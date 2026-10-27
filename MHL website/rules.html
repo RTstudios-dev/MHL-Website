@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules | MHL</title>
+<meta name="description" content="The rules of the Miniature Hockey League.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Rules | MHL">
+<meta property="og:description" content="The rules of the Miniature Hockey League.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>Rules</h1>
+  <p>How the league works and what is expected of every team.</p>
+</div>
+<div id="list"><div class="sk"></div></div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  let D;
+  try { D = await MHL.load(); } catch { return MHL.fail($('list'), 'the rules'); }
+  const { esc } = MHL;
+  if (!D.rules.length) { $('list').innerHTML = MHL.empty('No rules posted yet', 'The rules appear here once they are added.'); return; }
+  $('list').innerHTML = `<ol class="rules">${D.rules.map(r => `<li><div><h2>${esc(r.title)}</h2><div class="prose">${MHL.prose(r.body)}</div></div></li>`).join('')}</ol>`;
+})();
+</script>
+</body>
+</html>

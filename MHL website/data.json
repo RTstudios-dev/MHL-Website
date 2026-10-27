@@ -1,0 +1,114 @@
+{
+  "site": {
+    "season": "Season 1",
+    "discord": "https://discord.gg/HUABf9zJSy"
+  },
+  "teams": [
+    {
+      "id": "8a293d4f-5e84-4587-b40e-91e7ce0da391",
+      "name": "New team",
+      "short": "",
+      "color": "#c8102e",
+      "logo": "",
+      "photo": "",
+      "slug": "new-team"
+    },
+    {
+      "id": "8fc2367e-941a-4a63-8661-7e68653a1910",
+      "name": "kokoti",
+      "short": "",
+      "color": "#9a797f",
+      "logo": "/uploads/437ccb6d2193d369.png",
+      "photo": "",
+      "slug": "kokoti"
+    },
+    {
+      "id": "e4ff5b72-f1fb-4d56-9e17-ae5346a953ac",
+      "name": "hc great victoria",
+      "short": "HCG",
+      "color": "#c8102e",
+      "logo": "",
+      "photo": "",
+      "slug": "hc-great-victoria"
+    }
+  ],
+  "rounds": [],
+  "matches": [
+    {
+      "id": "11847ec3-292b-446b-9467-974051c7df9c",
+      "date": "",
+      "a": "8fc2367e-941a-4a63-8661-7e68653a1910",
+      "b": "e4ff5b72-f1fb-4d56-9e17-ae5346a953ac",
+      "round": "",
+      "games": [
+        {
+          "as": 6,
+          "bs": 0
+        },
+        {
+          "as": 1,
+          "bs": 2
+        },
+        {
+          "as": 3,
+          "bs": 0
+        }
+      ],
+      "goals": [
+        {
+          "g": 0,
+          "t": "a",
+          "n": 0,
+          "s": "16e8b48b-0eba-44a4-8183-9ae200473cfb",
+          "a1": "",
+          "a2": ""
+        },
+        {
+          "g": 1,
+          "t": "a",
+          "n": 0,
+          "s": "16e8b48b-0eba-44a4-8183-9ae200473cfb",
+          "a1": "",
+          "a2": ""
+        }
+      ]
+    }
+  ],
+  "players": [
+    {
+      "id": "16e8b48b-0eba-44a4-8183-9ae200473cfb",
+      "name": "curak",
+      "team": "8fc2367e-941a-4a63-8661-7e68653a1910",
+      "role": "skater",
+      "number": "88"
+    }
+  ],
+  "news": [
+    {
+      "id": "1fa70f9c-79f2-48b6-b423-cba4ca0d3db8",
+      "title": "hey yall",
+      "body": "idk what to write here",
+      "date": "2026-10-19",
+      "pinned": true
+    },
+    {
+      "id": "1a5f5ecf-aee8-47ec-9ac5-b7ec2e41a0b9",
+      "title": "ehrieuwheirws",
+      "body": "fesfeszufgesuzi",
+      "date": "2026-10-21",
+      "pinned": false
+    }
+  ],
+  "rules": [
+    {
+      "id": "a91e6705-1f61-4c85-82bf-1159db1bb4e0",
+      "title": "Rule 1",
+      "body": "skorp is the goat. he will never not be a goat. noone else is more goated than skorp."
+    },
+    {
+      "id": "5bb7da7c-5224-41fd-8a35-b2c68536807a",
+      "title": "Rule",
+      "body": ""
+    }
+  ]
+}

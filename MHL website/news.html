@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>News | MHL</title>
+<meta name="description" content="News and announcements from the Miniature Hockey League.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="News | MHL">
+<meta property="og:description" content="News and announcements from the Miniature Hockey League.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>News</h1>
+  <p>Announcements from the league.</p>
+</div>
+<div id="list"><div class="sk"></div></div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  let D;
+  try { D = await MHL.load(); } catch { return MHL.fail($('list'), 'the news'); }
+  const { esc } = MHL;
+  if (!D.news.length) { $('list').innerHTML = MHL.empty('No news yet', 'Announcements appear here once they are posted.'); return; }
+  const posts = [...D.news].sort((x, y) => (y.pinned - x.pinned) || y.date.localeCompare(x.date));
+  $('list').innerHTML = `<div class="posts">${posts.map(p => {
+    const [y, mo, d] = p.date.split('-').map(Number);
+    return `<article class="post"><time class="d" datetime="${esc(p.date)}"><b>${d}</b><span>${MHL.month(mo - 1)} ${y}</span></time>
+      <div>${p.pinned ? '<span class="pin">Pinned</span>' : ''}<h2>${esc(p.title)}</h2><div class="prose">${MHL.prose(p.body)}</div></div></article>`;
+  }).join('')}</div>`;
+})();
+</script>
+</body>
+</html>

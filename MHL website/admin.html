@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin | MHL</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+:root{--danger:#e08474}
+body{font-size:15px}
+.wrap{width:min(1180px,100% - 32px);margin-inline:auto}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:8px 10px;min-height:42px;width:100%;border-radius:0}
+textarea{min-height:120px;resize:vertical;line-height:1.5}
+input[type=color]{padding:2px;width:56px}
+input[type=checkbox]{width:20px;height:20px;min-height:0;accent-color:var(--gold)}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px solid var(--gold);outline-offset:0;border-color:var(--gold)}
+.f{display:grid;gap:4px;font-size:14px;font-weight:600}
+.f small{font-weight:400;color:var(--muted)}
+.btn.sm{min-height:38px;font-size:16px;padding:0 14px}
+.btn.del{background:transparent;color:var(--danger);border-color:var(--line)}
+.btn.del:hover{border-color:var(--danger);background:var(--hover);color:var(--danger)}
+.btn[disabled]{opacity:.45;cursor:default}
+
+/* login */
+.login{min-height:100dvh;display:grid;place-items:center;padding:16px}
+.login form{width:min(380px,100%);background:var(--paper);border-top:1px solid var(--rule);padding:32px;display:grid;gap:16px}
+.login h1{font-family:var(--disp);font-weight:500;font-size:44px;line-height:1}
+.err{color:var(--danger);font-weight:600;min-height:1.4em}
+
+/* top bar */
+.bar{position:sticky;top:0;z-index:10;background:var(--ice);border-bottom:1px solid var(--rule)}
+.bar .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 0}
+.bar b{font-family:var(--disp);font-weight:500;font-size:28px;line-height:1}
+.bar .seg{margin:0}
+.bar .right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.status{font-size:14px;color:var(--muted)}
+.status.dirty{color:var(--gold);font-weight:600}
+.bar a.lnk{font-size:14px;font-weight:600;color:var(--muted);text-decoration:underline}
+
+.panel{padding:28px 0 80px}
+.panel h2{font-family:var(--disp);font-weight:500;font-size:34px;line-height:1.05}
+.ph2{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:10px;margin:40px 0 16px}
+.ph2:first-child{margin-top:0}
+.help{color:var(--muted);max-width:75ch;margin-bottom:14px}
+.ed{background:var(--paper);border:1px solid var(--line);padding:16px;display:grid;gap:12px}
+.ed + .ed{margin-top:12px}
+.row{display:grid;gap:12px;align-items:end}
+.teams-row{grid-template-columns:minmax(160px,2fr) 90px 70px minmax(140px,1.4fr)}
+.imgs{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+.img{display:flex;align-items:center;gap:10px}
+.img .thumb{width:56px;height:56px;border:1px solid var(--line);display:grid;place-items:center;background:var(--ice);overflow:hidden;font-size:12px;color:var(--muted)}
+.img .thumb img{width:100%;height:100%;object-fit:cover}
+.img input[type=file]{display:none}
+.acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+
+/* matches */
+.match{display:grid;grid-template-columns:200px minmax(0,1fr) auto;gap:12px 18px;align-items:end}
+.teamsel{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:end}
+.teamsel .vs{padding-bottom:10px;font-family:var(--disp);font-style:italic;font-size:20px;color:var(--gold)}
+.games{display:flex;gap:10px;flex-wrap:wrap}
+.game{display:grid;gap:4px;font-size:13px;font-weight:600}
+.game div{display:flex;align-items:center;gap:4px}
+.game input{width:56px;text-align:center;padding:8px 4px}
+.preview{grid-column:1/-1;font-size:15px;padding:8px 12px;background:var(--ice);border-left:2px solid var(--line);color:var(--muted)}
+.preview b{color:var(--ink)}
+.preview.done{border-left-color:var(--gold)}
+.preview.warn{border-left-color:#b7791f}
+.preview b{font-weight:700}
+.rounds{display:grid;gap:8px;max-width:560px}
+.rnd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+
+/* goal log inside a match */
+.goals{grid-column:1/-1;border:1px solid var(--line)}
+.goals summary{cursor:pointer;padding:10px 12px;font-weight:500;background:var(--ice);color:var(--gold)}
+.goals .body{padding:4px 12px 14px}
+.goals h4{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;margin:16px 0 6px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.goals h4 span{font-family:var(--disp);font-weight:500;font-size:24px}
+.goals h4 small{font-size:14px;color:var(--muted)}
+.grow{display:grid;grid-template-columns:120px repeat(3,minmax(0,1fr));gap:8px;align-items:center;padding:4px 0}
+.grow.hd{font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.grow .who{font-size:13px;color:var(--muted)}
+.grow .who b{color:var(--gold);font-weight:600;letter-spacing:.06em;margin-right:4px}
+.grow select{min-height:36px;padding:4px 8px}
+.grow select.unset{color:var(--muted)}
+.check{font-size:13px;color:var(--muted);margin-top:6px}
+.tot{font-weight:700;text-align:center}
+@media (max-width:820px){.grow{grid-template-columns:1fr 1fr}.grow .who{grid-column:1/-1}.grow.hd{display:none}}
+
+/* players */
+.ptable{width:100%;border-collapse:collapse;background:var(--paper);border:1px solid var(--line)}
+.ptable th{text-align:left;font-size:13px;color:var(--muted);padding:10px 8px 6px;border-bottom:1px solid var(--rule);letter-spacing:.14em;text-transform:uppercase;font-size:11px}
+.ptable td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.ptable .n{width:76px}
+.pwrap{overflow-x:auto}
+.ptable{min-width:760px}
+.filter{max-width:280px;margin-bottom:14px}
+.checkline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+
+@media (max-width:820px){
+  .teams-row{grid-template-columns:1fr 1fr}
+  .match{grid-template-columns:1fr}
+  .bar .right{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/standings.js"></script>
+<script>
+const MHLA = (() => {
+  const root = document.getElementById('root');
+  let D = null, dirty = false, tab = 'teams', playerFilter = '';
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+  // h('div', {class: 'x', onclick: fn}, ...children)
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k === 'class') el.className = v;
+      else if (k === 'value') el.value = v;
+      else if (k === 'checked') el.checked = v;
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
+    return el;
+  }
+  const field = (label, input, help) => h('label', { class: 'f' }, h('span', {}, label), input, help ? h('small', {}, help) : null);
+  const text = (obj, key, attrs = {}) => h('input', { type: 'text', value: obj[key] ?? '', ...attrs, oninput: e => { obj[key] = e.target.value; touch(); attrs.after && attrs.after(); } });
+  const teamName = id => (D.teams.find(t => t.id === id) || {}).name || 'Unknown team';
+
+  function touch() {
+    dirty = true;
+    const s = document.getElementById('status');
+    if (s) { s.textContent = 'Unsaved changes'; s.className = 'status dirty'; }
+    const b = document.getElementById('saveBtn'); if (b) b.disabled = false;
+  }
+  window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  // login
+  function login(msg) {
+    const err = h('p', { class: 'err', role: 'alert' }, msg || '');
+    const pw = h('input', { type: 'password', id: 'pw', autocomplete: 'current-password', required: true });
+    const form = h('form', { onsubmit: async e => {
+      e.preventDefault(); err.textContent = '';
+      const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw.value }) });
+      if (r.ok) return start();
+      err.textContent = (await r.json().catch(() => ({}))).error || 'Login failed';
+      pw.select();
+    } }, h('h1', {}, 'MHL Admin'), field('Password', pw), h('button', { class: 'btn', type: 'submit' }, 'Log in'), err);
+    root.replaceChildren(h('div', { class: 'login' }, form));
+    pw.focus();
+  }
+
+  async function start() {
+    const r = await fetch('/api/data', { cache: 'no-store' });
+    D = await r.json();
+    dirty = false;
+    draw();
+  }
+
+  async function save() {
+    const b = document.getElementById('saveBtn'), s = document.getElementById('status');
+    b.disabled = true; s.textContent = 'Saving...'; s.className = 'status';
+    const body = { ...D }; delete body.hasLogo; delete body.logoUrl;
+    const r = await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (r.status === 401) { dirty = false; return login('Your session ended. Log in again, then redo the last changes.'); }
+    if (!r.ok) { s.textContent = 'Saving failed. Try again.'; s.className = 'status dirty'; b.disabled = false; return; }
+    D = await r.json(); dirty = false;
+    draw();
+    const s2 = document.getElementById('status'); s2.textContent = 'Saved. The site is updated.';
+  }
+
+  async function upload(file) {
+    const r = await fetch('/api/upload', { method: 'POST', body: file });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { alert(j.error || 'Upload failed'); return null; }
+    return j.url;
+  }
+
+  // frame
+  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['news', 'News'], ['rules', 'Rules'], ['settings', 'Settings']];
+  function draw() {
+    const y = scrollY;
+    const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
+      TABS.map(([k, t]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(k === tab), onclick: () => { tab = k; draw(); scrollTo(0, 0); } }, t)));
+    const bar = h('header', { class: 'bar' }, h('div', { class: 'wrap' },
+      h('b', {}, 'MHL Admin'), seg,
+      h('div', { class: 'right' },
+        h('span', { id: 'status', class: 'status' + (dirty ? ' dirty' : ''), 'aria-live': 'polite' }, dirty ? 'Unsaved changes' : 'All changes saved'),
+        h('button', { class: 'btn sm', id: 'saveBtn', type: 'button', disabled: !dirty, onclick: save }, 'Save changes'),
+        h('a', { class: 'lnk', href: '/', target: '_blank' }, 'View site'),
+        h('a', { class: 'lnk', href: '#', onclick: async e => {
+          e.preventDefault();
+          if (dirty && !confirm('You have unsaved changes. Log out anyway?')) return;
+          dirty = false; await fetch('/api/logout', { method: 'POST' }); login();
+        } }, 'Log out'))));
+    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, news, rules, settings })[tab]());
+    root.replaceChildren(bar, panel);
+    scrollTo(0, y);
+  }
+  const head = (title, ...right) => h('div', { class: 'ph2' }, h('h2', {}, title), right.length ? h('div', { class: 'acts' }, right) : null);
+
+  // teams
+  function imgPicker(t, key, label) {
+    const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', onchange: async e => {
+      const f = e.target.files[0]; if (!f) return;
+      const url = await upload(f); if (!url) return;
+      t[key] = url; touch(); draw();
+    } });
+    return h('div', { class: 'img' },
+      h('span', { class: 'thumb' }, t[key] ? h('img', { src: t[key], alt: '' }) : 'None'),
+      h('div', {}, h('div', { class: 'f' }, label),
+        h('div', { class: 'acts', style: 'justify-content:flex-start' },
+          h('button', { class: 'btn line sm', type: 'button', onclick: () => file.click() }, t[key] ? 'Replace' : 'Upload'),
+          t[key] ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { t[key] = ''; touch(); draw(); } }, 'Remove') : null),
+        file));
+  }
+  function teams() {
+    const add = h('button', { class: 'btn sm', type: 'button', onclick: () => {
+      D.teams.push({ id: uid(), name: 'New team', short: '', color: '#c8102e', logo: '', photo: '', slug: '' }); touch(); draw();
+    } }, 'Add team');
+    return [
+      head('Teams', add),
+      h('p', { class: 'help' }, 'The short code (2 to 4 letters) shows on scoreboards. The page address is the end of the team page link, for example /team/ice-giants. Leave it empty to make one from the name. Changing it later breaks links people already shared.'),
+      D.teams.length ? D.teams.map(t => h('div', { class: 'ed' },
+        h('div', { class: 'row teams-row' },
+          field('Team name', text(t, 'name', { maxlength: 40 })),
+          field('Short code', text(t, 'short', { maxlength: 4, style: 'text-transform:uppercase' })),
+          field('Colour', h('input', { type: 'color', value: t.color, oninput: e => { t.color = e.target.value; touch(); } })),
+          field('Page address', text(t, 'slug', { maxlength: 40, placeholder: 'made from the name' }))),
+        h('div', { class: 'imgs' }, imgPicker(t, 'logo', 'Logo'), imgPicker(t, 'photo', 'Team photo (landscape)'),
+          h('div', { class: 'acts', style: 'margin-left:auto' }, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+            const nm = D.matches.filter(m => m.a === t.id || m.b === t.id).length, np = D.players.filter(p => p.team === t.id).length;
+            if (!confirm(`Delete ${t.name}?` + (nm || np ? ` Its ${nm} match(es) and ${np} player(s) are deleted too.` : ''))) return;
+            D.teams = D.teams.filter(x => x !== t);
+            D.matches = D.matches.filter(m => m.a !== t.id && m.b !== t.id);
+            D.players = D.players.filter(p => p.team !== t.id);
+            touch(); draw();
+          } }, 'Delete team'))))) : h('div', { class: 'empty' }, h('b', {}, 'No teams yet'), 'Press Add team to create the first one.'),
+    ];
+  }
+
+  // matches
+  function preview(m) {
+    const st = MHL.state(m), pts = MHL.points(st), g = MHL.gamesOf(m);
+    const A = teamName(m.a), B = teamName(m.b);
+    const ties = g.filter(x => x && x.as != null && x.bs != null && x.as === x.bs).length;
+    const extra = g.length === 3 && g[2] && (g[2].as != null || g[2].bs != null) && !st.counted.includes(g[2]);
+    if (pts) {
+      const w = st.wa > st.wb ? A : B;
+      return { cls: extra ? 'warn' : 'done', html: `<b>${esc(w)} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}.</b> Points: ${esc(A)} ${pts[0]}, ${esc(B)} ${pts[1]}.` + (extra ? ' Game 3 is ignored because the series ended 2-0.' : '') };
+    }
+    if (ties) return { cls: 'warn', html: 'A game has equal scores. Ties do not count: enter the final score after overtime.' };
+    if (st.started) return { cls: '', html: `Series ${st.wa}-${st.wb}. ${st.wa === 1 && st.wb === 1 ? 'Enter game 3 to finish it.' : 'Enter the next game to finish it.'} No points until the series is decided.` };
+    return { cls: '', html: 'Not played yet. Enter game scores and the points are given out automatically.' };
+  }
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function teamSelect(m, key) {
+    return h('select', { onchange: e => { m[key] = e.target.value; touch(); draw(); } },
+      D.teams.map(t => h('option', { value: t.id, selected: t.id === m[key] }, t.name)));
+  }
+  function matchEd(m) {
+    while (m.games.length < 3) m.games.push({ as: null, bs: null });
+    const pv = h('div', { class: 'preview' });
+    const upd = () => { const p = preview(m); pv.className = 'preview ' + p.cls; pv.innerHTML = p.html; };
+    const scoreIn = (g, k, label) => h('input', { type: 'number', min: 0, max: 99, inputmode: 'numeric', 'aria-label': label, value: g[k] ?? '',
+      oninput: e => { const v = e.target.value; g[k] = v === '' ? null : Math.max(0, Math.min(99, Math.floor(Number(v)))); touch(); upd(); ed.querySelector('.goals').replaceWith(goalsEd(m)); } });
+    const roundSel = h('select', { onchange: e => { m.round = e.target.value; touch(); draw(); } },
+      h('option', { value: '' }, 'No round'), D.rounds.map(r => h('option', { value: r.id, selected: r.id === m.round }, r.name)));
+    const ed = h('div', { class: 'ed match' },
+      h('div', { style: 'display:grid;gap:10px' },
+        field('Date and time', h('input', { type: 'datetime-local', value: m.date, oninput: e => { m.date = e.target.value; touch(); } })),
+        field('Round', roundSel)),
+      h('div', { style: 'display:grid;gap:10px' },
+        h('div', { class: 'teamsel' }, field('Team A', teamSelect(m, 'a')), h('span', { class: 'vs' }, 'vs'), field('Team B', teamSelect(m, 'b'))),
+        h('div', { class: 'games' }, m.games.map((g, i) => h('div', { class: 'game' }, `Game ${i + 1}  (A - B)`,
+          h('div', {}, scoreIn(g, 'as', `Game ${i + 1} goals for team A`), '-', scoreIn(g, 'bs', `Game ${i + 1} goals for team B`)))))),
+      h('div', { class: 'acts' }, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+        if (!confirm(`Delete ${teamName(m.a)} vs ${teamName(m.b)}?`)) return;
+        D.matches = D.matches.filter(x => x !== m); touch(); draw();
+      } }, 'Delete')),
+      pv, goalsEd(m));
+    upd();
+    return ed;
+  }
+  // goal log for one series: a row for every goal in the game scores, pick scorer + assists
+  const openGoals = new Map();
+  function goalsEd(m) {
+    m.goals = m.goals || [];
+    const st = MHL.state(m), games = MHL.gamesOf(m);
+    const counted = games.map(g => st.counted.includes(g));
+    const find = (g, t, n) => m.goals.find(x => x.g === g && x.t === t && x.n === n);
+    const get = (g, t, n) => find(g, t, n) || (m.goals.push({ g, t, n, s: '', a1: '', a2: '' }), m.goals[m.goals.length - 1]);
+    const code = t => { const tm = D.teams.find(x => x.id === t) || {}; return tm.short || (tm.name || '?').slice(0, 3).toUpperCase(); };
+    const pname = p => p.name + (p.number ? ' #' + p.number : '');
+    // every goal slot that counts right now
+    const slots = [];
+    games.forEach((g, gi) => { if (!counted[gi]) return; ['a', 'b'].forEach(t => { for (let n = 0; n < (t === 'a' ? g.as : g.bs); n++) slots.push([gi, t, n]); }); });
+    const summary = h('summary', {});
+    const updSummary = () => {
+      const done = slots.filter(([g, t, n]) => (find(g, t, n) || {}).s).length;
+      summary.textContent = !slots.length ? 'Goals (enter game scores first)' : `Goals: ${done} of ${slots.length} scorers entered`;
+    };
+    const pick = (x, k, roster, empty, slot, label) => {
+      // roster of the scoring team, plus whoever is already picked (in case they moved team)
+      const list = [...roster];
+      if (x && x[k] && !list.some(p => p.id === x[k])) { const p = D.players.find(p => p.id === x[k]); if (p) list.push(p); }
+      return h('select', { class: x && x[k] ? '' : 'unset', 'aria-label': label, onchange: e => {
+          const v = e.target.value;
+          get(...slot)[k] = v; e.target.className = v ? '' : 'unset'; touch(); updSummary();
+        } },
+        h('option', { value: '' }, empty), list.map(p => h('option', { value: p.id, selected: x && x[k] === p.id }, pname(p))));
+    };
+    const body = h('div', { class: 'body' });
+    if (!slots.length) body.append(h('p', { class: 'help', style: 'margin:10px 0 0' }, 'Type in the game scores above. A row appears here for every goal, so you can pick who scored it and who assisted.'));
+    games.forEach((g, gi) => {
+      if (g.as == null || g.bs == null || (!g.as && !g.bs)) return;
+      body.append(h('h4', {}, h('span', {}, `Game ${gi + 1}`), h('small', {}, `${teamName(m.a)} ${g.as} - ${g.bs} ${teamName(m.b)}`)));
+      if (!counted[gi]) { body.append(h('p', { class: 'help', style: 'margin:0' }, g.as === g.bs ? 'Tied game, it does not count. Enter the final score after overtime.' : 'This game does not count (the series was already over).')); return; }
+      body.append(h('div', { class: 'grow hd' }, h('span', {}, ''), h('span', {}, 'Scorer'), h('span', {}, 'Assist'), h('span', {}, 'Second assist')));
+      ['a', 'b'].forEach(t => {
+        const tid = t === 'a' ? m.a : m.b, total = t === 'a' ? g.as : g.bs;
+        const roster = D.players.filter(p => p.team === tid).sort((x, y) => (Number(x.number) || 999) - (Number(y.number) || 999) || x.name.localeCompare(y.name));
+        for (let n = 0; n < total; n++) {
+          const x = find(gi, t, n), slot = [gi, t, n], tag = `Game ${gi + 1}, ${code(tid)} goal ${n + 1}`;
+          body.append(h('div', { class: 'grow' }, h('span', { class: 'who' }, h('b', {}, code(tid)), `goal ${n + 1}`),
+            pick(x, 's', roster, 'Who scored?', slot, tag + ', scorer'),
+            pick(x, 'a1', roster, 'No assist', slot, tag + ', assist'),
+            pick(x, 'a2', roster, 'No assist', slot, tag + ', second assist')));
+        }
+        if (!roster.length && total) body.append(h('p', { class: 'check' }, `${teamName(tid)} has no players yet. Add them in the Players tab.`));
+      });
+    });
+    updSummary();
+    // open by default while scorers are missing, after that remember what was toggled
+    const missing = slots.some(([g, t, n]) => !(find(g, t, n) || {}).s);
+    const open = openGoals.has(m.id) ? openGoals.get(m.id) : missing;
+    return h('details', { class: 'goals', open, ontoggle: e => openGoals.set(m.id, e.target.open) }, summary, body);
+  }
+  function addMatch(round) {
+    const [a, b] = D.teams;
+    D.matches.push({ id: uid(), date: '', a: a.id, b: b.id, round, goals: [], games: [{ as: null, bs: null }, { as: null, bs: null }, { as: null, bs: null }] });
+    touch(); draw();
+  }
+  function matches() {
+    if (D.teams.length < 2) return [head('Matches'), h('div', { class: 'empty' }, h('b', {}, 'Add teams first'), 'You need at least two teams before you can add matches.')];
+    const roundsEd = h('div', { class: 'rounds' }, D.rounds.map((r, i) => h('div', { class: 'rnd' },
+      text(r, 'name', { maxlength: 40, 'aria-label': `Round ${i + 1} name` }),
+      h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+        const n = D.matches.filter(m => m.round === r.id).length;
+        if (!confirm(`Delete the round "${r.name}"?` + (n ? ` Its ${n} match(es) are kept, without a round.` : ''))) return;
+        D.rounds = D.rounds.filter(x => x !== r); D.matches.forEach(m => { if (m.round === r.id) m.round = ''; }); touch(); draw();
+      } }, 'Delete'))));
+    const groups = [...D.rounds.map(r => ({ id: r.id, name: r.name })), { id: '', name: D.rounds.length ? 'Matches without a round' : 'Matches' }];
+    return [
+      head('Rounds', h('button', { class: 'btn line sm', type: 'button', onclick: () => { D.rounds.push({ id: uid(), name: 'Round ' + (D.rounds.length + 1) }); touch(); draw(); } }, 'Add round')),
+      h('p', { class: 'help' }, 'Rounds group the matches, for example Round 1 or Week 3. Optional.'),
+      D.rounds.length ? roundsEd : null,
+      h('p', { class: 'help', style: 'margin-top:24px' }, 'Each match is a best-of-3 series. Enter the score of every game played. Points are given out automatically: 2-0 win 3 points, 2-1 win 2 points, 2-1 loss 1 point. Under each match, pick who scored every goal and who assisted. Press Save changes to publish.'),
+      groups.map(g => {
+        const ms = D.matches.filter(m => (g.id ? m.round === g.id : !D.rounds.some(r => r.id === m.round))).sort((x, y) => (x.date || '9').localeCompare(y.date || '9'));
+        if (!g.id && !ms.length && D.rounds.length) return null;
+        return [head(g.name, h('button', { class: 'btn sm', type: 'button', onclick: () => addMatch(g.id) }, 'Add match')),
+          ms.length ? ms.map(matchEd) : h('p', { class: 'help' }, 'No matches in this round yet.')];
+      }),
+    ];
+  }
+
+  // players
+  function players() {
+    if (!D.teams.length) return [head('Players'), h('div', { class: 'empty' }, h('b', {}, 'Add teams first'), 'Players belong to a team.')];
+    const list = D.players.filter(p => !playerFilter || p.team === playerFilter);
+    const tot = MHL.playerTotals(D);
+    return [
+      head('Players', h('button', { class: 'btn sm', type: 'button', onclick: () => {
+        D.players.push({ id: uid(), name: '', team: playerFilter || D.teams[0].id, role: 'skater', number: '' }); touch(); draw();
+        const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
+      } }, 'Add player')),
+      h('p', { class: 'help' }, 'Goals and assists are logged goal by goal under each match in the Matches tab. The totals here count themselves.'),
+      h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
+        h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
+      list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
+        h('thead', {}, h('tr', {}, ['Name', 'Team', 'Number', 'Position', 'Goals', 'Assists', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('tbody', {}, list.map(p => h('tr', {},
+          h('td', {}, text(p, 'name', { maxlength: 40, 'aria-label': 'Player name', placeholder: 'Player name' })),
+          h('td', {}, h('select', { 'aria-label': 'Team', onchange: e => { p.team = e.target.value; touch(); } }, D.teams.map(t => h('option', { value: t.id, selected: t.id === p.team }, t.name)))),
+          h('td', {}, h('input', { type: 'text', inputmode: 'numeric', maxlength: 3, class: 'n', 'aria-label': 'Jersey number', value: p.number, oninput: e => { p.number = e.target.value.replace(/\D/g, ''); touch(); } })),
+          h('td', {}, h('select', { 'aria-label': 'Position', onchange: e => { p.role = e.target.value; touch(); } },
+            h('option', { value: 'skater', selected: p.role !== 'goalie' }, 'Skater'), h('option', { value: 'goalie', selected: p.role === 'goalie' }, 'Goalie'))),
+          h('td', { class: 'tot' }, tot[p.id] ? tot[p.id].g : 0), h('td', { class: 'tot' }, tot[p.id] ? tot[p.id].a : 0),
+          h('td', {}, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+            const t = tot[p.id] || { g: 0, a: 0 };
+            if (!confirm(`Delete ${p.name || 'this player'}?` + (t.g || t.a ? ` Their ${t.g} goals and ${t.a} assists are removed from the matches too.` : ''))) return;
+            D.players = D.players.filter(x => x !== p);
+            D.matches.forEach(m => (m.goals || []).forEach(x => ['s', 'a1', 'a2'].forEach(k => { if (x[k] === p.id) x[k] = ''; })));
+            touch(); draw();
+          } }, 'Delete'))))))) : h('div', { class: 'empty' }, h('b', {}, 'No players'), 'Press Add player to add one.'),
+    ];
+  }
+
+  // news
+  function news() {
+    const posts = [...D.news].sort((x, y) => y.date.localeCompare(x.date));
+    return [
+      head('News', h('button', { class: 'btn sm', type: 'button', onclick: () => {
+        D.news.push({ id: uid(), title: '', body: '', date: new Date().toISOString().slice(0, 10), pinned: false }); touch(); draw();
+      } }, 'Add post')),
+      h('p', { class: 'help' }, 'Pinned posts stay at the top. Leave a blank line between paragraphs. Links starting with https:// become clickable. The newest post also shows on the home page.'),
+      posts.length ? posts.map(n => h('div', { class: 'ed' },
+        h('div', { class: 'row', style: 'grid-template-columns:minmax(0,1fr) 180px auto' },
+          field('Title', text(n, 'title', { maxlength: 120 })),
+          field('Date', h('input', { type: 'date', value: n.date, oninput: e => { n.date = e.target.value; touch(); } })),
+          h('label', { class: 'checkline', style: 'padding-bottom:10px' }, h('input', { type: 'checkbox', checked: n.pinned, onchange: e => { n.pinned = e.target.checked; touch(); } }), 'Pinned')),
+        field('Text', h('textarea', { maxlength: 4000, oninput: e => { n.body = e.target.value; touch(); } }, n.body)),
+        h('div', { class: 'acts' }, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+          if (!confirm(`Delete the post "${n.title || 'Untitled'}"?`)) return;
+          D.news = D.news.filter(x => x !== n); touch(); draw();
+        } }, 'Delete post')))) : h('div', { class: 'empty' }, h('b', {}, 'No news yet'), 'Press Add post to write the first one.'),
+    ];
+  }
+
+  // rules
+  function rules() {
+    const move = (i, d) => { const j = i + d; [D.rules[i], D.rules[j]] = [D.rules[j], D.rules[i]]; touch(); draw(); };
+    return [
+      head('Rules', h('button', { class: 'btn sm', type: 'button', onclick: () => { D.rules.push({ id: uid(), title: '', body: '' }); touch(); draw(); } }, 'Add rule')),
+      h('p', { class: 'help' }, 'Rules are numbered on the site in this order.'),
+      D.rules.length ? D.rules.map((r, i) => h('div', { class: 'ed' },
+        field(`Rule ${i + 1} title`, text(r, 'title', { maxlength: 120 })),
+        field('Text', h('textarea', { maxlength: 4000, oninput: e => { r.body = e.target.value; touch(); } }, r.body)),
+        h('div', { class: 'acts' },
+          h('button', { class: 'btn line sm', type: 'button', disabled: i === 0, onclick: () => move(i, -1) }, 'Move up'),
+          h('button', { class: 'btn line sm', type: 'button', disabled: i === D.rules.length - 1, onclick: () => move(i, 1) }, 'Move down'),
+          h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+            if (!confirm(`Delete rule ${i + 1}?`)) return;
+            D.rules = D.rules.filter(x => x !== r); touch(); draw();
+          } }, 'Delete')))) : h('div', { class: 'empty' }, h('b', {}, 'No rules yet'), 'Press Add rule to write the first one.'),
+    ];
+  }
+
+  // settings
+  function settings() {
+    D.site = D.site || { season: '', discord: '' };
+    return [
+      head('Settings'),
+      h('div', { class: 'ed', style: 'max-width:640px' },
+        field('Season name', text(D.site, 'season', { maxlength: 40, placeholder: 'Season 1' }), 'Shows on the home page.'),
+        field('Discord invite link', text(D.site, 'discord', { maxlength: 300, placeholder: 'https://discord.gg/...' }), 'Must start with https://. Leave empty to hide the Join the Discord button.'),
+        h('p', { class: 'help', style: 'margin:0' }, D.hasLogo ? `The league logo (${D.logoUrl.slice(1)}) is in use.` : 'No league logo yet: the site shows the MHL wordmark. To add one, put logo.png (or logo.webp / logo.jpg) next to server.js and reload the site.')),
+    ];
+  }
+
+  return { start, login, check: async () => ((await (await fetch('/api/me')).json()).admin ? start() : login()) };
+})();
+MHLA.check();
+</script>
+</body>
+</html>

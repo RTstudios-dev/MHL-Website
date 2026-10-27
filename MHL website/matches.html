@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matches | MHL</title>
+<meta name="description" content="Every MHL series: fixtures, results and game-by-game scores.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Matches | MHL">
+<meta property="og:description" content="Every MHL series: fixtures, results and game-by-game scores.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>Matches</h1>
+  <p>Every series is best of 3. A 2-0 win gives 3 points, a 2-1 win gives the winner 2 and the loser 1.</p>
+</div>
+<div class="seg" id="rounds" role="group" aria-label="Round" hidden></div>
+<div id="list"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  let D;
+  try { D = await MHL.load(); } catch { return MHL.fail($('list'), 'the matches'); }
+  const { esc } = MHL;
+  if (!D.matches.length) { $('list').innerHTML = MHL.empty('No matches yet', 'Fixtures and results appear here once they are added.'); return; }
+
+  // rounds in order, matches without a round at the end
+  const groups = D.rounds.map(r => ({ id: r.id, name: r.name, ms: D.matches.filter(m => m.round === r.id) }));
+  const loose = D.matches.filter(m => !D.R[m.round]);
+  if (loose.length) groups.push({ id: '_none', name: D.rounds.length ? 'Other matches' : 'All matches', ms: loose });
+  const used = groups.filter(g => g.ms.length);
+  let pick = new URLSearchParams(location.search).get('round') || 'all';
+  if (pick !== 'all' && !used.some(g => g.id === pick)) pick = 'all';
+
+  function draw() {
+    if (used.length > 1) {
+      $('rounds').hidden = false;
+      $('rounds').innerHTML = [{ id: 'all', name: 'All' }, ...used].map(g => `<button type="button" data-r="${esc(g.id)}" aria-pressed="${g.id === pick}">${esc(g.name)}</button>`).join('');
+    }
+    const show = pick === 'all' ? used : used.filter(g => g.id === pick);
+    $('list').innerHTML = show.map(g => `<section class="block"><div class="bh"><h2>${esc(g.name)}</h2></div>
+      <div class="sbs">${[...g.ms].sort(MHL.byDate).map(m => MHL.scoreboard(m, D)).join('')}</div></section>`).join('');
+  }
+  $('rounds').addEventListener('click', e => {
+    const b = e.target.closest('button[data-r]'); if (!b) return;
+    pick = b.dataset.r;
+    history.replaceState(null, '', pick === 'all' ? location.pathname : '?round=' + encodeURIComponent(pick));
+    draw();
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

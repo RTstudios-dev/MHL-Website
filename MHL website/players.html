@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Players | MHL</title>
+<meta name="description" content="MHL scoring leaders: goals, assists and points.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Players | MHL">
+<meta property="og:description" content="MHL scoring leaders: goals, assists and points.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>Players</h1>
+  <p>Scoring leaders. Points are goals plus assists.</p>
+</div>
+<div class="seg" role="tablist" aria-label="Stat" id="tabs">
+  <button type="button" role="tab" data-k="p" aria-selected="true">Points</button>
+  <button type="button" role="tab" data-k="g" aria-selected="false">Goals</button>
+  <button type="button" role="tab" data-k="a" aria-selected="false">Assists</button>
+</div>
+<div id="leaders"><div class="sk"></div></div>
+<section aria-labelledby="hAll" id="allBlock" hidden>
+  <div class="bh"><h2 id="hAll">All players</h2></div>
+  <div id="all"></div>
+</section>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  let D;
+  try { D = await MHL.load(); } catch { return MHL.fail($('leaders'), 'the players'); }
+  const { esc } = MHL;
+  if (!D.players.length) { $('tabs').hidden = true; $('leaders').innerHTML = MHL.empty('No players yet', 'Players and their stats appear here once they are added.'); return; }
+  const P = D.players.map(p => ({ ...p, p: p.g + p.a, t: D.T[p.team] }));
+  const NAMES = { p: 'Points', g: 'Goals', a: 'Assists' };
+  const tie = { p: ['g', 'a'], g: ['p', 'a'], a: ['p', 'g'] };
+  const rank = k => [...P].sort((x, y) => y[k] - x[k] || y[tie[k][0]] - x[tie[k][0]] || y[tie[k][1]] - x[tie[k][1]] || x.name.localeCompare(y.name));
+  let key = 'p', sortKey = 'p';
+
+  function leaders() {
+    const list = rank(key).filter(p => p[key] > 0);
+    if (!list.length) { $('leaders').innerHTML = MHL.empty('No ' + NAMES[key].toLowerCase() + ' yet', 'Leaders show here once stats are entered.'); return; }
+    const [one, ...rest] = list;
+    $('leaders').innerHTML = `<div class="leaders">
+      <div class="top1" style="--c:${esc(one.t.color)}"><div><span class="k">${NAMES[key]} leader</span><h2>${esc(one.name)}</h2>
+        <p>${MHL.teamLink(one.t)}${one.number ? ', #' + esc(one.number) : ''}</p></div><span class="big num">${one[key]}</span></div>
+      <div class="rest">${rest.slice(0, 5).map((p, i) => `<div class="lm"><span class="r">${i + 2}</span>${MHL.badge(p.t)}<span class="nm">${esc(p.name)}<small>${esc(p.t.name)}</small></span><span class="v">${p[key]}</span></div>`).join('')
+        || '<div class="lm"><span></span><span></span><span class="nm"><small>No one else has any yet.</small></span><span></span></div>'}</div>
+    </div>`;
+  }
+  function table() {
+    $('allBlock').hidden = false;
+    const cols = [['g', 'G', 'Goals'], ['a', 'A', 'Assists'], ['p', 'P', 'Points']];
+    $('all').innerHTML = `<div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Team</th><th class="l" scope="col">Pos</th>
+        ${cols.map(([k, s, t]) => `<th scope="col"${k === sortKey ? ' aria-sort="descending"' : ''}><button type="button" data-s="${k}" title="Sort by ${t}">${s}</button></th>`).join('')}</tr></thead>
+      <tbody>${rank(sortKey).map(p => `<tr><td class="l"><b>${esc(p.name)}</b>${p.number ? ` <span style="color:var(--muted)">#${esc(p.number)}</span>` : ''}</td>
+        <td class="l"><span class="team">${MHL.badge(p.t)}${MHL.teamLink(p.t)}</span></td><td class="l">${p.role === 'goalie' ? 'Goalie' : 'Skater'}</td>
+        <td>${p.g}</td><td>${p.a}</td><td class="pts">${p.p}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+  $('tabs').addEventListener('click', e => {
+    const b = e.target.closest('button[data-k]'); if (!b) return;
+    key = b.dataset.k;
+    $('tabs').querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+    leaders();
+  });
+  $('all').addEventListener('click', e => {
+    const b = e.target.closest('button[data-s]'); if (!b) return;
+    sortKey = b.dataset.s; table();
+    $('all').querySelector(`button[data-s="${sortKey}"]`).focus();
+  });
+  leaders(); table();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teams | MHL</title>
+<meta name="description" content="The teams of the Miniature Hockey League.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Teams | MHL">
+<meta property="og:description" content="The teams of the Miniature Hockey League.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>Teams</h1>
+  <p>Open a team for its roster, results and upcoming matches.</p>
+</div>
+<div id="list"><div class="sk"></div></div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  let D;
+  try { D = await MHL.load(); } catch { return MHL.fail($('list'), 'the teams'); }
+  const { esc } = MHL, S = D.table.S;
+  if (!D.teams.length) { $('list').innerHTML = MHL.empty('No teams yet', 'Teams appear here once they are added.'); return; }
+  const ord = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
+  const roster = id => D.players.filter(p => p.team === id).length;
+  $('list').innerHTML = `<div class="tgrid">${[...D.teams].sort((x, y) => x.name.localeCompare(y.name)).map(t => {
+    const r = S[t.id], n = roster(t.id);
+    return `<a class="tile" href="${MHL.teamUrl(t)}" style="--c:${esc(t.color)}">${MHL.badge(t, 'md')}<div><h2>${esc(t.name)}</h2>
+      <p>${ord(r.place)} place, ${r.pts} pts</p><p>Series ${r.sw}-${r.sl}${n ? `, ${n} player${n > 1 ? 's' : ''}` : ''}</p></div></a>`;
+  }).join('')}</div>`;
+})();
+</script>
+</body>
+</html>

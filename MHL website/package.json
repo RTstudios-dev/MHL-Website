@@ -1,0 +1,14 @@
+{
+  "name": "mhl-website",
+  "version": "1.0.0",
+  "description": "Miniature Hockey League website",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "hash-password": "node hash-password.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
