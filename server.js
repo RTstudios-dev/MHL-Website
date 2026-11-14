@@ -64,13 +64,15 @@ if (HASH && !/^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/.test(HASH)) {
   process.exit(1);
 }
 if (!HASH && !PASSWORD) {
-  if (PROD) {
-    console.error('No admin password set. Set ADMIN_PASSWORD_HASH (recommended) or ADMIN_PASSWORD, then start again.');
-    process.exit(1);
-  }
+  // no password in the environment: use (or create) one stored in DATA_DIR/.admin-password
+  if (PROD) console.warn('WARNING: ADMIN_PASSWORD_HASH / ADMIN_PASSWORD not set. Using the generated password in ' + PW_FILE + '. Setting ADMIN_PASSWORD_HASH is safer.');
   if (!fs.existsSync(PW_FILE)) {
-    fs.writeFileSync(PW_FILE, crypto.randomBytes(9).toString('base64url'));
-    console.log('Generated a new admin password, see the file .admin-password');
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const generated = crypto.randomBytes(12).toString('base64url');
+    fs.writeFileSync(PW_FILE, generated, { mode: 0o600 });
+    console.log(PROD
+      ? 'Generated a new admin password. Log in at /admin with: ' + generated
+      : 'Generated a new admin password, see the file .admin-password');
   }
   PASSWORD = fs.readFileSync(PW_FILE, 'utf8').trim();
 }
