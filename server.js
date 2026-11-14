@@ -14,8 +14,6 @@ const DIR = __dirname;
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DIR);
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const PW_FILE = path.join(DATA_DIR, '.admin-password');
-// optional: a password file committed with the code (admin-password.txt is easier to see/upload than the hidden .admin-password)
-const PW_FILE_BUNDLED = ['admin-password.txt', '.admin-password'].map(f => path.join(DIR, f)).find(f => fs.existsSync(f)) || '';
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 // league logo: logo.png, logo.webp or logo.jpg next to server.js (optional)
 const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
@@ -66,21 +64,16 @@ if (HASH && !/^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/.test(HASH)) {
   process.exit(1);
 }
 if (!HASH && !PASSWORD) {
-  // no password in the environment: use (or create) one stored in DATA_DIR/.admin-password
-  if (PROD) console.warn('WARNING: ADMIN_PASSWORD_HASH / ADMIN_PASSWORD not set. Using the generated password in ' + PW_FILE + '. Setting ADMIN_PASSWORD_HASH is safer.');
-  if (PW_FILE_BUNDLED) {
-    PASSWORD = fs.readFileSync(PW_FILE_BUNDLED, 'utf8').trim();   // committed file wins
-  } else if (!fs.existsSync(PW_FILE)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const generated = crypto.randomBytes(12).toString('base64url');
-    fs.writeFileSync(PW_FILE, generated, { mode: 0o600 });
-    console.log(PROD
-      ? 'Generated a new admin password. Log in at /admin with: ' + generated
-      : 'Generated a new admin password, see the file .admin-password');
+  if (PROD) {
+    console.error('No admin password set. Set ADMIN_PASSWORD_HASH (recommended) or ADMIN_PASSWORD, then start again.');
+    process.exit(1);
   }
-  if (!PASSWORD) PASSWORD = fs.readFileSync(PW_FILE, 'utf8').trim();
+  if (!fs.existsSync(PW_FILE)) {
+    fs.writeFileSync(PW_FILE, crypto.randomBytes(9).toString('base64url'));
+    console.log('Generated a new admin password, see the file .admin-password');
+  }
+  PASSWORD = fs.readFileSync(PW_FILE, 'utf8').trim();
 }
-console.log('Admin password source: ' + (HASH ? 'ADMIN_PASSWORD_HASH env var' : process.env.ADMIN_PASSWORD ? 'ADMIN_PASSWORD env var' : PW_FILE_BUNDLED ? 'file ' + path.basename(PW_FILE_BUNDLED) + ' in the project folder' : 'generated file ' + PW_FILE));
 async function checkPassword(pw) {
   if (HASH) {
     const [, salt, hash] = HASH.split('$');
