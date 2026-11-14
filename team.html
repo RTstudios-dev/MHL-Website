@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team | MHL</title>
+<meta name="description" content="An MHL team: record, roster, results and upcoming matches.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Team | MHL">
+<meta property="og:description" content="An MHL team: record, roster, results and upcoming matches.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div id="page"><div class="sk"></div><div class="sk"></div></div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  const notFound = () => {
+    document.title = 'Team not found | MHL';
+    $('page').innerHTML = `<div class="ph"><h1>Team not found</h1><p>This team does not exist or its page address changed.</p></div><a class="btn line" href="/teams">All teams</a>`;
+  };
+  if (window.__MHL_404) return notFound();
+  let D;
+  try { D = await MHL.load(); } catch { return MHL.fail($('page'), 'this team'); }
+  const { esc } = MHL;
+  let seg = ''; try { seg = decodeURIComponent(location.pathname.split('/')[2] || '').toLowerCase(); } catch {}
+  const t = D.teams.find(x => x.slug === seg) || D.teams.find(x => x.id === seg);
+  if (!t) return notFound();
+
+  const r = D.table.S[t.id], n = D.teams.length;
+  const ord = k => k + (['th', 'st', 'nd', 'rd'][(k % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][k % 100] || 'th');
+  const gd = r.gf - r.ga;
+  const mine = D.matches.filter(m => m.a === t.id || m.b === t.id);
+  const results = mine.filter(MHL.played).sort(MHL.byDate).reverse();
+  const upcoming = mine.filter(m => !MHL.played(m)).sort(MHL.byDate);
+  const players = D.players.filter(p => p.team === t.id).sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name));
+
+  $('page').innerHTML = `
+    <div class="thead">${MHL.badge(t, 'lg')}<div><a class="back" href="/teams">All teams</a><h1>${esc(t.name)}</h1>
+      <p>${ord(r.place)} of ${n}, ${r.pts} point${r.pts === 1 ? '' : 's'}</p></div></div>
+    <div class="stats">
+      <div><b class="num">${ord(r.place)}</b><small>Place</small></div>
+      <div><b class="num">${r.pts}</b><small>Points</small></div>
+      <div><b class="num">${r.sw}-${r.sl}</b><small>Series won-lost</small></div>
+      <div><b class="num">${r.mw}-${r.ml}</b><small>Games won-lost</small></div>
+      <div><b class="num">${r.gf}-${r.ga}</b><small>Goals for-against</small></div>
+      <div><b class="num">${gd > 0 ? '+' + gd : gd}</b><small>Goal difference</small></div>
+    </div>
+    ${t.photo ? `<figure class="tphoto"><img src="${esc(t.photo)}" alt="The ${esc(t.name)} team"></figure>` : ''}
+    <div class="split">
+      <section aria-labelledby="hRoster"><div class="bh"><h2 id="hRoster">Roster</h2></div>
+        ${players.length ? `<div class="tbl-wrap"><table class="tbl mini">
+          <thead><tr><th scope="col" class="pos">#</th><th scope="col" class="l">Player</th><th scope="col" class="l">Pos</th><th scope="col" title="Goals">G</th><th scope="col" title="Assists">A</th><th scope="col" title="Points">P</th></tr></thead>
+          <tbody>${players.map(p => `<tr><td class="pos">${esc(p.number || '-')}</td><td class="l">${esc(p.name)}</td><td class="l">${p.role === 'goalie' ? 'Goalie' : 'Skater'}</td><td>${p.g}</td><td>${p.a}</td><td class="pts">${p.g + p.a}</td></tr>`).join('')}</tbody>
+        </table></div>` : MHL.empty('No players listed', 'The roster appears here once players are added.')}
+      </section>
+      <div>
+        <section aria-labelledby="hUp"><div class="bh"><h2 id="hUp">Upcoming</h2></div>
+          ${upcoming.length ? `<div class="sbs">${upcoming.map(m => MHL.scoreboard(m, D)).join('')}</div>` : MHL.empty('Nothing scheduled', 'The next series shows here once it is added.')}
+        </section>
+        <section class="block" aria-labelledby="hRes"><div class="bh"><h2 id="hRes">Results</h2></div>
+          ${results.length ? `<div class="sbs">${results.map(m => MHL.scoreboard(m, D)).join('')}</div>` : MHL.empty('No results yet', 'Finished series show here.')}
+        </section>
+      </div>
+    </div>`;
+})();
+</script>
+</body>
+</html>

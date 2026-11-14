@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MHL | Miniature Hockey League</title>
+<meta name="description" content="Results, standings, teams and player stats from the Miniature Hockey League.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="MHL | Miniature Hockey League">
+<meta property="og:description" content="Results, standings, teams and player stats from the Miniature Hockey League.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="mast">
+  <div>
+    <h1>Miniature Hockey League</h1>
+    <p id="season">Best-of-3 series. Points go to both teams when a series reaches game 3.</p>
+  </div>
+  <div class="facts" aria-label="League totals">
+    <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
+    <div><b id="fSeries" class="num">0</b><small>Series played</small></div>
+    <div><b id="fGoals" class="num">0</b><small>Goals</small></div>
+  </div>
+</div>
+<div class="ticker" id="ticker" aria-label="Latest results" hidden></div>
+<div class="home">
+  <div>
+    <section class="block" aria-labelledby="hNext">
+      <div class="bh"><h2 id="hNext">Next up</h2><a href="/matches">All matches</a></div>
+      <div id="next"><div class="sk"></div><div class="sk"></div></div>
+    </section>
+    <section class="block" aria-labelledby="hNews" id="newsBlock" hidden>
+      <div class="bh"><h2 id="hNews">Latest news</h2><a href="/news">All news</a></div>
+      <div id="news"></div>
+    </section>
+  </div>
+  <div>
+    <section class="block" aria-labelledby="hTable">
+      <div class="bh"><h2 id="hTable">Standings</h2><a href="/standings">Full table</a></div>
+      <div id="table"><div class="sk"></div></div>
+    </section>
+    <section class="block" aria-labelledby="hScorers">
+      <div class="bh"><h2 id="hScorers">Top scorers</h2><a href="/players">All players</a></div>
+      <div id="scorers"><div class="sk"></div></div>
+    </section>
+  </div>
+</div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  let D;
+  try { D = await MHL.load(); } catch { return MHL.fail($('next'), 'the league data'); }
+  const { esc } = MHL, tb = D.table;
+  if (D.site.season) $('season').textContent = D.site.season + '. Best-of-3 series. Points go to both teams when a series reaches game 3.';
+  $('fTeams').textContent = D.teams.length;
+  $('fSeries').textContent = tb.seriesPlayed;
+  $('fGoals').textContent = tb.goals;
+
+  // latest results, newest first
+  const done = D.matches.filter(MHL.played).sort(MHL.byDate).reverse().slice(0, 12);
+  if (done.length) {
+    $('ticker').hidden = false;
+    $('ticker').innerHTML = done.map(m => {
+      const st = MHL.state(m), A = D.T[m.a], B = D.T[m.b], aw = st.wa > st.wb;
+      const r = D.R[m.round];
+      return `<a class="tk" href="/matches"><span class="lab">${esc(r ? r.name : MHL.fmtDate(m.date))}</span>
+        <span class="t${aw ? ' w' : ''}">${esc(MHL.code(A))}</span><span class="n${aw ? ' w' : ''}">${st.wa}</span>
+        <span class="t${aw ? '' : ' w'}">${esc(MHL.code(B))}</span><span class="n${aw ? '' : ' w'}">${st.wb}</span></a>`;
+    }).join('');
+  }
+
+  const next = D.matches.filter(m => !MHL.played(m)).sort(MHL.byDate).slice(0, 4);
+  $('next').innerHTML = next.length ? `<div class="sbs">${next.map(m => MHL.scoreboard(m, D)).join('')}</div>`
+    : MHL.empty('No matches scheduled', done.length ? 'Every series so far is finished. New fixtures appear here.' : 'Fixtures appear here once they are added.');
+
+  const post = [...D.news].sort((x, y) => (y.pinned - x.pinned) || y.date.localeCompare(x.date))[0];
+  if (post) {
+    $('newsBlock').hidden = false;
+    const first = (post.body.split(/\n\s*\n/)[0] || '').slice(0, 260);
+    $('news').innerHTML = `<article class="newsbox"><time datetime="${esc(post.date)}">${esc(MHL.fmtDate(post.date))}</time><h3>${esc(post.title)}</h3><div class="prose">${MHL.prose(first)}</div></article>`;
+  }
+
+  $('table').innerHTML = tb.sorted.length ? `<div class="tbl-wrap"><table class="tbl mini">
+    <thead><tr><th class="pos" scope="col">#</th><th class="l" scope="col">Team</th><th scope="col" title="Series played">SP</th><th scope="col">PTS</th></tr></thead>
+    <tbody>${tb.sorted.slice(0, 6).map(r => `<tr><td class="pos">${r.place}</td><td class="l"><span class="team">${MHL.badge(r.t)}${MHL.teamLink(r.t)}</span></td><td>${r.sp}</td><td class="pts">${r.pts}</td></tr>`).join('')}</tbody>
+  </table></div>` : MHL.empty('No teams yet', 'The table fills in as teams are added.');
+
+  const top = [...D.players].sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name)).filter(p => p.g + p.a > 0).slice(0, 5);
+  $('scorers').innerHTML = top.length ? `<div class="lead-mini">${top.map((p, i) => `<div class="lm"><span class="r">${i + 1}</span>${MHL.badge(D.T[p.team])}<span class="nm">${esc(p.name)}<small>${p.g} G, ${p.a} A</small></span><span class="v">${p.g + p.a}</span></div>`).join('')}</div>`
+    : MHL.empty('No points yet', 'Goals and assists show here once they are entered.');
+})();
+</script>
+</body>
+</html>
