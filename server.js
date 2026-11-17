@@ -15,6 +15,7 @@ const DATA_DIR = path.resolve(process.env.DATA_DIR || DIR);
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const PW_FILE = path.join(DATA_DIR, '.admin-password');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const STEAM_OPENID = 'https://steamcommunity.com/openid/login';
 // league logo: logo.png, logo.webp or logo.jpg next to server.js (optional)
 const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
@@ -105,11 +106,19 @@ const STATIC = {
 
 const sessions = new Map(); // token -> expiry
 const SESSION_MS = 12 * 3600 * 1000;
+const playerSessions = new Map(); // token -> { steamId, expires }
+const steamStates = new Map(); // state -> { returnTo, realm, expires }
+const steamNonces = new Map(); // nonce -> expiry
+const PLAYER_SESSION_MS = 12 * 3600 * 1000;
+const STEAM_STATE_MS = 5 * 60 * 1000;
 const fails = new Map(); // ip -> {n, until}
 const publicLimits = new Map(); // key -> {n, until}
 setInterval(() => {
   const now = Date.now();
   for (const [t, exp] of sessions) if (exp < now) sessions.delete(t);
+  for (const [t, player] of playerSessions) if (player.expires < now) playerSessions.delete(t);
+  for (const [state, entry] of steamStates) if (entry.expires < now) steamStates.delete(state);
+  for (const [nonce, exp] of steamNonces) if (exp < now) steamNonces.delete(nonce);
   for (const [ip, f] of fails) if (f.until < now && f.n === 0) fails.delete(ip);
   for (const [key, limit] of publicLimits) if (limit.until < now) publicLimits.delete(key);
 }, 10 * 60 * 1000).unref();
@@ -144,6 +153,26 @@ const isAdmin = req => {
   if (exp < Date.now()) { sessions.delete(t); return false; }
   return true;
 };
+const playerSteamId = req => {
+  const token = getCookie(req, 'mhl_player');
+  const session = token && playerSessions.get(token);
+  if (!session) return '';
+  if (session.expires < Date.now()) { playerSessions.delete(token); return ''; }
+  return session.steamId;
+};
+const requestOrigin = req => {
+  const host = String(req.headers.host || '');
+  if (!/^[a-z0-9.-]+(?::\d{1,5})?$/i.test(host)) return '';
+  const forwarded = TRUST_PROXY ? String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() : '';
+  const secure = forwarded ? forwarded === 'https' : !!req.socket.encrypted;
+  if (forwarded && forwarded !== 'http' && forwarded !== 'https') return '';
+  if (PROD && !secure) return '';
+  return `${secure ? 'https' : 'http'}://${host.toLowerCase()}`;
+};
+const steamFailure = res => send(res, 303, 'Returning to signup', 'text/plain; charset=utf-8', {
+  Location: '/sign-up?steam=failed',
+  'Set-Cookie': 'mhl_steam_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0',
+});
 
 const CSP = [
   "default-src 'self'",
@@ -265,6 +294,7 @@ function sanitize(d) {
     id: str(p.id, 40) || crypto.randomUUID(),
     discord: str(p.discord, 80),
     steam: steamProfile(p.steam),
+    steamId: /^\d{17}$/.test(String(p.steamId || '')) ? String(p.steamId) : '',
     name: str(p.name, 40),
     hours: num(p.hours, 100000),
     position: ['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(p.position) ? p.position : '',
@@ -325,10 +355,112 @@ const server = http.createServer(async (req, res) => {
   if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=15552000');
   try {
     if (p === '/healthz') return send(res, 200, 'ok', 'text/plain');
+    if (p === '/auth/steam' && req.method === 'GET') {
+      const origin = requestOrigin(req);
+      if (!origin) return send(res, 503, 'Steam sign-in requires a valid HTTPS site origin.', 'text/plain; charset=utf-8');
+      if (!allowPublic('steam-login:' + clientIp(req), 20, 60 * 60 * 1000)) {
+        return send(res, 429, 'Too many Steam sign-in attempts. Please try again later.', 'text/plain; charset=utf-8');
+      }
+      if (steamStates.size >= 10000) steamStates.delete(steamStates.keys().next().value);
+      const state = crypto.randomBytes(24).toString('hex');
+      const realm = origin + '/';
+      const returnTo = `${origin}/auth/steam/callback?state=${state}`;
+      steamStates.set(state, { returnTo, realm, expires: Date.now() + STEAM_STATE_MS });
+      const login = new URL(STEAM_OPENID);
+      login.searchParams.set('openid.ns', 'http://specs.openid.net/auth/2.0');
+      login.searchParams.set('openid.mode', 'checkid_setup');
+      login.searchParams.set('openid.realm', realm);
+      login.searchParams.set('openid.return_to', returnTo);
+      login.searchParams.set('openid.identity', 'http://specs.openid.net/auth/2.0/identifier_select');
+      login.searchParams.set('openid.claimed_id', 'http://specs.openid.net/auth/2.0/identifier_select');
+      const secure = origin.startsWith('https://') ? '; Secure' : '';
+      return send(res, 302, 'Redirecting to Steam', 'text/plain; charset=utf-8', {
+        Location: login.toString(),
+        'Set-Cookie': `mhl_steam_state=${state}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${STEAM_STATE_MS / 1000}${secure}`,
+      });
+    }
+    if (p === '/auth/steam/callback' && req.method === 'GET') {
+      const origin = requestOrigin(req);
+      const state = url.searchParams.get('state') || '';
+      const stateCookie = getCookie(req, 'mhl_steam_state');
+      const pending = state && stateCookie === state ? steamStates.get(state) : null;
+      if (!origin || !pending || pending.expires < Date.now()) return steamFailure(res);
+      steamStates.delete(state);
+
+      const params = url.searchParams;
+      const claimed = params.get('openid.claimed_id') || '';
+      const identity = params.get('openid.identity') || '';
+      const endpoint = params.get('openid.op_endpoint') || '';
+      const nonce = params.get('openid.response_nonce') || '';
+      const signed = new Set((params.get('openid.signed') || '').split(','));
+      const idMatch = claimed.match(/^https?:\/\/steamcommunity\.com\/openid\/id\/(\d{17})$/i);
+      const nonceDate = nonce.slice(0, 20);
+      const nonceTime = Date.parse(nonceDate);
+      const requiredSigned = ['op_endpoint', 'claimed_id', 'identity', 'return_to', 'response_nonce'];
+      if (params.get('openid.ns') !== 'http://specs.openid.net/auth/2.0' ||
+          params.get('openid.mode') !== 'id_res' ||
+          endpoint !== STEAM_OPENID || !idMatch || identity !== claimed ||
+          params.get('openid.return_to') !== pending.returnTo ||
+          !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(nonceDate) ||
+          !Number.isFinite(nonceTime) || Math.abs(Date.now() - nonceTime) > 10 * 60 * 1000 ||
+          nonce.length > 256 || requiredSigned.some(field => !signed.has(field)) ||
+          steamNonces.has(nonce)) return steamFailure(res);
+
+      if (steamNonces.size >= 10000) steamNonces.delete(steamNonces.keys().next().value);
+      steamNonces.set(nonce, Date.now() + 10 * 60 * 1000);
+      const verification = new URLSearchParams();
+      for (const [key, value] of params) if (key.startsWith('openid.')) verification.append(key, value);
+      verification.set('openid.mode', 'check_authentication');
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      let verified = false;
+      try {
+        const check = await fetch(STEAM_OPENID, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: verification.toString(),
+          signal: controller.signal,
+        });
+        const result = await check.text();
+        verified = check.ok && /^is_valid:true\s*$/m.test(result);
+      } catch {
+        verified = false;
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!verified) return steamFailure(res);
+
+      const steamId = idMatch[1], token = crypto.randomBytes(32).toString('hex');
+      playerSessions.set(token, { steamId, expires: Date.now() + PLAYER_SESSION_MS });
+      const secure = origin.startsWith('https://') ? '; Secure' : '';
+      return send(res, 303, 'Signed in with Steam', 'text/plain; charset=utf-8', {
+        Location: '/sign-up?steam=connected',
+        'Set-Cookie': [
+          `mhl_player=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${PLAYER_SESSION_MS / 1000}${secure}`,
+          `mhl_steam_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
+        ],
+      });
+    }
+    if (p === '/api/player/me' && req.method === 'GET') {
+      const steamId = playerSteamId(req);
+      return send(res, 200, { authenticated: !!steamId, steamId });
+    }
+    if (p === '/api/player/logout' && req.method === 'POST') {
+      const token = getCookie(req, 'mhl_player');
+      if (token) playerSessions.delete(token);
+      const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
+      return send(res, 200, { ok: true }, 'application/json', {
+        'Set-Cookie': `mhl_player=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
+      });
+    }
     if (p === '/api/data' && req.method === 'GET') {
       // logoUrl: pages swap the wordmark for the logo when there is one
       const logo = findLogo();
-      return send(res, 200, { ...readData(), hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
+      const data = readData();
+      if (!isAdmin(req)) {
+        data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
+      }
+      return send(res, 200, { ...data, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/me') return send(res, 200, { admin: isAdmin(req) });
 
@@ -367,21 +499,24 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ...clean, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/sign-up' && req.method === 'POST') {
+      const steamId = playerSteamId(req);
+      if (!steamId) return send(res, 401, { error: 'Sign in with Steam before submitting your signup.' });
       if (!allowPublic('signup:' + clientIp(req), 5, 60 * 60 * 1000)) {
         return send(res, 429, { error: 'You have submitted several signups recently. Please try again later.' });
       }
       const signup = JSON.parse(await readBody(req) || '{}');
       const discord = str(signup.discord, 80), name = str(signup.name, 40);
-      const steam = steamProfile(signup.steam);
+      const steam = `https://steamcommunity.com/profiles/${steamId}`;
       const hours = Number(signup.hours);
-      if (!discord || !name || !steam || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
+      if (!discord || !name || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
           !['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(signup.position) ||
           !['Yes', 'No', 'Maybe'].includes(signup.captain)) {
         return send(res, 400, { error: 'Complete all fields with valid answers before submitting.' });
       }
       const data = readData();
       const discordKey = discord.toLowerCase(), profileKey = steamKey(steam);
-      if (data.signups.some(player => String(player.discord || '').trim().toLowerCase() === discordKey ||
+      if (data.signups.some(player => player.steamId === steamId ||
+          String(player.discord || '').trim().toLowerCase() === discordKey ||
           (profileKey && steamKey(player.steam) === profileKey))) {
         return send(res, 409, { error: 'You have already signed up. If you need to change something, please ask a staff member via the Discord server.' });
       }
@@ -390,6 +525,7 @@ const server = http.createServer(async (req, res) => {
         id: crypto.randomUUID(),
         discord,
         steam,
+        steamId,
         name,
         hours,
         position: signup.position,
@@ -413,6 +549,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { url: '/uploads/' + name });
     }
     if (p === '/api/sign-up-upload' && req.method === 'POST') {
+      if (!playerSteamId(req)) return send(res, 401, { error: 'Sign in with Steam before uploading a profile picture.' });
       if (!allowPublic('signup-upload:' + clientIp(req), 10, 60 * 60 * 1000)) {
         return send(res, 429, { error: 'Too many profile picture uploads. Please try again later.' });
       }

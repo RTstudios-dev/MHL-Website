@@ -412,9 +412,9 @@ const MHLA = (() => {
     const captainOptions = ['Yes', 'No', 'Maybe'];
     return [
       head('Season 2 Players'),
-      h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Value here. Press Save changes to publish updates."),
+      h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Value in euros here. Steam profile links are only shown in admin."),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Value', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Value (€)', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(signup => h('tr', {},
           h('td', {}, text(signup, 'name', { maxlength: 40, 'aria-label': `In-game name for ${signup.name}`, required: true })),
           h('td', {}, text(signup, 'discord', { maxlength: 80, 'aria-label': `Discord username for ${signup.name}`, required: true })),

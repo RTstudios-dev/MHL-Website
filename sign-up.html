@@ -12,6 +12,10 @@
 <link rel="stylesheet" href="/site.css">
 <style>
 .signup{max-width:680px;display:grid;gap:20px}
+.signup[hidden],.steam-auth [hidden]{display:none}
+.steam-auth{max-width:680px;margin-bottom:32px}
+.steam-auth .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:16px}
+.steam-auth p{color:var(--muted)}
 .signup .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:18px}
 .signup label{display:grid;gap:6px;color:var(--ink);font-weight:500}
 .signup input,.signup select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:10px 12px;min-height:46px}
@@ -35,14 +39,17 @@
   <h1>Sign Up Here</h1>
   <p>Interested in playing Season 2? Fill in your player details below.</p>
 </div>
-<form class="signup" id="signup">
+<section class="steam-auth" aria-label="Player account">
+  <div class="ed">
+    <p id="steamStatus" role="status" aria-live="polite">Sign in with Steam to submit a player signup.</p>
+    <a class="btn" id="steamLogin" href="/auth/steam">Sign in with Steam</a>
+    <button class="btn line" id="steamLogout" type="button" hidden>Sign out</button>
+  </div>
+</section>
+<form class="signup" id="signup" hidden>
   <div class="ed">
     <label>Type your discord username here
       <input name="discord" type="text" maxlength="80" autocomplete="nickname" required>
-    </label>
-    <label>What is your Steam profile link?
-      <input name="steam" type="url" maxlength="300" placeholder="https://steamcommunity.com/id/yourname" required>
-      <small>Enter your public Steam Community profile URL.</small>
     </label>
     <label>Type your in-game name here
       <input name="name" type="text" maxlength="40" required>
@@ -89,10 +96,46 @@
 <script>
 (() => {
   const form = document.getElementById('signup');
+  const steamStatus = document.getElementById('steamStatus');
+  const steamLogin = document.getElementById('steamLogin');
+  const steamLogout = document.getElementById('steamLogout');
   const fileInput = document.getElementById('photo');
   const preview = document.getElementById('preview');
   const status = document.getElementById('status');
   const button = document.getElementById('submit');
+
+  async function refreshSteamSession() {
+    try {
+      const response = await fetch('/api/player/me', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Could not check Steam sign-in.');
+      const player = await response.json();
+      form.hidden = !player.authenticated;
+      steamLogin.hidden = !!player.authenticated;
+      steamLogout.hidden = !player.authenticated;
+      steamStatus.textContent = player.authenticated
+        ? 'Signed in with Steam. You can submit your player signup.'
+        : new URLSearchParams(location.search).get('steam') === 'failed'
+          ? 'Steam sign-in could not be completed. Please try again.'
+          : 'Sign in with Steam to submit a player signup.';
+    } catch {
+      form.hidden = true;
+      steamLogin.hidden = false;
+      steamLogout.hidden = true;
+      steamStatus.textContent = 'Could not check Steam sign-in. Please reload and try again.';
+    }
+  }
+  steamLogout.addEventListener('click', async () => {
+    steamLogout.disabled = true;
+    try {
+      const response = await fetch('/api/player/logout', { method: 'POST' });
+      if (!response.ok) throw new Error('Sign out failed. Please try again.');
+      await refreshSteamSession();
+    } catch (error) {
+      steamStatus.textContent = error.message || 'Sign out failed. Please try again.';
+    } finally {
+      steamLogout.disabled = false;
+    }
+  });
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
@@ -139,7 +182,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           discord: values.get('discord'),
-          steam: values.get('steam'),
           name: values.get('name'),
           hours: Number(values.get('hours')),
           position: values.get('position'),
@@ -149,6 +191,7 @@
       });
       const result = await response.json();
       if (!response.ok) {
+        if (response.status === 401) await refreshSteamSession();
         if (response.status === 409) {
           form.reset();
           preview.removeAttribute('src');
@@ -168,6 +211,7 @@
       button.disabled = false;
     }
   });
+  refreshSteamSession();
 })();
 </script>
 </body>
