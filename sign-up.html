@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign Up Here | MHL</title>
+<meta name="description" content="Sign up to play in Season 2 of the Miniature Hockey League.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+.signup{max-width:680px;display:grid;gap:20px}
+.signup .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:18px}
+.signup label{display:grid;gap:6px;color:var(--ink);font-weight:500}
+.signup input,.signup select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:10px 12px;min-height:46px}
+.signup input:focus-visible,.signup select:focus-visible{outline:1px solid var(--gold);border-color:var(--gold)}
+.signup small{font-size:13px;font-weight:400;color:var(--muted)}
+.picrow{display:flex;align-items:center;gap:16px}
+.picrow img{width:76px;height:76px;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--ice)}
+.picrow input{max-width:100%}
+.signup-status{min-height:1.6em;color:var(--muted)}
+.signup-status.success{color:var(--gold)}
+.signup-status.error{color:#e08474}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>Sign Up Here</h1>
+  <p>Interested in playing Season 2? Fill in your player details below.</p>
+</div>
+<form class="signup" id="signup">
+  <div class="ed">
+    <label>Type your discord username here
+      <input name="discord" type="text" maxlength="80" autocomplete="nickname" required>
+    </label>
+    <label>Type your in-game name here
+      <input name="name" type="text" maxlength="40" required>
+    </label>
+    <label>How many hours on puck do you have
+      <input name="hours" type="number" min="0" max="100000" step="1" inputmode="numeric" required>
+      <small>Enter a whole number of hours.</small>
+    </label>
+    <label>Would you like to be captain?
+      <select name="captain" required>
+        <option value="" selected disabled>Choose Yes, No, or Maybe</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+        <option value="Maybe">Maybe</option>
+      </select>
+    </label>
+    <label>Profile picture
+      <div class="picrow">
+        <img id="preview" alt="Profile picture preview" hidden>
+        <input id="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+      </div>
+      <small>Optional. PNG, JPG, WEBP, or GIF; maximum 5 MB.</small>
+    </label>
+    <button class="btn" id="submit" type="submit">Submit signup</button>
+    <p class="signup-status" id="status" role="status" aria-live="polite"></p>
+  </div>
+</form>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(() => {
+  const form = document.getElementById('signup');
+  const fileInput = document.getElementById('photo');
+  const preview = document.getElementById('preview');
+  const status = document.getElementById('status');
+  const button = document.getElementById('submit');
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) { preview.removeAttribute('src'); preview.hidden = true; return; }
+    if (file.size > 5000000) {
+      fileInput.value = '';
+      preview.removeAttribute('src');
+      preview.hidden = true;
+      status.textContent = 'That image is too large. Choose an image under 5 MB.';
+      status.className = 'signup-status error';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      preview.src = reader.result;
+      preview.hidden = false;
+      status.textContent = '';
+      status.className = 'signup-status';
+    };
+    reader.onerror = () => {
+      status.textContent = 'Could not preview that image. Try choosing it again.';
+      status.className = 'signup-status error';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    button.disabled = true;
+    status.textContent = 'Submitting...';
+    status.className = 'signup-status';
+    try {
+      let photo = '';
+      const file = fileInput.files[0];
+      if (file) {
+        const upload = await fetch('/api/sign-up-upload', { method: 'POST', body: file });
+        const uploaded = await upload.json();
+        if (!upload.ok) throw new Error(uploaded.error || 'Could not upload the profile picture.');
+        photo = uploaded.url;
+      }
+      const values = new FormData(form);
+      const response = await fetch('/api/sign-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          discord: values.get('discord'),
+          name: values.get('name'),
+          hours: Number(values.get('hours')),
+          captain: values.get('captain'),
+          photo,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not submit your signup.');
+      form.reset();
+      preview.removeAttribute('src');
+      preview.hidden = true;
+      status.textContent = 'Thanks! Your Season 2 signup has been received.';
+      status.className = 'signup-status success';
+    } catch (error) {
+      status.textContent = error.message || 'Could not submit your signup. Please try again.';
+      status.className = 'signup-status error';
+    } finally {
+      button.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

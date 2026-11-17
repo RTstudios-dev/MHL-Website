@@ -21,6 +21,7 @@ Don't upload `.admin-password` anywhere, it's already in `.gitignore`.
 - `/standings`
 - `/teams` and `/team/<name>` for each team
 - `/players`
+- `/sign-up` and `/season-2-players`
 - `/news`
 - `/rules`
 - `/admin`
@@ -39,7 +40,10 @@ Remember to press **Save changes**, nothing goes live until you do.
 - Players: name, team, number, position. Their goal and assist totals add up from the matches.
 - News: pinned posts stay on top, the newest one also shows on the home page.
 - Rules: shown in the same order as in the admin.
+- Season 2 Players: player signups are stored with the league data; admins can edit each player's Value from the Season 2 Players section.
 - Settings: season name and Discord link (leave it empty to hide the Discord button).
+
+Public Season 2 signups are saved in the same persistent `data.json` as the rest of the site. Optional profile pictures are stored in `uploads/`, alongside team images, and are retained when admin changes are saved.
 
 ## Points
 

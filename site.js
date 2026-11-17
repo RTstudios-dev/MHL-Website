@@ -6,6 +6,7 @@
   const NAV = [
     ['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Standings'], ['/teams', 'Teams'],
     ['/players', 'Players'], ['/news', 'News'], ['/rules', 'Rules'],
+    ['/season-2-players', 'Season 2 Players'], ['/sign-up', 'Sign Up Here'],
   ];
   // phone tab bar: 4 pages + More
   const TABS = [['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Table'], ['/teams', 'Teams']];

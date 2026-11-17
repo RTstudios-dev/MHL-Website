@@ -20,7 +20,7 @@ const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
-const EMPTY = { site: { season: 'Season 1', discord: '' }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '' }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -91,6 +91,8 @@ const STATIC = {
   '/standings': ['standings.html', HTML],
   '/teams': ['teams.html', HTML],
   '/players': ['players.html', HTML],
+  '/sign-up': ['sign-up.html', HTML],
+  '/season-2-players': ['season-2-players.html', HTML],
   '/news': ['news.html', HTML],
   '/rules': ['rules.html', HTML],
   '/admin': ['admin.html', HTML],
@@ -104,10 +106,12 @@ const STATIC = {
 const sessions = new Map(); // token -> expiry
 const SESSION_MS = 12 * 3600 * 1000;
 const fails = new Map(); // ip -> {n, until}
+const publicLimits = new Map(); // key -> {n, until}
 setInterval(() => {
   const now = Date.now();
   for (const [t, exp] of sessions) if (exp < now) sessions.delete(t);
   for (const [ip, f] of fails) if (f.until < now && f.n === 0) fails.delete(ip);
+  for (const [key, limit] of publicLimits) if (limit.until < now) publicLimits.delete(key);
 }, 10 * 60 * 1000).unref();
 
 const clientIp = req => {
@@ -116,6 +120,18 @@ const clientIp = req => {
     if (xff.length) return xff[xff.length - 1]; // last hop = what the proxy saw
   }
   return req.socket.remoteAddress;
+};
+const allowPublic = (key, max, windowMs) => {
+  const now = Date.now();
+  let limit = publicLimits.get(key);
+  if (!limit || limit.until <= now) {
+    if (publicLimits.size >= 10000) publicLimits.delete(publicLimits.keys().next().value);
+    limit = { n: 0, until: now + windowMs };
+    publicLimits.set(key, limit);
+  }
+  if (limit.n >= max) return false;
+  limit.n++;
+  return true;
 };
 const getCookie = (req, name) => {
   const m = (req.headers.cookie || '').split(/;\s*/).find(c => c.startsWith(name + '='));
@@ -160,7 +176,7 @@ const readRaw = (req, max = 300_000) => new Promise((resolve, reject) => {
 });
 
 // clean up whatever the admin page sends
-const readBody = async req => (await readRaw(req, 1_000_000)).toString();
+const readBody = async (req, max = 1_000_000) => (await readRaw(req, max)).toString();
 const str = (v, n) => String(v ?? '').trim().slice(0, n);
 const num = (v, max = 9999) => { const x = Math.floor(Number(v)); return Number.isFinite(x) && x >= 0 ? Math.min(x, max) : 0; };
 const score = v => (v === null || v === '' || v === undefined) ? null : num(v, 99);
@@ -240,7 +256,16 @@ function sanitize(d) {
     title: str(r.title, 120) || 'Rule',
     body: String(r.body ?? '').trim().slice(0, 4000),
   }));
-  return { site, teams, rounds, matches, players, news, rules };
+  const signups = (Array.isArray(d.signups) ? d.signups : []).slice(0, 5000).map(p => ({
+    id: str(p.id, 40) || crypto.randomUUID(),
+    discord: str(p.discord, 80),
+    name: str(p.name, 40),
+    hours: num(p.hours, 100000),
+    captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
+    photo: okImage(p.photo) ? p.photo : '',
+    value: num(p.value, 1000000),
+  })).filter(p => p.discord && p.name);
+  return { site, teams, rounds, matches, players, news, rules, signups };
 }
 
 // team pages
@@ -321,18 +346,60 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/data' && req.method === 'PUT') {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
-      const clean = sanitize(JSON.parse(await readBody(req)));
+      const clean = sanitize(JSON.parse(await readBody(req, 10_000_000)));
+      const current = readData();
+      const byId = new Map(current.signups.map(signup => [signup.id, signup]));
+      clean.signups.forEach(signup => byId.set(signup.id, signup));
+      clean.signups = [...byId.values()].slice(0, 5000);
       writeData(clean);
       // delete uploads nothing uses anymore
-      const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo]).map(u => path.basename(u || '')));
+      const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo]).concat(clean.signups.map(s => s.photo)).map(u => path.basename(u || '')));
       for (const f of fs.readdirSync(UPLOAD_DIR)) if (!used.has(f)) fs.unlink(path.join(UPLOAD_DIR, f), () => {});
       const logo = findLogo();
       return send(res, 200, { ...clean, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
+    }
+    if (p === '/api/sign-up' && req.method === 'POST') {
+      if (!allowPublic('signup:' + clientIp(req), 5, 60 * 60 * 1000)) {
+        return send(res, 429, { error: 'You have submitted several signups recently. Please try again later.' });
+      }
+      const signup = JSON.parse(await readBody(req) || '{}');
+      const discord = str(signup.discord, 80), name = str(signup.name, 40);
+      const hours = Number(signup.hours);
+      if (!discord || !name || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
+          !['Yes', 'No', 'Maybe'].includes(signup.captain)) {
+        return send(res, 400, { error: 'Complete all fields with valid answers before submitting.' });
+      }
+      const data = readData();
+      if (data.signups.length >= 5000) return send(res, 409, { error: 'Signups are currently full. Please contact the league administrator.' });
+      const entry = {
+        id: crypto.randomUUID(),
+        discord,
+        name,
+        hours,
+        captain: signup.captain,
+        photo: okImage(signup.photo) ? signup.photo : '',
+        value: 0,
+      };
+      data.signups.push(entry);
+      writeData(data);
+      return send(res, 201, { ok: true });
     }
     if (p === '/api/upload' && req.method === 'POST') {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
       let buf;
       try { buf = await readRaw(req, 8_000_000); } catch { return send(res, 413, { error: 'Image too large (max 8 MB)' }); }
+      const ext = sniff(buf);
+      if (!ext) return send(res, 400, { error: 'Use a PNG, JPG, WEBP or GIF image' });
+      const name = crypto.randomBytes(8).toString('hex') + '.' + ext;
+      fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
+      return send(res, 200, { url: '/uploads/' + name });
+    }
+    if (p === '/api/sign-up-upload' && req.method === 'POST') {
+      if (!allowPublic('signup-upload:' + clientIp(req), 10, 60 * 60 * 1000)) {
+        return send(res, 429, { error: 'Too many profile picture uploads. Please try again later.' });
+      }
+      let buf;
+      try { buf = await readRaw(req, 5_000_000); } catch { return send(res, 413, { error: 'Image too large (max 5 MB)' }); }
       const ext = sniff(buf);
       if (!ext) return send(res, 400, { error: 'Use a PNG, JPG, WEBP or GIF image' });
       const name = crypto.randomBytes(8).toString('hex') + '.' + ext;

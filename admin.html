@@ -160,6 +160,7 @@ const MHLA = (() => {
   async function start() {
     const r = await fetch('/api/data', { cache: 'no-store' });
     D = await r.json();
+    D.signups = Array.isArray(D.signups) ? D.signups : [];
     dirty = false;
     draw();
   }
@@ -184,7 +185,7 @@ const MHLA = (() => {
   }
 
   // frame
-  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['news', 'News'], ['rules', 'Rules'], ['settings', 'Settings']];
+  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Players'], ['news', 'News'], ['rules', 'Rules'], ['settings', 'Settings']];
   function draw() {
     const y = scrollY;
     const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
@@ -200,7 +201,7 @@ const MHLA = (() => {
           if (dirty && !confirm('You have unsaved changes. Log out anyway?')) return;
           dirty = false; await fetch('/api/logout', { method: 'POST' }); login();
         } }, 'Log out'))));
-    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, news, rules, settings })[tab]());
+    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, signups, news, rules, settings })[tab]());
     root.replaceChildren(bar, panel);
     scrollTo(0, y);
   }
@@ -401,6 +402,34 @@ const MHLA = (() => {
             D.matches.forEach(m => (m.goals || []).forEach(x => ['s', 'a1', 'a2'].forEach(k => { if (x[k] === p.id) x[k] = ''; })));
             touch(); draw();
           } }, 'Delete'))))))) : h('div', { class: 'empty' }, h('b', {}, 'No players'), 'Press Add player to add one.'),
+    ];
+  }
+
+  // season 2 signups
+  function signups() {
+    const list = [...D.signups].sort((a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord));
+    return [
+      head('Season 2 Players'),
+      h('p', { class: 'help' }, "Set each player's Value here. Signup details are submitted on the public Sign Up Here page. Press Save changes to publish updated values."),
+      list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Hours on Puck', 'Captain?', 'Value'].map(x => h('th', { scope: 'col' }, x)))),
+        h('tbody', {}, list.map(signup => h('tr', {},
+          h('td', {}, signup.name),
+          h('td', {}, signup.discord),
+          h('td', { class: 'tot' }, signup.hours),
+          h('td', {}, signup.captain),
+          h('td', {}, h('input', {
+            type: 'number', min: 0, max: 1000000, step: 1, class: 'n',
+            'aria-label': `Value for ${signup.name}`,
+            value: signup.value ?? 0,
+            oninput: e => {
+              const value = Number(e.target.value);
+              if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) return;
+              signup.value = value;
+              touch();
+            },
+          })),
+        ))))) : h('div', { class: 'empty' }, h('b', {}, 'No Season 2 signups yet'), 'New entries from the public signup form will appear here.'),
     ];
   }
 

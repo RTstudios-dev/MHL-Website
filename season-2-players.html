@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Season 2 Players | MHL</title>
+<meta name="description" content="Season 2 player signups for the Miniature Hockey League.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+.sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
+.sortbar select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:9px 12px;min-height:44px}
+.signup-person{display:flex;align-items:center;gap:12px;min-width:170px}
+.signup-person img,.avatar{width:42px;height:42px;flex:none;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
+.avatar{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:22px}
+.signup-table{min-width:760px}
+.signup-table .name-cell{min-width:190px}
+.signup-table .value-cell{font-family:var(--disp);font-size:24px;color:var(--gold)}
+@media(max-width:560px){.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>Season 2 Players</h1>
+  <p>Player signups and their Season 2 details.</p>
+</div>
+<div class="sortbar">
+  <p id="count" class="note" style="margin:0"></p>
+  <label for="sort">Sort signups
+    <select id="sort">
+      <option value="captains">Potential Captains</option>
+      <option value="hours-desc">Highest Hours</option>
+      <option value="hours-asc">Lowest Hours</option>
+      <option value="value-desc">Highest Value</option>
+      <option value="value-asc">Lowest Value</option>
+    </select>
+  </label>
+</div>
+<div id="players"><div class="sk"></div></div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(async () => {
+  const host = document.getElementById('players');
+  const select = document.getElementById('sort');
+  const signups = () => window.seasonSignups || [];
+  function draw() {
+    const list = [...signups()];
+    const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
+    const captainRank = { Yes: 0, Maybe: 1, No: 2 };
+    const sorters = {
+      captains: (a, b) => captainRank[a.captain] - captainRank[b.captain] || byName(a, b),
+      'hours-desc': (a, b) => b.hours - a.hours || byName(a, b),
+      'hours-asc': (a, b) => a.hours - b.hours || byName(a, b),
+      'value-desc': (a, b) => b.value - a.value || byName(a, b),
+      'value-asc': (a, b) => a.value - b.value || byName(a, b),
+    };
+    list.sort(sorters[select.value]);
+    document.getElementById('count').textContent = `${list.length} ${list.length === 1 ? 'signup' : 'signups'}`;
+    if (!list.length) {
+      host.innerHTML = MHL.empty('No Season 2 signups yet', 'Use Sign Up Here to add the first player.');
+      return;
+    }
+    host.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">
+      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
+        <th scope="col">Hours on Puck</th><th scope="col">Captain?</th><th scope="col">Value</th></tr></thead>
+      <tbody>${list.map(player => `<tr>
+        <td class="l name-cell"><span class="signup-person">${player.photo
+          ? `<img src="${MHL.esc(player.photo)}" alt="">`
+          : `<span class="avatar" aria-hidden="true">${MHL.esc(player.name.slice(0, 1).toUpperCase())}</span>`}
+          <b>${MHL.esc(player.name)}</b></span></td>
+        <td class="l">${MHL.esc(player.discord)}</td><td>${player.hours}</td>
+        <td>${MHL.esc(player.captain)}</td><td class="value-cell">${player.value}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+  select.addEventListener('change', draw);
+  try {
+    const response = await fetch('/api/data', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Could not load player signups.');
+    const data = await response.json();
+    window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
+    draw();
+  } catch {
+    MHL.fail(host, 'the Season 2 players');
+  }
+})();
+</script>
+</body>
+</html>
