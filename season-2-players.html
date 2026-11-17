@@ -198,8 +198,11 @@
     list.sort(sorters[select.value]);
     const totalSignups = signups().length;
     const averageValue = key => {
-      if (!totalSignups) return '—';
-      const average = signups().reduce((sum, player) => sum + (Number(player[key] ?? player.value) || 0), 0) / totalSignups;
+      const otherKey = key === 'skaterValue' ? 'goalieValue' : 'skaterValue';
+      const valueOf = (player, valueKey) => Number(player[valueKey] ?? player.value) || 0;
+      const eligible = signups().filter(player => valueOf(player, key) >= valueOf(player, otherKey));
+      if (!eligible.length) return '—';
+      const average = eligible.reduce((sum, player) => sum + valueOf(player, key), 0) / eligible.length;
       return averageValueFormat.format(Math.ceil(average / 100000) * 100000);
     };
     document.getElementById('count').textContent = `${totalSignups} ${totalSignups === 1 ? 'signup' : 'signups'} (est possible teams ${Math.floor(totalSignups / 8)}) · Avg Skater Value ${averageValue('skaterValue')} · Avg Goalie Value ${averageValue('goalieValue')}`;
