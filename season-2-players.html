@@ -17,11 +17,15 @@
 .signup-person{display:flex;align-items:center;gap:12px;min-width:170px}
 .signup-person img,.avatar{width:42px;height:42px;flex:none;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
 .avatar{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:22px}
+.signup-team-display{display:inline-flex;align-items:center;gap:8px}
+.signup-team-display .badge{width:30px;height:30px}
+.signup-team-tag{display:inline-flex;align-items:center;min-height:26px;padding:2px 8px;border:1px solid var(--line);color:var(--gold);font-size:11px;letter-spacing:.08em;white-space:nowrap}
 .signup-table{min-width:1080px}
 .signup-table .name-cell{min-width:190px}
 .signup-table .value-cell{font-family:var(--disp);font-size:24px;color:var(--gold)}
 .own-signup{margin-bottom:40px}
 .own-signup .signup-table{min-width:1180px}
+.own-signup .tbl-wrap{overflow:visible}
 .own-signup .edit-cell{width:1%;white-space:nowrap}
 .cap-banner{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 30px}
 .cap-item{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--paper);border:1px solid var(--line);padding:14px 18px}
@@ -56,7 +60,7 @@
       <option value="captains">Potential Captains</option>
       <option value="hours-desc">Highest Hours</option>
       <option value="hours-asc">Lowest Hours</option>
-      <option value="value-desc">Highest Value</option>
+      <option value="value-desc" selected>Highest Value</option>
       <option value="value-asc">Lowest Value</option>
     </select>
   </label>
@@ -95,13 +99,19 @@
   };
   let teams = [];
   let ownSignupId = '';
+  const teamDisplay = player => {
+    const team = teams.find(item => item.id === player.team);
+    if (!team) return '—';
+    const tag = team.logo ? `<b class="signup-team-tag">${MHL.esc(MHL.code(team))}</b>` : '';
+    return `<span class="signup-team-display" title="${MHL.esc(team.name)}">${MHL.badge(team)}${tag}</span>`;
+  };
   const playerCells = player => `<td class="l name-cell"><span class="signup-person">${player.photo
     ? `<img src="${MHL.esc(player.photo)}" alt="">`
     : `<span class="avatar" aria-hidden="true">${MHL.esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
     <b>${MHL.esc(player.name)}</b></span></td>
     <td class="l">${MHL.esc(player.discord)}</td><td>${Number(player.hours) || 0}</td>
     <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain || '—')}</td>
-    <td class="l">${MHL.esc(teams.find(team => team.id === player.team)?.name || '—')}</td>
+    <td class="l">${teamDisplay(player)}</td>
     <td class="value-cell">${formatValue(player.skaterValue ?? player.value)}</td>
     <td class="value-cell">${formatValue(player.goalieValue ?? player.value)}</td>`;
   const tableHead = action => `<thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>

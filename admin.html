@@ -123,7 +123,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'captains';
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc';
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   // h('div', {class: 'x', onclick: fn}, ...children)
