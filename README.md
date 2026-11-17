@@ -42,11 +42,13 @@ Remember to press **Save changes**, nothing goes live until you do.
 - Players: name, team, number, position. Their goal and assist totals add up from the matches.
 - News: pinned posts stay on top, the newest one also shows on the home page.
 - Rules: shown in the same order as in the admin.
-- Season 2 Players: signups include position and Steam profile. Steam links are admin-only; admins can edit signup answers, assign a team, and set each player's Value in euros. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
+- Season 2 Players: signups include position and Steam profile. Steam links are admin-only; admins can edit signup answers, assign a team, and set separate Skater and Goalie Values in euros. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
 - Player Profile: the top-right Steam button becomes the player's profile picture when signed in. The profile page shows Discord and roster goals, assists, and points above the editable Season 2 signup. This does not change Admin login.
 - Settings: season name and Discord link (leave it empty to hide the Discord button).
 
 Public Season 2 signups are saved in the same persistent `data.json` as the rest of the site. Optional profile pictures are stored in `uploads/`, alongside team images, and are retained when admin changes are saved. Existing signups without position, team, or Steam profile remain unassigned/blank.
+
+Existing single signup Values are carried into both the Skater and Goalie Values until an admin changes them. A displayed value of zero appears as a dash on the public board.
 
 Steam sign-in uses OpenID and never collects player passwords. It is not required to submit a signup. If existing signups use custom Steam `/id/` links, set the optional `STEAM_API_KEY` on the host so Player Login can match those links to Steam accounts; numeric `/profiles/` links work without it. Admin login remains separate.
 

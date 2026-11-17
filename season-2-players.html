@@ -17,11 +17,11 @@
 .signup-person{display:flex;align-items:center;gap:12px;min-width:170px}
 .signup-person img,.avatar{width:42px;height:42px;flex:none;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
 .avatar{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:22px}
-.signup-table{min-width:920px}
+.signup-table{min-width:1080px}
 .signup-table .name-cell{min-width:190px}
 .signup-table .value-cell{font-family:var(--disp);font-size:24px;color:var(--gold)}
 .own-signup{margin-bottom:40px}
-.own-signup .signup-table{min-width:1020px}
+.own-signup .signup-table{min-width:1180px}
 .own-signup .edit-cell{width:1%;white-space:nowrap}
 .sign-in-entry{width:100%;min-height:84px;font-size:14px}
 @media(max-width:560px){.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}}
@@ -71,6 +71,7 @@
   const compactValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 1 });
   const formatValue = raw => {
     const value = Number(raw) || 0;
+    if (!value) return '—';
     return value >= 1_000_000
       ? compactValueFormat.format(value).replace(/([KMBT])$/, (_, suffix) => suffix.toLowerCase())
       : valueFormat.format(value);
@@ -84,21 +85,24 @@
     <td class="l">${MHL.esc(player.discord)}</td><td>${Number(player.hours) || 0}</td>
     <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain || '—')}</td>
     <td class="l">${MHL.esc(teams.find(team => team.id === player.team)?.name || '—')}</td>
-    <td class="value-cell">${formatValue(player.value)}</td>`;
+    <td class="value-cell">${formatValue(player.skaterValue ?? player.value)}</td>
+    <td class="value-cell">${formatValue(player.goalieValue ?? player.value)}</td>`;
   const tableHead = action => `<thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
     <th scope="col">Hours on Puck</th><th scope="col">Position</th><th scope="col">Captain?</th>
-    <th class="l" scope="col">Team</th><th scope="col">Value (€)</th>${action ? '<th scope="col">Action</th>' : ''}</tr></thead>`;
+    <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th>
+    ${action ? '<th scope="col">Action</th>' : ''}</tr></thead>`;
 
   function draw() {
     const list = signups().filter(player => player.id !== ownSignupId);
     const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
     const captainRank = { Yes: 0, Maybe: 1, No: 2 };
+    const valueOf = player => Math.max(Number(player.skaterValue ?? player.value) || 0, Number(player.goalieValue ?? player.value) || 0);
     const sorters = {
       captains: (a, b) => captainRank[a.captain] - captainRank[b.captain] || byName(a, b),
       'hours-desc': (a, b) => b.hours - a.hours || byName(a, b),
       'hours-asc': (a, b) => a.hours - b.hours || byName(a, b),
-      'value-desc': (a, b) => b.value - a.value || byName(a, b),
-      'value-asc': (a, b) => a.value - b.value || byName(a, b),
+      'value-desc': (a, b) => valueOf(b) - valueOf(a) || byName(a, b),
+      'value-asc': (a, b) => valueOf(a) - valueOf(b) || byName(a, b),
     };
     list.sort(sorters[select.value]);
     document.getElementById('count').textContent = `${list.length} ${list.length === 1 ? 'signup' : 'signups'}`;

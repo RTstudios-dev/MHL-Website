@@ -211,6 +211,10 @@ const readRaw = (req, max = 300_000) => new Promise((resolve, reject) => {
 const readBody = async (req, max = 1_000_000) => (await readRaw(req, max)).toString();
 const str = (v, n) => String(v ?? '').trim().slice(0, n);
 const num = (v, max = 9999) => { const x = Math.floor(Number(v)); return Number.isFinite(x) && x >= 0 ? Math.min(x, max) : 0; };
+const signupValues = signup => ({
+  skaterValue: num(signup.skaterValue ?? signup.value, Number.MAX_SAFE_INTEGER),
+  goalieValue: num(signup.goalieValue ?? signup.value, Number.MAX_SAFE_INTEGER),
+});
 const score = v => (v === null || v === '' || v === undefined) ? null : num(v, 99);
 const okImage = u => UPLOAD_RE.test(u) && fs.existsSync(uploadFile(u));
 const steamProfile = v => {
@@ -325,7 +329,7 @@ function sanitize(d) {
     captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
     team: ids.has(p.team) ? p.team : '',
     photo: okImage(p.photo) ? p.photo : '',
-    value: num(p.value, Number.MAX_SAFE_INTEGER),
+    ...signupValues(p),
   })).filter(p => p.discord && p.name);
   return { site, teams, rounds, matches, players, news, rules, signups };
 }
@@ -499,7 +503,7 @@ const server = http.createServer(async (req, res) => {
         signup: {
           id: signup.id, discord: signup.discord, name: signup.name, steam: signup.steam,
           hours: signup.hours, position: signup.position, captain: signup.captain,
-          photo: signup.photo, team: signup.team, value: signup.value,
+          photo: signup.photo, team: signup.team, ...signupValues(signup),
         },
       });
     }
@@ -554,6 +558,7 @@ const server = http.createServer(async (req, res) => {
       if (!isAdmin(req)) {
         data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
       }
+      data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
       return send(res, 200, { ...data, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/me') return send(res, 200, { admin: isAdmin(req) });
@@ -629,7 +634,8 @@ const server = http.createServer(async (req, res) => {
         captain: signup.captain,
         team: '',
         photo: okImage(signup.photo) ? signup.photo : '',
-        value: 0,
+        skaterValue: 0,
+        goalieValue: 0,
       };
       data.signups.push(entry);
       writeData(data);

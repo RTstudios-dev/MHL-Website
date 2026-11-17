@@ -410,11 +410,22 @@ const MHLA = (() => {
     const list = [...D.signups].sort((a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord));
     const positionOptions = ['', 'Goalie', 'Attacker', 'Defender', 'Flexible'];
     const captainOptions = ['Yes', 'No', 'Maybe'];
+    const valueInput = (signup, key, label) => h('input', {
+      type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
+      'aria-label': `${label} for ${signup.name}`,
+      value: signup[key] ?? signup.value ?? 0,
+      oninput: e => {
+        const value = Number(e.target.value);
+        if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
+        signup[key] = value;
+        touch();
+      },
+    });
     return [
       head('Season 2 Players'),
-      h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Value in euros here. Steam profile links are only shown in admin."),
+      h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Skater and Goalie Values in euros here. Steam profile links are only shown in admin."),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Value (€)', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Skater Value (€)', 'Goalie Value (€)', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(signup => h('tr', {},
           h('td', {}, text(signup, 'name', { maxlength: 40, 'aria-label': `In-game name for ${signup.name}`, required: true })),
           h('td', {}, text(signup, 'discord', { maxlength: 80, 'aria-label': `Discord username for ${signup.name}`, required: true })),
@@ -443,17 +454,8 @@ const MHLA = (() => {
             onchange: e => { signup.team = e.target.value; touch(); },
           }, [h('option', { value: '', selected: !signup.team }, 'Unassigned'),
             D.teams.map(team => h('option', { value: team.id, selected: team.id === signup.team }, team.name))])),
-          h('td', {}, h('input', {
-            type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
-            'aria-label': `Value for ${signup.name}`,
-            value: signup.value ?? 0,
-            oninput: e => {
-              const value = Number(e.target.value);
-              if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
-              signup.value = value;
-              touch();
-            },
-          })),
+          h('td', {}, valueInput(signup, 'skaterValue', 'Skater Value')),
+          h('td', {}, valueInput(signup, 'goalieValue', 'Goalie Value')),
           h('td', {}, imgPicker(signup, 'photo', '')),
         ))))) : h('div', { class: 'empty' }, h('b', {}, 'No Season 2 signups yet'), 'New entries from the public signup form will appear here.'),
     ];
