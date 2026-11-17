@@ -98,12 +98,22 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .pwrap{overflow-x:auto}
 .ptable{min-width:760px}
 .filter{max-width:280px;margin-bottom:14px}
+.signup-sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.signup-sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
+.signup-sortbar select{width:auto;min-width:220px}
+.caps-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:640px;margin-bottom:16px}
 .checkline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
 
 @media (max-width:820px){
   .teams-row{grid-template-columns:1fr 1fr}
   .match{grid-template-columns:1fr}
   .bar .right{margin-left:0}
+}
+@media (max-width:560px){
+  .signup-sortbar{align-items:flex-start;flex-direction:column}
+  .signup-sortbar label{width:100%;align-items:flex-start;flex-direction:column}
+  .signup-sortbar select{width:100%}
+  .caps-edit{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -113,7 +123,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '';
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'captains';
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   // h('div', {class: 'x', onclick: fn}, ...children)
@@ -407,7 +417,22 @@ const MHLA = (() => {
 
   // season 2 signups
   function signups() {
-    const list = [...D.signups].sort((a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord));
+    D.site = D.site || {};
+    const list = [...D.signups];
+    const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
+    const captainRank = { Yes: 0, Maybe: 1, No: 2 };
+    const valueOf = signup => Math.max(
+      Number(signup.skaterValue ?? signup.value) || 0,
+      Number(signup.goalieValue ?? signup.value) || 0,
+    );
+    const sorters = {
+      captains: (a, b) => captainRank[a.captain] - captainRank[b.captain] || byName(a, b),
+      'hours-desc': (a, b) => b.hours - a.hours || byName(a, b),
+      'hours-asc': (a, b) => a.hours - b.hours || byName(a, b),
+      'value-desc': (a, b) => valueOf(b) - valueOf(a) || byName(a, b),
+      'value-asc': (a, b) => valueOf(a) - valueOf(b) || byName(a, b),
+    };
+    list.sort(sorters[signupSort]);
     const positionOptions = ['', 'Goalie', 'Attacker', 'Defender', 'Flexible'];
     const captainOptions = ['Yes', 'No', 'Maybe'];
     const valueInput = (signup, key, label) => h('input', {
@@ -421,9 +446,35 @@ const MHLA = (() => {
         touch();
       },
     });
+    const capInput = (key, label) => h('input', {
+      type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
+      'aria-label': label,
+      value: D.site[key] ?? 0,
+      oninput: e => {
+        const value = Number(e.target.value);
+        if (!Number.isSafeInteger(value) || value < 0) return;
+        D.site[key] = value;
+        touch();
+      },
+    });
     return [
       head('Season 2 Players'),
       h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Skater and Goalie Values in euros here. Steam profile links are only shown in admin."),
+      h('div', { class: 'caps-edit ed' },
+        field('Ice Cap €', capInput('iceCap', 'Ice Cap €')),
+        field('Team Cap €', capInput('teamCap', 'Team Cap €'))),
+      h('div', { class: 'signup-sortbar' },
+        h('p', { class: 'note', style: 'margin:0' }, `${list.length} ${list.length === 1 ? 'signup' : 'signups'}`),
+        h('label', {}, 'Sort signups',
+          h('select', {
+            'aria-label': 'Sort signups',
+            onchange: e => { signupSort = e.target.value; draw(); },
+          },
+            h('option', { value: 'captains', selected: signupSort === 'captains' }, 'Potential Captains'),
+            h('option', { value: 'hours-desc', selected: signupSort === 'hours-desc' }, 'Highest Hours'),
+            h('option', { value: 'hours-asc', selected: signupSort === 'hours-asc' }, 'Lowest Hours'),
+            h('option', { value: 'value-desc', selected: signupSort === 'value-desc' }, 'Highest Value'),
+            h('option', { value: 'value-asc', selected: signupSort === 'value-asc' }, 'Lowest Value')))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
         h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Skater Value (€)', 'Goalie Value (€)', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(signup => h('tr', {},

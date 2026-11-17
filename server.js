@@ -23,7 +23,7 @@ const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
-const EMPTY = { site: { season: 'Season 1', discord: '' }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -247,7 +247,12 @@ const okUrl = u => /^https:\/\/[^\s"<>]+$/.test(String(u || '')) ? String(u).sli
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
   const s = d.site && typeof d.site === 'object' ? d.site : {};
-  const site = { season: str(s.season, 40), discord: okUrl(s.discord) };
+  const site = {
+    season: str(s.season, 40),
+    discord: okUrl(s.discord),
+    iceCap: num(s.iceCap, Number.MAX_SAFE_INTEGER),
+    teamCap: num(s.teamCap, Number.MAX_SAFE_INTEGER),
+  };
   const teams = (Array.isArray(d.teams) ? d.teams : []).slice(0, 64).map(t => ({
     id: str(t.id, 40) || crypto.randomUUID(),
     name: str(t.name, 40) || 'Unnamed team',

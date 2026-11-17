@@ -23,8 +23,12 @@
 .own-signup{margin-bottom:40px}
 .own-signup .signup-table{min-width:1180px}
 .own-signup .edit-cell{width:1%;white-space:nowrap}
+.cap-banner{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 30px}
+.cap-item{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--paper);border:1px solid var(--line);padding:14px 18px}
+.cap-item span{color:var(--muted);font-size:14px}
+.cap-item strong{font-family:var(--disp);font-weight:500;font-size:26px;color:var(--gold)}
 .sign-in-entry{width:100%;min-height:84px;font-size:14px}
-@media(max-width:560px){.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}}
+@media(max-width:560px){.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}.cap-banner{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -40,6 +44,10 @@
 <section class="own-signup" aria-labelledby="ownSignupTitle">
   <div class="bh"><h2 id="ownSignupTitle">Your Season 2 Entry</h2></div>
   <div id="yourEntry"><div class="sk"></div></div>
+</section>
+<section class="cap-banner" aria-label="Season 2 caps">
+  <div class="cap-item"><span>Ice Cap €</span><strong id="iceCapValue">€0</strong></div>
+  <div class="cap-item"><span>Team Cap €</span><strong id="teamCapValue">€0</strong></div>
 </section>
 <div class="sortbar">
   <p id="count" class="note" style="margin:0"></p>
@@ -67,6 +75,15 @@
   const ownHost = document.getElementById('yourEntry');
   const select = document.getElementById('sort');
   const signups = () => window.seasonSignups || [];
+  const capFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const formatCap = raw => {
+    const value = Number(raw);
+    return capFormat.format(Number.isSafeInteger(value) && value >= 0 ? value : 0);
+  };
+  const drawCaps = site => {
+    document.getElementById('iceCapValue').textContent = formatCap(site.iceCap);
+    document.getElementById('teamCapValue').textContent = formatCap(site.teamCap);
+  };
   const valueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   const compactValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 1 });
   const formatValue = raw => {
@@ -148,6 +165,7 @@
     return MHL.fail(host, 'the Season 2 players');
   }
   window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
+  drawCaps(data.site || {});
   teams = Array.isArray(data.teams) ? data.teams : [];
   draw();
   await loadOwnEntry();
