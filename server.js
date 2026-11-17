@@ -5,6 +5,7 @@
 //   DATA_DIR             where data.json + uploads/ live. point it at the persistent disk when hosted
 //   ADMIN_PASSWORD_HASH  from `node hash-password.js` (use this when hosted)
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
+//   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
@@ -16,6 +17,7 @@ const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const PW_FILE = path.join(DATA_DIR, '.admin-password');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const STEAM_OPENID = 'https://steamcommunity.com/openid/login';
+const STEAM_API_KEY = (process.env.STEAM_API_KEY || '').trim();
 // league logo: logo.png, logo.webp or logo.jpg next to server.js (optional)
 const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
@@ -93,6 +95,7 @@ const STATIC = {
   '/teams': ['teams.html', HTML],
   '/players': ['players.html', HTML],
   '/sign-up': ['sign-up.html', HTML],
+  '/player-login': ['player-login.html', HTML],
   '/season-2-players': ['season-2-players.html', HTML],
   '/news': ['news.html', HTML],
   '/rules': ['rules.html', HTML],
@@ -153,12 +156,12 @@ const isAdmin = req => {
   if (exp < Date.now()) { sessions.delete(t); return false; }
   return true;
 };
-const playerSteamId = req => {
+const playerSession = req => {
   const token = getCookie(req, 'mhl_player');
   const session = token && playerSessions.get(token);
-  if (!session) return '';
-  if (session.expires < Date.now()) { playerSessions.delete(token); return ''; }
-  return session.steamId;
+  if (!session) return null;
+  if (session.expires < Date.now()) { playerSessions.delete(token); return null; }
+  return session;
 };
 const requestOrigin = req => {
   const host = String(req.headers.host || '');
@@ -169,8 +172,8 @@ const requestOrigin = req => {
   if (PROD && !secure) return '';
   return `${secure ? 'https' : 'http'}://${host.toLowerCase()}`;
 };
-const steamFailure = res => send(res, 303, 'Returning to signup', 'text/plain; charset=utf-8', {
-  Location: '/sign-up?steam=failed',
+const steamFailure = res => send(res, 303, 'Returning to player login', 'text/plain; charset=utf-8', {
+  Location: '/player-login?steam=failed',
   'Set-Cookie': 'mhl_steam_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0',
 });
 
@@ -215,6 +218,27 @@ const steamProfile = v => {
   return /^https:\/\/(?:www\.)?steamcommunity\.com\/(?:id\/[a-z0-9_-]+|profiles\/\d{17})\/?$/i.test(u) ? u : '';
 };
 const steamKey = v => steamProfile(v).replace(/^https:\/\/www\./i, 'https://').replace(/\/+$/, '').toLowerCase();
+async function steamProfileUrl(steamId) {
+  const canonical = `https://steamcommunity.com/profiles/${steamId}`;
+  if (!STEAM_API_KEY) return { profileUrl: canonical, lookupFailed: false };
+  const endpoint = new URL('https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/');
+  endpoint.searchParams.set('key', STEAM_API_KEY);
+  endpoint.searchParams.set('steamids', steamId);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(endpoint, { signal: controller.signal });
+    if (!response.ok) throw new Error('Steam profile lookup failed');
+    const result = await response.json();
+    const profile = steamProfile(result.response && result.response.players && result.response.players[0] && result.response.players[0].profileurl);
+    return { profileUrl: profile || canonical, lookupFailed: false };
+  } catch (error) {
+    console.error('Steam profile URL lookup failed:', error.message);
+    return { profileUrl: canonical, lookupFailed: true };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 const okUrl = u => /^https:\/\/[^\s"<>]+$/.test(String(u || '')) ? String(u).slice(0, 300) : '';
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
@@ -431,10 +455,11 @@ const server = http.createServer(async (req, res) => {
       if (!verified) return steamFailure(res);
 
       const steamId = idMatch[1], token = crypto.randomBytes(32).toString('hex');
-      playerSessions.set(token, { steamId, expires: Date.now() + PLAYER_SESSION_MS });
+      const { profileUrl, lookupFailed } = await steamProfileUrl(steamId);
+      playerSessions.set(token, { steamId, profileUrl, lookupFailed, expires: Date.now() + PLAYER_SESSION_MS });
       const secure = origin.startsWith('https://') ? '; Secure' : '';
       return send(res, 303, 'Signed in with Steam', 'text/plain; charset=utf-8', {
-        Location: '/sign-up?steam=connected',
+        Location: '/player-login?steam=connected',
         'Set-Cookie': [
           `mhl_player=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${PLAYER_SESSION_MS / 1000}${secure}`,
           `mhl_steam_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
@@ -442,8 +467,74 @@ const server = http.createServer(async (req, res) => {
       });
     }
     if (p === '/api/player/me' && req.method === 'GET') {
-      const steamId = playerSteamId(req);
-      return send(res, 200, { authenticated: !!steamId, steamId });
+      const player = playerSession(req);
+      return send(res, 200, {
+        authenticated: !!player,
+        steamId: player ? player.steamId : '',
+        profileUrl: player ? player.profileUrl : '',
+      });
+    }
+    if (p === '/api/player/signup' && req.method === 'GET') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam to find your signup.' });
+      const profileKey = steamKey(player.profileUrl);
+      const matches = readData().signups.filter(signup =>
+        (player.steamId && signup.steamId === player.steamId) ||
+        (profileKey && steamKey(signup.steam) === profileKey));
+      if (!matches.length) {
+        if (player.lookupFailed) {
+          return send(res, 503, { error: 'Steam could not resolve your profile link right now. Please sign out and try again later; do not create another signup yet.' });
+        }
+        const help = STEAM_API_KEY
+          ? 'No signup was found for this Steam profile. Make a separate signup first, using this Steam profile link.'
+          : 'No signup was found for this Steam profile. If your signup uses a custom Steam /id/ link, staff must configure STEAM_API_KEY to match it.';
+        return send(res, 404, { error: help });
+      }
+      if (matches.length > 1) return send(res, 409, { error: 'More than one signup is linked to this Steam profile. Please ask league staff for help.' });
+      const signup = matches[0];
+      return send(res, 200, {
+        profileUrl: player.profileUrl,
+        signup: {
+          discord: signup.discord, name: signup.name, steam: signup.steam,
+          hours: signup.hours, position: signup.position, captain: signup.captain, photo: signup.photo,
+        },
+      });
+    }
+    if (p === '/api/player/signup' && req.method === 'PUT') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam before editing your signup.' });
+      const data = readData();
+      const profileKey = steamKey(player.profileUrl);
+      const matches = data.signups.filter(signup =>
+        (player.steamId && signup.steamId === player.steamId) ||
+        (profileKey && steamKey(signup.steam) === profileKey));
+      if (matches.length !== 1) return send(res, matches.length ? 409 : 404, { error: 'Could not find one signup linked to this Steam profile.' });
+      const signup = matches[0];
+      const changes = JSON.parse(await readBody(req) || '{}');
+      const discord = str(changes.discord, 80), name = str(changes.name, 40);
+      const hours = Number(changes.hours);
+      if (!discord || !name || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
+          !['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(changes.position) ||
+          !['Yes', 'No', 'Maybe'].includes(changes.captain)) {
+        return send(res, 400, { error: 'Complete all fields with valid answers before saving.' });
+      }
+      const discordKey = discord.toLowerCase();
+      if (data.signups.some(other => other !== signup &&
+          ((player.steamId && other.steamId === player.steamId) ||
+            String(other.discord || '').trim().toLowerCase() === discordKey ||
+            (profileKey && steamKey(other.steam) === profileKey)))) {
+        return send(res, 409, { error: 'Those details match another signup. Please ask league staff for help.' });
+      }
+      signup.discord = discord;
+      signup.name = name;
+      signup.hours = hours;
+      signup.position = changes.position;
+      signup.captain = changes.captain;
+      signup.steam = player.profileUrl;
+      signup.steamId = player.steamId;
+      if (changes.photo !== undefined) signup.photo = okImage(changes.photo) ? changes.photo : '';
+      writeData(data);
+      return send(res, 200, { ok: true });
     }
     if (p === '/api/player/logout' && req.method === 'POST') {
       const token = getCookie(req, 'mhl_player');
@@ -499,26 +590,26 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ...clean, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/sign-up' && req.method === 'POST') {
-      const steamId = playerSteamId(req);
-      if (!steamId) return send(res, 401, { error: 'Sign in with Steam before submitting your signup.' });
       if (!allowPublic('signup:' + clientIp(req), 5, 60 * 60 * 1000)) {
         return send(res, 429, { error: 'You have submitted several signups recently. Please try again later.' });
       }
       const signup = JSON.parse(await readBody(req) || '{}');
       const discord = str(signup.discord, 80), name = str(signup.name, 40);
-      const steam = `https://steamcommunity.com/profiles/${steamId}`;
+      const steam = steamProfile(signup.steam);
+      const player = playerSession(req);
+      const steamId = player && steamKey(steam) === steamKey(player.profileUrl) ? player.steamId : '';
       const hours = Number(signup.hours);
-      if (!discord || !name || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
+      if (!discord || !name || !steam || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
           !['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(signup.position) ||
           !['Yes', 'No', 'Maybe'].includes(signup.captain)) {
         return send(res, 400, { error: 'Complete all fields with valid answers before submitting.' });
       }
       const data = readData();
       const discordKey = discord.toLowerCase(), profileKey = steamKey(steam);
-      if (data.signups.some(player => player.steamId === steamId ||
-          String(player.discord || '').trim().toLowerCase() === discordKey ||
-          (profileKey && steamKey(player.steam) === profileKey))) {
-        return send(res, 409, { error: 'You have already signed up. If you need to change something, please ask a staff member via the Discord server.' });
+      if (data.signups.some(existing => (steamId && existing.steamId === steamId) ||
+          String(existing.discord || '').trim().toLowerCase() === discordKey ||
+          (profileKey && steamKey(existing.steam) === profileKey))) {
+        return send(res, 409, { error: 'You have already signed up. Sign in on Player Login using the Steam account on your signup; if it cannot find your signup, ask staff via Discord.' });
       }
       if (data.signups.length >= 5000) return send(res, 409, { error: 'Signups are currently full. Please contact the league administrator.' });
       const entry = {
@@ -549,7 +640,6 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { url: '/uploads/' + name });
     }
     if (p === '/api/sign-up-upload' && req.method === 'POST') {
-      if (!playerSteamId(req)) return send(res, 401, { error: 'Sign in with Steam before uploading a profile picture.' });
       if (!allowPublic('signup-upload:' + clientIp(req), 10, 60 * 60 * 1000)) {
         return send(res, 429, { error: 'Too many profile picture uploads. Please try again later.' });
       }

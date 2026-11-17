@@ -21,7 +21,7 @@ Don't upload `.admin-password` anywhere, it's already in `.gitignore`.
 - `/standings`
 - `/teams` and `/team/<name>` for each team
 - `/players`
-- `/sign-up` and `/season-2-players`
+- `/sign-up`, `/player-login`, and `/season-2-players`
 - `/news`
 - `/rules`
 - `/admin`
@@ -40,12 +40,13 @@ Remember to press **Save changes**, nothing goes live until you do.
 - Players: name, team, number, position. Their goal and assist totals add up from the matches.
 - News: pinned posts stay on top, the newest one also shows on the home page.
 - Rules: shown in the same order as in the admin.
-- Season 2 Players: signups include position and Steam profile. Steam links are admin-only; admins can edit signup answers, assign a team, and set each player's Value in euros. Repeated Discord usernames or Steam profiles are rejected with instructions to contact staff.
+- Season 2 Players: signups include position and Steam profile. Steam links are admin-only; admins can edit signup answers, assign a team, and set each player's Value in euros. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
+- Player Login: Steam sign-in is separate from signup and lets a player edit the signup linked to their Steam profile. It does not change Admin login.
 - Settings: season name and Discord link (leave it empty to hide the Discord button).
 
 Public Season 2 signups are saved in the same persistent `data.json` as the rest of the site. Optional profile pictures are stored in `uploads/`, alongside team images, and are retained when admin changes are saved. Existing signups without position, team, or Steam profile remain unassigned/blank.
 
-Player signups require Steam sign-in. Steam verifies the account through OpenID; no Steam password or Web API key is collected. This is separate from the Admin password login.
+Steam sign-in uses OpenID and never collects player passwords. It is not required to submit a signup. If existing signups use custom Steam `/id/` links, set the optional `STEAM_API_KEY` on the host so Player Login can match those links to Steam accounts; numeric `/profiles/` links work without it. Admin login remains separate.
 
 ## Points
 

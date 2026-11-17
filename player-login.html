@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Player Login | MHL</title>
+<meta name="description" content="Sign in with Steam to edit your MHL player signup.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+.player-login,.player-edit{max-width:680px}
+.player-login .ed,.player-edit .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:18px}
+.player-login p,.player-edit p{color:var(--muted)}
+.player-login a.profile{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
+.player-login .signup-link{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
+.player-edit[hidden],.player-login [hidden]{display:none}
+.player-edit label{display:grid;gap:6px;color:var(--ink);font-weight:500}
+.player-edit input,.player-edit select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:10px 12px;min-height:46px}
+.player-edit input:focus-visible,.player-edit select:focus-visible{outline:1px solid var(--gold);border-color:var(--gold)}
+.player-edit small{font-size:13px;font-weight:400;color:var(--muted)}
+.photo-row{display:flex;align-items:center;gap:16px}
+.photo-row img{width:76px;height:76px;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--ice)}
+.player-status{min-height:1.6em}
+.player-status.success{color:var(--gold)}
+.player-status.error{color:#e08474}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+<div class="ph">
+  <h1>Player Login</h1>
+  <p>Sign in with Steam to find and edit the signup linked to your Steam profile.</p>
+</div>
+<section class="player-login" aria-label="Steam account">
+  <div class="ed">
+    <p id="steamStatus" role="status" aria-live="polite">Sign in with Steam to manage your signup.</p>
+    <a class="btn" id="steamLogin" href="/auth/steam">Sign in with Steam</a>
+    <button class="btn line" id="steamLogout" type="button" hidden>Sign out</button>
+    <a class="profile" id="steamProfile" href="#" target="_blank" rel="noopener" hidden>View Steam profile</a>
+    <a class="signup-link" id="signupLink" href="/sign-up" hidden>Go to Sign Up Here</a>
+  </div>
+</section>
+<form class="player-edit" id="edit" hidden>
+  <div class="ed">
+    <label>Type your discord username here
+      <input name="discord" type="text" maxlength="80" required>
+    </label>
+    <label>Type your in-game name here
+      <input name="name" type="text" maxlength="40" required>
+    </label>
+    <label>How many hours on puck do you have
+      <input name="hours" type="number" min="0" max="100000" step="1" inputmode="numeric" required>
+    </label>
+    <label>What position do you play?
+      <select name="position" required>
+        <option value="Goalie">Goalie</option>
+        <option value="Attacker">Attacker</option>
+        <option value="Defender">Defender</option>
+        <option value="Flexible">Flexible</option>
+      </select>
+    </label>
+    <label>Would you like to be captain?
+      <select name="captain" required>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+        <option value="Maybe">Maybe</option>
+      </select>
+    </label>
+    <label>Profile picture
+      <div class="photo-row">
+        <img id="photoPreview" alt="Profile picture preview" hidden>
+        <input id="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+      </div>
+      <small>Optional. PNG, JPG, WEBP, or GIF; maximum 5 MB.</small>
+    </label>
+    <button class="btn" id="save" type="submit">Save signup changes</button>
+    <p class="player-status" id="editStatus" role="status" aria-live="polite"></p>
+  </div>
+</form>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script>
+(() => {
+  const form = document.getElementById('edit');
+  const steamStatus = document.getElementById('steamStatus');
+  const login = document.getElementById('steamLogin');
+  const logout = document.getElementById('steamLogout');
+  const profileLink = document.getElementById('steamProfile');
+  const signupLink = document.getElementById('signupLink');
+  const editStatus = document.getElementById('editStatus');
+  const photoInput = document.getElementById('photo');
+  const photoPreview = document.getElementById('photoPreview');
+  const saveButton = document.getElementById('save');
+  let currentPhoto = '';
+
+  async function loadSignup() {
+    try {
+      const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
+      if (!sessionResponse.ok) throw new Error('Could not check Steam sign-in.');
+      const session = await sessionResponse.json();
+      if (!session.authenticated) {
+        form.hidden = true;
+        login.hidden = false;
+        logout.hidden = true;
+        profileLink.hidden = true;
+        signupLink.hidden = true;
+        steamStatus.textContent = new URLSearchParams(location.search).get('steam') === 'failed'
+          ? 'Steam sign-in could not be completed. Please try again.'
+          : 'Sign in with Steam to manage your signup.';
+        return;
+      }
+
+      login.hidden = true;
+      logout.hidden = false;
+      profileLink.href = session.profileUrl;
+      profileLink.hidden = false;
+      const response = await fetch('/api/player/signup', { cache: 'no-store' });
+      const result = await response.json();
+      if (response.status === 404) {
+        form.hidden = true;
+        signupLink.hidden = false;
+        steamStatus.textContent = result.error || 'No signup was found for this Steam profile.';
+        return;
+      }
+      if (!response.ok) throw new Error(result.error || 'Could not load your signup.');
+
+      const signup = result.signup;
+      form.elements.namedItem('discord').value = signup.discord;
+      form.elements.namedItem('name').value = signup.name;
+      form.elements.namedItem('hours').value = signup.hours;
+      form.elements.namedItem('position').value = signup.position;
+      form.elements.namedItem('captain').value = signup.captain;
+      currentPhoto = signup.photo || '';
+      photoPreview.src = currentPhoto;
+      photoPreview.hidden = !currentPhoto;
+      signupLink.hidden = true;
+      form.hidden = false;
+      steamStatus.textContent = 'Your signup was found. Update your answers below; your assigned team and Value are unchanged.';
+    } catch (error) {
+      form.hidden = true;
+      steamStatus.textContent = error.message || 'Could not load your signup. Please reload and try again.';
+    }
+  }
+
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files[0];
+    if (!file) return;
+    if (file.size > 5000000) {
+      photoInput.value = '';
+      editStatus.textContent = 'That image is too large. Choose an image under 5 MB.';
+      editStatus.className = 'player-status error';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => { photoPreview.src = reader.result; photoPreview.hidden = false; };
+    reader.onerror = () => {
+      editStatus.textContent = 'Could not preview that image. Try choosing it again.';
+      editStatus.className = 'player-status error';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  logout.addEventListener('click', async () => {
+    logout.disabled = true;
+    try {
+      const response = await fetch('/api/player/logout', { method: 'POST' });
+      if (!response.ok) throw new Error('Sign out failed. Please try again.');
+      location.href = '/player-login';
+    } catch (error) {
+      steamStatus.textContent = error.message || 'Sign out failed. Please try again.';
+      logout.disabled = false;
+    }
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    saveButton.disabled = true;
+    editStatus.textContent = 'Saving...';
+    editStatus.className = 'player-status';
+    try {
+      let photo = currentPhoto;
+      const file = photoInput.files[0];
+      if (file) {
+        const upload = await fetch('/api/sign-up-upload', { method: 'POST', body: file });
+        const uploaded = await upload.json();
+        if (!upload.ok) throw new Error(uploaded.error || 'Could not upload the profile picture.');
+        photo = uploaded.url;
+      }
+      const response = await fetch('/api/player/signup', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          discord: form.elements.namedItem('discord').value,
+          name: form.elements.namedItem('name').value,
+          hours: Number(form.elements.namedItem('hours').value),
+          position: form.elements.namedItem('position').value,
+          captain: form.elements.namedItem('captain').value,
+          photo,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save your signup.');
+      currentPhoto = photo;
+      editStatus.textContent = 'Your signup has been updated.';
+      editStatus.className = 'player-status success';
+    } catch (error) {
+      editStatus.textContent = error.message || 'Could not save your signup. Please try again.';
+      editStatus.className = 'player-status error';
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+
+  loadSignup();
+})();
+</script>
+</body>
+</html>
