@@ -408,16 +408,41 @@ const MHLA = (() => {
   // season 2 signups
   function signups() {
     const list = [...D.signups].sort((a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord));
+    const positionOptions = ['', 'Goalie', 'Attacker', 'Defender', 'Flexible'];
+    const captainOptions = ['Yes', 'No', 'Maybe'];
     return [
       head('Season 2 Players'),
-      h('p', { class: 'help' }, "Set each player's Value here. Signup details are submitted on the public Sign Up Here page. Press Save changes to publish updated values."),
+      h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Value here. Press Save changes to publish updates."),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Hours on Puck', 'Captain?', 'Value'].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Value', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(signup => h('tr', {},
-          h('td', {}, signup.name),
-          h('td', {}, signup.discord),
-          h('td', { class: 'tot' }, signup.hours),
-          h('td', {}, signup.captain),
+          h('td', {}, text(signup, 'name', { maxlength: 40, 'aria-label': `In-game name for ${signup.name}`, required: true })),
+          h('td', {}, text(signup, 'discord', { maxlength: 80, 'aria-label': `Discord username for ${signup.name}`, required: true })),
+          h('td', {}, text(signup, 'steam', { maxlength: 300, 'aria-label': `Steam profile link for ${signup.name}` })),
+          h('td', {}, h('input', {
+            type: 'number', min: 0, max: 100000, step: 1, class: 'n',
+            'aria-label': `Hours on Puck for ${signup.name}`,
+            value: signup.hours,
+            oninput: e => {
+              const value = Number(e.target.value);
+              if (!Number.isSafeInteger(value) || value < 0 || value > 100000) return;
+              signup.hours = value;
+              touch();
+            },
+          })),
+          h('td', {}, h('select', {
+            'aria-label': `Position for ${signup.name}`,
+            onchange: e => { signup.position = e.target.value; touch(); },
+          }, positionOptions.map(value => h('option', { value, selected: value === (signup.position || '') }, value || 'Unassigned')))),
+          h('td', {}, h('select', {
+            'aria-label': `Captain preference for ${signup.name}`,
+            onchange: e => { signup.captain = e.target.value; touch(); },
+          }, captainOptions.map(value => h('option', { value, selected: value === signup.captain }, value)))),
+          h('td', {}, h('select', {
+            'aria-label': `Team for ${signup.name}`,
+            onchange: e => { signup.team = e.target.value; touch(); },
+          }, [h('option', { value: '', selected: !signup.team }, 'Unassigned'),
+            D.teams.map(team => h('option', { value: team.id, selected: team.id === signup.team }, team.name))])),
           h('td', {}, h('input', {
             type: 'number', min: 0, max: 1000000, step: 1, class: 'n',
             'aria-label': `Value for ${signup.name}`,
@@ -429,6 +454,7 @@ const MHLA = (() => {
               touch();
             },
           })),
+          h('td', {}, imgPicker(signup, 'photo', '')),
         ))))) : h('div', { class: 'empty' }, h('b', {}, 'No Season 2 signups yet'), 'New entries from the public signup form will appear here.'),
     ];
   }

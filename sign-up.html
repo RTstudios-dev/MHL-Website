@@ -40,12 +40,25 @@
     <label>Type your discord username here
       <input name="discord" type="text" maxlength="80" autocomplete="nickname" required>
     </label>
+    <label>What is your Steam profile link?
+      <input name="steam" type="url" maxlength="300" placeholder="https://steamcommunity.com/id/yourname" required>
+      <small>Enter your public Steam Community profile URL.</small>
+    </label>
     <label>Type your in-game name here
       <input name="name" type="text" maxlength="40" required>
     </label>
     <label>How many hours on puck do you have
       <input name="hours" type="number" min="0" max="100000" step="1" inputmode="numeric" required>
       <small>Enter a whole number of hours.</small>
+    </label>
+    <label>What position do you play?
+      <select name="position" required>
+        <option value="" selected disabled>Choose a position</option>
+        <option value="Goalie">Goalie</option>
+        <option value="Attacker">Attacker</option>
+        <option value="Defender">Defender</option>
+        <option value="Flexible">Flexible</option>
+      </select>
     </label>
     <label>Would you like to be captain?
       <select name="captain" required>
@@ -126,14 +139,23 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           discord: values.get('discord'),
+          steam: values.get('steam'),
           name: values.get('name'),
           hours: Number(values.get('hours')),
+          position: values.get('position'),
           captain: values.get('captain'),
           photo,
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Could not submit your signup.');
+      if (!response.ok) {
+        if (response.status === 409) {
+          form.reset();
+          preview.removeAttribute('src');
+          preview.hidden = true;
+        }
+        throw new Error(result.error || 'Could not submit your signup.');
+      }
       form.reset();
       preview.removeAttribute('src');
       preview.hidden = true;

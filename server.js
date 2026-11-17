@@ -181,6 +181,11 @@ const str = (v, n) => String(v ?? '').trim().slice(0, n);
 const num = (v, max = 9999) => { const x = Math.floor(Number(v)); return Number.isFinite(x) && x >= 0 ? Math.min(x, max) : 0; };
 const score = v => (v === null || v === '' || v === undefined) ? null : num(v, 99);
 const okImage = u => UPLOAD_RE.test(u) && fs.existsSync(uploadFile(u));
+const steamProfile = v => {
+  const u = str(v, 300);
+  return /^https:\/\/(?:www\.)?steamcommunity\.com\/(?:id\/[a-z0-9_-]+|profiles\/\d{17})\/?$/i.test(u) ? u : '';
+};
+const steamKey = v => steamProfile(v).replace(/^https:\/\/www\./i, 'https://').replace(/\/+$/, '').toLowerCase();
 const okUrl = u => /^https:\/\/[^\s"<>]+$/.test(String(u || '')) ? String(u).slice(0, 300) : '';
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
@@ -259,9 +264,12 @@ function sanitize(d) {
   const signups = (Array.isArray(d.signups) ? d.signups : []).slice(0, 5000).map(p => ({
     id: str(p.id, 40) || crypto.randomUUID(),
     discord: str(p.discord, 80),
+    steam: steamProfile(p.steam),
     name: str(p.name, 40),
     hours: num(p.hours, 100000),
+    position: ['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(p.position) ? p.position : '',
     captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
+    team: ids.has(p.team) ? p.team : '',
     photo: okImage(p.photo) ? p.photo : '',
     value: num(p.value, 1000000),
   })).filter(p => p.discord && p.name);
@@ -364,19 +372,29 @@ const server = http.createServer(async (req, res) => {
       }
       const signup = JSON.parse(await readBody(req) || '{}');
       const discord = str(signup.discord, 80), name = str(signup.name, 40);
+      const steam = steamProfile(signup.steam);
       const hours = Number(signup.hours);
-      if (!discord || !name || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
+      if (!discord || !name || !steam || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
+          !['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(signup.position) ||
           !['Yes', 'No', 'Maybe'].includes(signup.captain)) {
         return send(res, 400, { error: 'Complete all fields with valid answers before submitting.' });
       }
       const data = readData();
+      const discordKey = discord.toLowerCase(), profileKey = steamKey(steam);
+      if (data.signups.some(player => String(player.discord || '').trim().toLowerCase() === discordKey ||
+          (profileKey && steamKey(player.steam) === profileKey))) {
+        return send(res, 409, { error: 'You have already signed up. If you need to change something, please ask a staff member via the Discord server.' });
+      }
       if (data.signups.length >= 5000) return send(res, 409, { error: 'Signups are currently full. Please contact the league administrator.' });
       const entry = {
         id: crypto.randomUUID(),
         discord,
+        steam,
         name,
         hours,
+        position: signup.position,
         captain: signup.captain,
+        team: '',
         photo: okImage(signup.photo) ? signup.photo : '',
         value: 0,
       };

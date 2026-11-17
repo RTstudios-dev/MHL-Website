@@ -17,8 +17,9 @@
 .signup-person{display:flex;align-items:center;gap:12px;min-width:170px}
 .signup-person img,.avatar{width:42px;height:42px;flex:none;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
 .avatar{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:22px}
-.signup-table{min-width:760px}
+.signup-table{min-width:920px}
 .signup-table .name-cell{min-width:190px}
+.signup-table a{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
 .signup-table .value-cell{font-family:var(--disp);font-size:24px;color:var(--gold)}
 @media(max-width:560px){.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}}
 </style>
@@ -76,15 +77,19 @@
       return;
     }
     host.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">
-      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
-        <th scope="col">Hours on Puck</th><th scope="col">Captain?</th><th scope="col">Value</th></tr></thead>
+      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th><th class="l" scope="col">Steam</th>
+        <th scope="col">Hours on Puck</th><th scope="col">Position</th><th scope="col">Captain?</th><th class="l" scope="col">Team</th><th scope="col">Value</th></tr></thead>
       <tbody>${list.map(player => `<tr>
         <td class="l name-cell"><span class="signup-person">${player.photo
           ? `<img src="${MHL.esc(player.photo)}" alt="">`
           : `<span class="avatar" aria-hidden="true">${MHL.esc(player.name.slice(0, 1).toUpperCase())}</span>`}
           <b>${MHL.esc(player.name)}</b></span></td>
-        <td class="l">${MHL.esc(player.discord)}</td><td>${player.hours}</td>
-        <td>${MHL.esc(player.captain)}</td><td class="value-cell">${player.value}</td>
+        <td class="l">${MHL.esc(player.discord)}</td>
+        <td class="l">${player.steam ? `<a href="${MHL.esc(player.steam)}" target="_blank" rel="noopener">Steam profile</a>` : '—'}</td>
+        <td>${player.hours}</td>
+        <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain)}</td>
+        <td class="l">${MHL.esc((data.teams || []).find(team => team.id === player.team)?.name || '—')}</td>
+        <td class="value-cell">${player.value}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
   }

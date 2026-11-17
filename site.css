@@ -37,6 +37,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .side nav a{display:block;padding:11px 30px;color:var(--muted);transition:color .25s,padding .25s var(--ease)}
 .side nav a:hover{color:var(--ink);padding-left:36px}
 .side nav a[aria-current=page]{color:var(--gold);box-shadow:inset 2px 0 var(--gold)}
+.side nav a[href="/sign-up"],.more a[href="/sign-up"]{color:var(--gold);font-weight:600}
 .side-foot{margin-top:auto;padding:22px 30px 0;display:grid;gap:14px}
 .side-foot .admin{font-size:13px;color:var(--muted)}
 .side-foot .admin:hover{color:var(--ink)}
