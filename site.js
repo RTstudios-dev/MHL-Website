@@ -6,7 +6,7 @@
   const NAV = [
     ['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Standings'], ['/teams', 'Teams'],
     ['/players', 'Players'], ['/news', 'News'], ['/rules', 'Rules'],
-    ['/season-2-players', 'Season 2 Players'], ['/player-login', 'Player Login'], ['/sign-up', 'Sign Up Here'],
+    ['/season-2-players', 'Season 2 Players'], ['/sign-up', 'Sign Up Here'],
   ];
   // phone tab bar: 4 pages + More
   const TABS = [['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Table'], ['/teams', 'Teams']];
@@ -22,6 +22,12 @@
       <nav aria-label="Main">${NAV.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')}</nav>
       <div class="side-foot"><span id="discordSlot"></span><a class="admin" href="/admin">Admin</a></div>`;
     document.getElementById('mtop').innerHTML = `<a href="/" aria-label="MHL home">${wordmark}</a><span>Miniature Hockey League</span>`;
+    const steamLogin = document.createElement('a');
+    steamLogin.className = 'btn steam-login-top';
+    steamLogin.href = '/player-login';
+    steamLogin.textContent = 'Steam Login in';
+    steamLogin.setAttribute('aria-label', 'Steam login and player profile');
+    document.body.appendChild(steamLogin);
     const inMore = !TABS.some(([h]) => h === current);
     document.getElementById('tabbar').innerHTML = TABS.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')
       + `<button type="button" id="moreBtn" aria-expanded="false" aria-controls="more"${inMore ? ' aria-current="page"' : ''}>More</button>`;

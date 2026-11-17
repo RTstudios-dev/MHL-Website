@@ -26,6 +26,8 @@ Don't upload `.admin-password` anywhere, it's already in `.gitignore`.
 - `/rules`
 - `/admin`
 
+Player Steam sign-in is available from the top-right button; it is not a navigation tab.
+
 ## Admin
 
 Remember to press **Save changes**, nothing goes live until you do.

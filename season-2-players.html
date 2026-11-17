@@ -20,6 +20,10 @@
 .signup-table{min-width:920px}
 .signup-table .name-cell{min-width:190px}
 .signup-table .value-cell{font-family:var(--disp);font-size:24px;color:var(--gold)}
+.own-signup{margin-bottom:40px}
+.own-signup .signup-table{min-width:1020px}
+.own-signup .edit-cell{width:1%;white-space:nowrap}
+.sign-in-entry{width:100%;min-height:84px;font-size:14px}
 @media(max-width:560px){.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}}
 </style>
 </head>
@@ -33,6 +37,10 @@
   <h1>Season 2 Players</h1>
   <p>Player signups and their Season 2 details.</p>
 </div>
+<section class="own-signup" aria-labelledby="ownSignupTitle">
+  <div class="bh"><h2 id="ownSignupTitle">Your Season 2 Entry</h2></div>
+  <div id="yourEntry"><div class="sk"></div></div>
+</section>
 <div class="sortbar">
   <p id="count" class="note" style="margin:0"></p>
   <label for="sort">Sort signups
@@ -56,12 +64,26 @@
 <script>
 (async () => {
   const host = document.getElementById('players');
+  const ownHost = document.getElementById('yourEntry');
   const select = document.getElementById('sort');
   const signups = () => window.seasonSignups || [];
   const valueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   let teams = [];
+  let ownSignupId = '';
+  const playerCells = player => `<td class="l name-cell"><span class="signup-person">${player.photo
+    ? `<img src="${MHL.esc(player.photo)}" alt="">`
+    : `<span class="avatar" aria-hidden="true">${MHL.esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
+    <b>${MHL.esc(player.name)}</b></span></td>
+    <td class="l">${MHL.esc(player.discord)}</td><td>${Number(player.hours) || 0}</td>
+    <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain || '—')}</td>
+    <td class="l">${MHL.esc(teams.find(team => team.id === player.team)?.name || '—')}</td>
+    <td class="value-cell">${valueFormat.format(Number(player.value) || 0)}</td>`;
+  const tableHead = action => `<thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
+    <th scope="col">Hours on Puck</th><th scope="col">Position</th><th scope="col">Captain?</th>
+    <th class="l" scope="col">Team</th><th scope="col">Value (€)</th>${action ? '<th scope="col">Action</th>' : ''}</tr></thead>`;
+
   function draw() {
-    const list = [...signups()];
+    const list = signups().filter(player => player.id !== ownSignupId);
     const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
     const captainRank = { Yes: 0, Maybe: 1, No: 2 };
     const sorters = {
@@ -77,20 +99,33 @@
       host.innerHTML = MHL.empty('No Season 2 signups yet', 'Use Sign Up Here to add the first player.');
       return;
     }
-    host.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">
-      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
-        <th scope="col">Hours on Puck</th><th scope="col">Position</th><th scope="col">Captain?</th><th class="l" scope="col">Team</th><th scope="col">Value (€)</th></tr></thead>
-      <tbody>${list.map(player => `<tr>
-        <td class="l name-cell"><span class="signup-person">${player.photo
-          ? `<img src="${MHL.esc(player.photo)}" alt="">`
-          : `<span class="avatar" aria-hidden="true">${MHL.esc(player.name.slice(0, 1).toUpperCase())}</span>`}
-          <b>${MHL.esc(player.name)}</b></span></td>
-        <td class="l">${MHL.esc(player.discord)}</td><td>${player.hours}</td>
-        <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain)}</td>
-        <td class="l">${MHL.esc(teams.find(team => team.id === player.team)?.name || '—')}</td>
-        <td class="value-cell">${valueFormat.format(Number(player.value) || 0)}</td>
-      </tr>`).join('')}</tbody>
+    host.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">${tableHead(false)}
+      <tbody>${list.map(player => `<tr>${playerCells(player)}</tr>`).join('')}</tbody>
     </table></div>`;
+  }
+  async function loadOwnEntry() {
+    try {
+      const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
+      if (!sessionResponse.ok) throw new Error('Could not check Steam sign-in.');
+      const session = await sessionResponse.json();
+      if (!session.authenticated) {
+        ownHost.innerHTML = '<a class="btn sign-in-entry" href="/player-login">Sign in to edit entry</a>';
+        return;
+      }
+      const response = await fetch('/api/player/signup', { cache: 'no-store' });
+      const result = await response.json();
+      if (response.status === 404) {
+        ownHost.innerHTML = '<a class="btn sign-in-entry" href="/sign-up">Sign up for Season 2</a>';
+        return;
+      }
+      if (!response.ok) throw new Error(result.error || 'Could not load your entry.');
+      ownSignupId = result.signup.id;
+      ownHost.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">${tableHead(true)}
+        <tbody><tr>${playerCells(result.signup)}<td class="edit-cell"><a class="btn" href="/player-login">Edit</a></td></tr></tbody>
+      </table></div>`;
+    } catch (error) {
+      ownHost.innerHTML = MHL.empty('Could not load your entry', error.message || 'Please reload and try again.');
+    }
   }
   select.addEventListener('change', draw);
   let data;
@@ -103,6 +138,8 @@
   }
   window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
   teams = Array.isArray(data.teams) ? data.teams : [];
+  draw();
+  await loadOwnEntry();
   draw();
 })();
 </script>

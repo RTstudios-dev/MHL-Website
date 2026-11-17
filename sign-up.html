@@ -12,6 +12,10 @@
 <link rel="stylesheet" href="/site.css">
 <style>
 .signup{max-width:680px;display:grid;gap:20px}
+.steam-options{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:end}
+.steam-option{display:grid;gap:6px;align-content:end;color:var(--muted);font-size:14px}
+.steam-option .btn{width:100%}
+.steam-status{min-height:1.5em;font-size:13px}
 .signup .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:18px}
 .signup label{display:grid;gap:6px;color:var(--ink);font-weight:500}
 .signup input,.signup select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:10px 12px;min-height:46px}
@@ -23,6 +27,7 @@
 .signup-status{min-height:1.6em;color:var(--muted)}
 .signup-status.success{color:var(--gold)}
 .signup-status.error{color:#e08474}
+@media(max-width:560px){.steam-options{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -40,10 +45,17 @@
     <label>Type your discord username here
       <input name="discord" type="text" maxlength="80" autocomplete="nickname" required>
     </label>
-    <label>What is your Steam profile link?
-      <input name="steam" type="url" maxlength="300" placeholder="https://steamcommunity.com/id/yourname" required>
-      <small>Enter your public Steam Community profile URL.</small>
-    </label>
+    <div class="steam-options">
+      <label>Steam profile link
+        <input name="steam" type="url" maxlength="300" placeholder="https://steamcommunity.com/id/yourname" required>
+        <small>Enter your public Steam Community profile URL.</small>
+      </label>
+      <div class="steam-option">
+        <span>Or sign in and add it automatically</span>
+        <a class="btn" href="/auth/steam?return=%2Fsign-up">Sign in with Steam</a>
+        <p id="steamStatus" class="steam-status" role="status" aria-live="polite"></p>
+      </div>
+    </div>
     <label>Type your in-game name here
       <input name="name" type="text" maxlength="40" required>
     </label>
@@ -92,7 +104,33 @@
   const fileInput = document.getElementById('photo');
   const preview = document.getElementById('preview');
   const status = document.getElementById('status');
+  const steamStatus = document.getElementById('steamStatus');
+  const steamField = form.elements.namedItem('steam');
   const button = document.getElementById('submit');
+
+  async function fillSteamProfile() {
+    const loginStatus = new URLSearchParams(location.search).get('steam');
+    if (loginStatus === 'failed') {
+      steamStatus.textContent = 'Steam sign-in could not be completed. You can enter the profile link manually.';
+      return;
+    }
+    try {
+      const response = await fetch('/api/player/me', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Could not check Steam sign-in.');
+      const player = await response.json();
+      if (!player.authenticated) return;
+      if (player.profileLookupFailed) {
+        steamStatus.textContent = 'Steam could not resolve your profile URL. Try again later or enter it manually.';
+        return;
+      }
+      if (!steamField.value || loginStatus === 'connected') steamField.value = player.profileUrl;
+      steamStatus.textContent = 'Steam profile added. You can change the link if needed.';
+    } catch (error) {
+      if (loginStatus === 'connected') {
+        steamStatus.textContent = error.message || 'Could not load your Steam profile. Please enter the link manually.';
+      }
+    }
+  }
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
@@ -168,6 +206,7 @@
       button.disabled = false;
     }
   });
+  fillSteamProfile();
 })();
 </script>
 </body>

@@ -389,7 +389,8 @@ const server = http.createServer(async (req, res) => {
       const state = crypto.randomBytes(24).toString('hex');
       const realm = origin + '/';
       const returnTo = `${origin}/auth/steam/callback?state=${state}`;
-      steamStates.set(state, { returnTo, realm, expires: Date.now() + STEAM_STATE_MS });
+      const returnPath = url.searchParams.get('return') === '/sign-up' ? '/sign-up' : '/player-login';
+      steamStates.set(state, { returnTo, realm, returnPath, expires: Date.now() + STEAM_STATE_MS });
       const login = new URL(STEAM_OPENID);
       login.searchParams.set('openid.ns', 'http://specs.openid.net/auth/2.0');
       login.searchParams.set('openid.mode', 'checkid_setup');
@@ -459,7 +460,7 @@ const server = http.createServer(async (req, res) => {
       playerSessions.set(token, { steamId, profileUrl, lookupFailed, expires: Date.now() + PLAYER_SESSION_MS });
       const secure = origin.startsWith('https://') ? '; Secure' : '';
       return send(res, 303, 'Signed in with Steam', 'text/plain; charset=utf-8', {
-        Location: '/player-login?steam=connected',
+        Location: `${pending.returnPath}?steam=connected`,
         'Set-Cookie': [
           `mhl_player=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${PLAYER_SESSION_MS / 1000}${secure}`,
           `mhl_steam_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
@@ -472,6 +473,7 @@ const server = http.createServer(async (req, res) => {
         authenticated: !!player,
         steamId: player ? player.steamId : '',
         profileUrl: player ? player.profileUrl : '',
+        profileLookupFailed: !!(player && player.lookupFailed),
       });
     }
     if (p === '/api/player/signup' && req.method === 'GET') {
@@ -495,8 +497,9 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         profileUrl: player.profileUrl,
         signup: {
-          discord: signup.discord, name: signup.name, steam: signup.steam,
-          hours: signup.hours, position: signup.position, captain: signup.captain, photo: signup.photo,
+          id: signup.id, discord: signup.discord, name: signup.name, steam: signup.steam,
+          hours: signup.hours, position: signup.position, captain: signup.captain,
+          photo: signup.photo, team: signup.team, value: signup.value,
         },
       });
     }
@@ -606,6 +609,9 @@ const server = http.createServer(async (req, res) => {
       }
       const data = readData();
       const discordKey = discord.toLowerCase(), profileKey = steamKey(steam);
+      if (player && player.lookupFailed && profileKey === steamKey(player.profileUrl)) {
+        return send(res, 503, { error: 'Steam could not resolve your profile link right now. Please try Steam sign-in again or enter your profile URL manually.' });
+      }
       if (data.signups.some(existing => (steamId && existing.steamId === steamId) ||
           String(existing.discord || '').trim().toLowerCase() === discordKey ||
           (profileKey && steamKey(existing.steam) === profileKey))) {
