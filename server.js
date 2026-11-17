@@ -217,8 +217,7 @@ const signupValues = signup => ({
 });
 const draftPrice = signup => {
   const { skaterValue, goalieValue } = signupValues(signup);
-  if (signup.position === 'Goalie') return goalieValue;
-  return signup.position === 'Flexible' ? Math.max(skaterValue, goalieValue) : skaterValue;
+  return Math.max(skaterValue, goalieValue);
 };
 const normalizeDraft = (raw, teams, signups) => {
   const teamIds = new Set(teams.map(team => team.id));

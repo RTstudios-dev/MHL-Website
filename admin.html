@@ -262,7 +262,7 @@ const MHLA = (() => {
     const draftPrice = signup => {
       const skater = Number(signup.skaterValue ?? signup.value) || 0;
       const goalie = Number(signup.goalieValue ?? signup.value) || 0;
-      return signup.position === 'Goalie' ? goalie : signup.position === 'Flexible' ? Math.max(skater, goalie) : skater;
+      return Math.max(skater, goalie);
     };
     const orderedTeams = D.draft.order.filter(Boolean);
     const missingCaptain = orderedTeams.some(id => {
@@ -532,9 +532,11 @@ const MHLA = (() => {
     D.draft.picks = Array.isArray(D.draft.picks) ? D.draft.picks : [];
     const list = [...D.signups];
     const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
-    const averageValue = key => D.signups.length
-      ? averageValueFormat.format(D.signups.reduce((sum, signup) => sum + (Number(signup[key] ?? signup.value) || 0), 0) / D.signups.length)
-      : '—';
+    const averageValue = key => {
+      if (!D.signups.length) return '—';
+      const average = D.signups.reduce((sum, signup) => sum + (Number(signup[key] ?? signup.value) || 0), 0) / D.signups.length;
+      return averageValueFormat.format(Math.ceil(average / 100000) * 100000);
+    };
     const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
     const captainRank = { Yes: 0, Maybe: 1, No: 2 };
     const valueOf = signup => Math.max(

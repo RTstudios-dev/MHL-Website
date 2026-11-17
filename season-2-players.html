@@ -155,7 +155,7 @@
   const draftPrice = player => {
     const skater = Number(player.skaterValue ?? player.value) || 0;
     const goalie = Number(player.goalieValue ?? player.value) || 0;
-    return player.position === 'Goalie' ? goalie : player.position === 'Flexible' ? Math.max(skater, goalie) : skater;
+    return Math.max(skater, goalie);
   };
   const showPickControls = () => draftState.active && !!draftState.captainTeamId;
   const pickButton = player => {
@@ -197,9 +197,11 @@
     };
     list.sort(sorters[select.value]);
     const totalSignups = signups().length;
-    const averageValue = key => totalSignups
-      ? averageValueFormat.format(signups().reduce((sum, player) => sum + (Number(player[key] ?? player.value) || 0), 0) / totalSignups)
-      : '—';
+    const averageValue = key => {
+      if (!totalSignups) return '—';
+      const average = signups().reduce((sum, player) => sum + (Number(player[key] ?? player.value) || 0), 0) / totalSignups;
+      return averageValueFormat.format(Math.ceil(average / 100000) * 100000);
+    };
     document.getElementById('count').textContent = `${totalSignups} ${totalSignups === 1 ? 'signup' : 'signups'} (est possible teams ${Math.floor(totalSignups / 8)}) · Avg Skater Value ${averageValue('skaterValue')} · Avg Goalie Value ${averageValue('goalieValue')}`;
     if (!list.length) {
       host.innerHTML = MHL.empty('No Season 2 signups yet', 'Use Sign Up Here to add the first player.');
@@ -316,7 +318,7 @@
       if (!response.ok) throw new Error(result.error || 'Could not load your entry.');
       ownSignupId = result.signup.id;
       ownHost.innerHTML = `<div class="tbl-wrap signup-wrap"><table class="tbl signup-table has-action">${tableHead(true)}
-        <tbody><tr>${playerCells(result.signup)}<td class="edit-cell" data-label="Actions"><a class="btn" href="/player-login">Edit</a>${showPickControls() ? pickButton(result.signup) : ''}</td></tr></tbody>
+        <tbody><tr>${playerCells(result.signup)}<td class="edit-cell" data-label="Actions"><a class="btn" href="/player-login">Edit</a></td></tr></tbody>
       </table></div>`;
     } catch (error) {
       ownHost.innerHTML = MHL.empty('Could not load your entry', error.message || 'Please reload and try again.');
