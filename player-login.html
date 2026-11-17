@@ -12,12 +12,27 @@
 <link rel="stylesheet" href="/site.css">
 <style>
 .player-login,.player-edit{max-width:680px}
-.player-edit-title{font-family:var(--disp);font-weight:500;font-size:34px;line-height:1.05;margin-bottom:20px}
+.player-edit-title{font-family:var(--disp);font-weight:500;font-size:34px;line-height:1.05;margin:44px 0 20px}
+.profile-summary{max-width:680px;background:var(--card);border-top:1px solid var(--rule);padding:24px;margin-bottom:28px}
+.profile-summary[hidden],.player-edit[hidden],.player-login[hidden]{display:none}
+.profile-stats[hidden]{display:none}
+#steamStatus{max-width:680px;margin-bottom:16px;color:var(--muted)}
+.profile-overview,.profile-identity{display:flex;align-items:center;gap:18px}
+.profile-overview{justify-content:space-between}
+.profile-identity img,.profile-avatar-fallback{width:96px;height:96px;flex:none;object-fit:cover;border:1px solid var(--rule);border-radius:50%;background:var(--paper)}
+.profile-avatar-fallback{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:44px}
+.profile-identity small{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.profile-identity h2{font-family:var(--disp);font-size:32px;font-weight:500;line-height:1.05}
 .player-login .ed,.player-edit .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:18px}
-.player-login p,.player-edit p{color:var(--muted)}
-.player-login a.profile{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
-.player-login .signup-link{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
-.player-edit[hidden],.player-login [hidden]{display:none}
+.player-login p,.player-edit p,.profile-summary p{color:var(--muted)}
+.player-login .profile{display:inline-block;margin-top:8px;color:var(--gold);text-decoration:underline;text-underline-offset:3px}
+.signup-link{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
+.profile-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:26px}
+.profile-stats div{padding-top:12px;border-top:1px solid var(--line)}
+.profile-stats span{display:block;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+.profile-stats strong{font-family:var(--disp);font-size:32px;font-weight:500;color:var(--gold)}
+.player-profile-status{margin-top:14px;min-height:1.5em}
+.player-profile-status.error{color:#e08474}
 .player-edit label{display:grid;gap:6px;color:var(--ink);font-weight:500}
 .player-edit input,.player-edit select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:10px 12px;min-height:46px}
 .player-edit input:focus-visible,.player-edit select:focus-visible{outline:1px solid var(--gold);border-color:var(--gold)}
@@ -27,6 +42,14 @@
 .player-status{min-height:1.6em}
 .player-status.success{color:var(--gold)}
 .player-status.error{color:#e08474}
+@media(max-width:560px){
+  .profile-identity{gap:12px}
+  .profile-identity img,.profile-avatar-fallback{width:72px;height:72px}
+  .profile-identity h2{font-size:26px}
+  .profile-overview{align-items:flex-start}
+  .profile-stats{gap:10px}
+  .profile-stats strong{font-size:26px}
+}
 </style>
 </head>
 <body>
@@ -36,19 +59,36 @@
 <header class="mtop" id="mtop"></header>
 <main class="main" id="main">
 <div class="ph">
-  <h1>Season 2 Player</h1>
-  <p>Sign in with Steam to find and edit the signup linked to your Steam profile.</p>
+  <h1>Player Profile</h1>
 </div>
-<section class="player-login" aria-label="Steam account">
+<p id="steamStatus" role="status" aria-live="polite">Sign in with Steam to view your player profile.</p>
+<section class="profile-summary" id="profileSummary" aria-label="Player profile" hidden>
+  <div class="profile-overview">
+    <div class="profile-identity">
+      <img id="profileAvatar" alt="" hidden>
+      <span class="profile-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">S</span>
+      <div>
+        <small>Discord username</small>
+        <h2 id="profileDiscord">Steam Player</h2>
+        <a class="profile" id="steamProfile" href="#" target="_blank" rel="noopener">View Steam profile</a>
+      </div>
+    </div>
+    <button class="btn line" id="steamLogout" type="button">Sign out</button>
+  </div>
+  <div class="profile-stats" id="profileStats" hidden>
+    <div><span>Goals</span><strong id="profileGoals">0</strong></div>
+    <div><span>Assists</span><strong id="profileAssists">0</strong></div>
+    <div><span>Points</span><strong id="profilePoints">0</strong></div>
+  </div>
+  <p class="player-profile-status" id="statsStatus" role="status" aria-live="polite"></p>
+</section>
+<section class="player-login" id="loginPanel" aria-label="Steam account">
   <div class="ed">
-    <p id="steamStatus" role="status" aria-live="polite">Sign in with Steam to manage your signup.</p>
     <a class="btn" id="steamLogin" href="/auth/steam">Sign in with Steam</a>
-    <button class="btn line" id="steamLogout" type="button" hidden>Sign out</button>
-    <a class="profile" id="steamProfile" href="#" target="_blank" rel="noopener" hidden>View Steam profile</a>
-    <a class="signup-link" id="signupLink" href="/sign-up" hidden>Sign up for Season 2</a>
   </div>
 </section>
 <h2 class="player-edit-title" id="editTitle" hidden>Season 2 Player</h2>
+<a class="signup-link" id="signupLink" href="/sign-up" hidden>Sign up for Season 2</a>
 <form class="player-edit" id="edit" hidden>
   <div class="ed">
     <label>Type your discord username here
@@ -97,9 +137,19 @@
 (() => {
   const form = document.getElementById('edit');
   const steamStatus = document.getElementById('steamStatus');
+  const loginPanel = document.getElementById('loginPanel');
   const login = document.getElementById('steamLogin');
   const logout = document.getElementById('steamLogout');
+  const profileSummary = document.getElementById('profileSummary');
+  const profileAvatar = document.getElementById('profileAvatar');
+  const profileAvatarFallback = document.getElementById('profileAvatarFallback');
+  const profileDiscord = document.getElementById('profileDiscord');
   const profileLink = document.getElementById('steamProfile');
+  const profileStats = document.getElementById('profileStats');
+  const profileGoals = document.getElementById('profileGoals');
+  const profileAssists = document.getElementById('profileAssists');
+  const profilePoints = document.getElementById('profilePoints');
+  const statsStatus = document.getElementById('statsStatus');
   const signupLink = document.getElementById('signupLink');
   const editTitle = document.getElementById('editTitle');
   const editStatus = document.getElementById('editStatus');
@@ -107,6 +157,50 @@
   const photoPreview = document.getElementById('photoPreview');
   const saveButton = document.getElementById('save');
   let currentPhoto = '';
+  let currentSession = null;
+  let currentSignup = null;
+  let siteDataPromise = null;
+
+  function showProfile(signup, session) {
+    currentSignup = signup;
+    currentSession = session;
+    const name = signup && (signup.discord || signup.name) || 'Steam Player';
+    profileDiscord.textContent = name;
+    profileLink.href = session.profileUrl;
+    if (signup && signup.photo) {
+      profileAvatar.src = signup.photo;
+      profileAvatar.hidden = false;
+      profileAvatarFallback.hidden = true;
+    } else {
+      profileAvatar.removeAttribute('src');
+      profileAvatar.hidden = true;
+      profileAvatarFallback.textContent = name.trim().charAt(0).toUpperCase() || 'S';
+      profileAvatarFallback.hidden = false;
+    }
+    profileSummary.hidden = false;
+  }
+
+  async function loadStats(signup) {
+    profileStats.hidden = false;
+    statsStatus.textContent = '';
+    statsStatus.className = 'player-profile-status';
+    try {
+      if (!siteDataPromise) siteDataPromise = MHL.load();
+      const data = await siteDataPromise;
+      const playerName = String(signup.name || '').trim().toLowerCase();
+      const rosterPlayer = data.players.find(player => String(player.name || '').trim().toLowerCase() === playerName);
+      const goals = rosterPlayer ? Number(rosterPlayer.g) || 0 : 0;
+      const assists = rosterPlayer ? Number(rosterPlayer.a) || 0 : 0;
+      profileGoals.textContent = goals;
+      profileAssists.textContent = assists;
+      profilePoints.textContent = goals + assists;
+      if (!rosterPlayer) statsStatus.textContent = 'Stats will appear once your in-game name is on the player roster.';
+    } catch (error) {
+      statsStatus.textContent = 'Could not load player stats. Please reload the page to try again.';
+      statsStatus.className = 'player-profile-status error';
+      console.error('Could not load player stats:', error);
+    }
+  }
 
   async function loadSignup() {
     try {
@@ -116,32 +210,34 @@
       if (!session.authenticated) {
         form.hidden = true;
         editTitle.hidden = true;
+        profileSummary.hidden = true;
+        loginPanel.hidden = false;
         login.hidden = false;
-        logout.hidden = true;
-        profileLink.hidden = true;
         signupLink.hidden = true;
         steamStatus.textContent = new URLSearchParams(location.search).get('steam') === 'failed'
           ? 'Steam sign-in could not be completed. Please try again.'
-          : 'Sign in with Steam to manage your signup.';
+          : 'Sign in with Steam to view your player profile.';
         return;
       }
 
+      loginPanel.hidden = true;
       login.hidden = true;
-      logout.hidden = false;
-      profileLink.href = session.profileUrl;
-      profileLink.hidden = false;
+      showProfile(null, session);
       const response = await fetch('/api/player/signup', { cache: 'no-store' });
       const result = await response.json();
       if (response.status === 404) {
         form.hidden = true;
-        editTitle.hidden = true;
+        editTitle.hidden = false;
         signupLink.hidden = false;
+        profileStats.hidden = true;
+        statsStatus.textContent = 'Complete your signup to add your Discord name and player stats here.';
         steamStatus.textContent = result.error || 'No signup was found for this Steam profile.';
         return;
       }
       if (!response.ok) throw new Error(result.error || 'Could not load your signup.');
 
       const signup = result.signup;
+      showProfile(signup, session);
       form.elements.namedItem('discord').value = signup.discord;
       form.elements.namedItem('name').value = signup.name;
       form.elements.namedItem('hours').value = signup.hours;
@@ -151,12 +247,16 @@
       photoPreview.src = currentPhoto;
       photoPreview.hidden = !currentPhoto;
       signupLink.hidden = true;
+      loginPanel.hidden = true;
       editTitle.hidden = false;
       form.hidden = false;
-      steamStatus.textContent = 'Your signup was found. Update your answers below; your assigned team and Value are unchanged.';
+      steamStatus.textContent = `Signed in as ${signup.discord}.`;
+      await loadStats(signup);
     } catch (error) {
       form.hidden = true;
       editTitle.hidden = true;
+      signupLink.hidden = true;
+      if (currentSession) showProfile(null, currentSession);
       steamStatus.textContent = error.message || 'Could not load your signup. Please reload and try again.';
     }
   }
@@ -220,6 +320,21 @@
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not save your signup.');
       currentPhoto = photo;
+      currentSignup = {
+        ...currentSignup,
+        discord: form.elements.namedItem('discord').value,
+        name: form.elements.namedItem('name').value,
+        hours: Number(form.elements.namedItem('hours').value),
+        position: form.elements.namedItem('position').value,
+        captain: form.elements.namedItem('captain').value,
+        photo,
+      };
+      showProfile(currentSignup, currentSession);
+      await loadStats(currentSignup);
+      if (MHL.refreshPlayerButton) {
+        try { await MHL.refreshPlayerButton(); }
+        catch (error) { console.error('Could not refresh the Steam profile button:', error); }
+      }
       editStatus.textContent = 'Your signup has been updated.';
       editStatus.className = 'player-status success';
     } catch (error) {

@@ -68,6 +68,13 @@
   const select = document.getElementById('sort');
   const signups = () => window.seasonSignups || [];
   const valueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const compactValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 1 });
+  const formatValue = raw => {
+    const value = Number(raw) || 0;
+    return value >= 1_000_000
+      ? compactValueFormat.format(value).replace(/([KMBT])$/, (_, suffix) => suffix.toLowerCase())
+      : valueFormat.format(value);
+  };
   let teams = [];
   let ownSignupId = '';
   const playerCells = player => `<td class="l name-cell"><span class="signup-person">${player.photo
@@ -77,7 +84,7 @@
     <td class="l">${MHL.esc(player.discord)}</td><td>${Number(player.hours) || 0}</td>
     <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain || '—')}</td>
     <td class="l">${MHL.esc(teams.find(team => team.id === player.team)?.name || '—')}</td>
-    <td class="value-cell">${valueFormat.format(Number(player.value) || 0)}</td>`;
+    <td class="value-cell">${formatValue(player.value)}</td>`;
   const tableHead = action => `<thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
     <th scope="col">Hours on Puck</th><th scope="col">Position</th><th scope="col">Captain?</th>
     <th class="l" scope="col">Team</th><th scope="col">Value (€)</th>${action ? '<th scope="col">Action</th>' : ''}</tr></thead>`;

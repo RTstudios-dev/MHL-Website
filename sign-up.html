@@ -197,6 +197,10 @@
       form.reset();
       preview.removeAttribute('src');
       preview.hidden = true;
+      if (MHL.refreshPlayerButton) {
+        try { await MHL.refreshPlayerButton(); }
+        catch (error) { console.error('Could not refresh the Steam profile button:', error); }
+      }
       status.textContent = 'Thanks! Your Season 2 signup has been received.';
       status.className = 'signup-status success';
     } catch (error) {

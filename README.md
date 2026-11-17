@@ -43,7 +43,7 @@ Remember to press **Save changes**, nothing goes live until you do.
 - News: pinned posts stay on top, the newest one also shows on the home page.
 - Rules: shown in the same order as in the admin.
 - Season 2 Players: signups include position and Steam profile. Steam links are admin-only; admins can edit signup answers, assign a team, and set each player's Value in euros. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
-- Player Login: Steam sign-in is separate from signup and lets a player edit the signup linked to their Steam profile. It does not change Admin login.
+- Player Profile: the top-right Steam button becomes the player's profile picture when signed in. The profile page shows Discord and roster goals, assists, and points above the editable Season 2 signup. This does not change Admin login.
 - Settings: season name and Discord link (leave it empty to hide the Discord button).
 
 Public Season 2 signups are saved in the same persistent `data.json` as the rest of the site. Optional profile pictures are stored in `uploads/`, alongside team images, and are retained when admin changes are saved. Existing signups without position, team, or Steam profile remain unassigned/blank.

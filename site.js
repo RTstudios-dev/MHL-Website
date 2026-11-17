@@ -15,6 +15,34 @@
   const cur = href => href === current ? ' aria-current="page"' : '';
 
   const wordmark = '<span class="wm">M<i>H</i>L</span>';
+  let steamLoginButton;
+  const showSteamProfileButton = signup => {
+    const name = signup && (signup.discord || signup.name) || 'Steam profile';
+    steamLoginButton.classList.add('is-profile');
+    steamLoginButton.setAttribute('aria-label', `${name} player profile`);
+    steamLoginButton.title = `${name} player profile`;
+    steamLoginButton.innerHTML = signup && signup.photo
+      ? `<img src="${esc(signup.photo)}" alt="">`
+      : `<span>${esc(name.trim().charAt(0).toUpperCase() || 'S')}</span>`;
+  };
+  M.refreshPlayerButton = async function () {
+    const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
+    if (!sessionResponse.ok) throw new Error('Could not check Steam sign-in.');
+    const session = await sessionResponse.json();
+    if (!session.authenticated) {
+      steamLoginButton.classList.remove('is-profile');
+      steamLoginButton.textContent = 'Steam Login in';
+      steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
+      steamLoginButton.removeAttribute('title');
+      return;
+    }
+    showSteamProfileButton(null);
+    const signupResponse = await fetch('/api/player/signup', { cache: 'no-store' });
+    if (signupResponse.status === 404) return;
+    if (!signupResponse.ok) throw new Error('Could not load your player profile.');
+    const result = await signupResponse.json();
+    showSteamProfileButton(result.signup);
+  };
   function shell() {
     const side = document.getElementById('side');
     side.innerHTML = `
@@ -22,12 +50,13 @@
       <nav aria-label="Main">${NAV.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')}</nav>
       <div class="side-foot"><span id="discordSlot"></span><a class="admin" href="/admin">Admin</a></div>`;
     document.getElementById('mtop').innerHTML = `<a href="/" aria-label="MHL home">${wordmark}</a><span>Miniature Hockey League</span>`;
-    const steamLogin = document.createElement('a');
-    steamLogin.className = 'btn steam-login-top';
-    steamLogin.href = '/player-login';
-    steamLogin.textContent = 'Steam Login in';
-    steamLogin.setAttribute('aria-label', 'Steam login and player profile');
-    document.body.appendChild(steamLogin);
+    steamLoginButton = document.createElement('a');
+    steamLoginButton.className = 'btn steam-login-top';
+    steamLoginButton.href = '/player-login';
+    steamLoginButton.textContent = 'Steam Login in';
+    steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
+    document.body.appendChild(steamLoginButton);
+    M.refreshPlayerButton().catch(error => console.error('Could not update the Steam profile button:', error));
     const inMore = !TABS.some(([h]) => h === current);
     document.getElementById('tabbar').innerHTML = TABS.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')
       + `<button type="button" id="moreBtn" aria-expanded="false" aria-controls="more"${inMore ? ' aria-current="page"' : ''}>More</button>`;
