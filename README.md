@@ -32,7 +32,8 @@ Player Steam sign-in is available from the top-right button; it is not a navigat
 
 Remember to press **Save changes**, nothing goes live until you do.
 
-- Teams: name, short code (shows on the scoreboards), colour, logo, team photo, page address.
+- Teams: name, short code (shows on the scoreboards), colour, logo, team photo, page address, and Season 2 captain.
+  Fill the numbered draft-order dropdowns manually; blank slots are skipped. Assign captains to the selected teams, then start/stop the draft with the button at the top of Teams and press **Save changes**. Steam-authenticated captains pick on the public Season 2 Players board in order. Each pick deducts its saved draft value from the team's budget; Goalies use Goalie Value, skaters use Skater Value, and Flexible players use the higher value. Teams that cannot afford the cheapest remaining player are skipped.
   If you change the page address later, old links to that team stop working.
 - Matches: rounds are optional. Each match is a best of 3, just type in the score of every game played.
   It shows you the result and points before saving.
@@ -42,7 +43,7 @@ Remember to press **Save changes**, nothing goes live until you do.
 - Players: name, team, number, position. Their goal and assist totals add up from the matches.
 - News: pinned posts stay on top, the newest one also shows on the home page.
 - Rules: shown in the same order as in the admin.
-- Season 2 Players: signups include position and Steam profile. Steam links are admin-only; admins can edit signup answers, assign a team, set separate Skater and Goalie Values in euros, and set the Ice Cap and Team Cap amounts. The caps appear between the signed-in player's entry and the public signup list. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
+- Season 2 Players: signups include position and Steam profile. Steam links are admin-only; admins can edit signup answers, assign a team, set separate Skater and Goalie Values in euros, and set the Ice Cap and Team Cap amounts. The caps appear between the signed-in player's entry and the public signup list. Team budgets and assigned Season 2 player values are shown in Teams. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
 - Player Profile: the top-right Steam button becomes the player's profile picture when signed in. The profile page shows Discord and roster goals, assists, and points above the editable Season 2 signup. This does not change Admin login.
 - Settings: season name and Discord link (leave it empty to hide the Discord button).
 

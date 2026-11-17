@@ -50,6 +50,23 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .ed + .ed{margin-top:12px}
 .row{display:grid;gap:12px;align-items:end}
 .teams-row{grid-template-columns:minmax(160px,2fr) 90px 70px minmax(140px,1.4fr)}
+.team-management{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:20px;align-items:start}
+.draft-order-panel{position:sticky;top:118px}
+.draft-order-panel h3,.team-drafted-players h4{margin:0;font-family:var(--disp);font-weight:500;font-size:24px}
+.draft-order-panel p{margin:0;color:var(--muted);font-size:13px}
+.draft-order{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.draft-order-item{display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:8px;padding:8px;border:1px solid var(--line);background:var(--paper)}
+.draft-order-item select{min-width:0}
+.draft-order-number{font-family:var(--disp);font-size:20px;color:var(--gold);text-align:center}
+.team-list{display:grid;gap:12px}
+.team-draft-settings{display:grid;grid-template-columns:minmax(200px,1fr) minmax(200px,1fr);gap:12px;align-items:end}
+.team-budget{display:grid;gap:4px;font-size:14px;color:var(--muted)}
+.team-budget b{font-family:var(--disp);font-size:23px;font-weight:500;color:var(--gold)}
+.team-drafted-players{border-top:1px solid var(--line);padding-top:10px;display:grid;gap:6px}
+.team-drafted-players ul{list-style:none;padding:0;margin:0;display:grid;gap:4px}
+.team-drafted-players li{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+.team-drafted-players li strong{font-weight:600;color:var(--gold);white-space:nowrap}
+.team-drafted-players li small{display:block;color:var(--muted);font-size:12px}
 .imgs{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
 .img{display:flex;align-items:center;gap:10px}
 .img .thumb{width:56px;height:56px;border:1px solid var(--line);display:grid;place-items:center;background:var(--ice);overflow:hidden;font-size:12px;color:var(--muted)}
@@ -106,6 +123,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 
 @media (max-width:820px){
   .teams-row{grid-template-columns:1fr 1fr}
+  .team-management{grid-template-columns:1fr}
+  .draft-order-panel{position:static}
+  .team-draft-settings{grid-template-columns:1fr}
   .match{grid-template-columns:1fr}
   .bar .right{margin-left:0}
 }
@@ -233,27 +253,117 @@ const MHLA = (() => {
         file));
   }
   function teams() {
-    const add = h('button', { class: 'btn sm', type: 'button', onclick: () => {
-      D.teams.push({ id: uid(), name: 'New team', short: '', color: '#c8102e', logo: '', photo: '', slug: '' }); touch(); draw();
+    D.draft = D.draft || { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] };
+    const savedOrder = Array.isArray(D.draft.order) ? D.draft.order : [];
+    D.draft.order = D.teams.map((team, index) => D.teams.some(item => item.id === savedOrder[index]) ? savedOrder[index] : '');
+    D.draft.picks = Array.isArray(D.draft.picks) ? D.draft.picks : [];
+    const formatEuro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+    const teamCap = Number(D.site && D.site.teamCap) || 0;
+    const draftPrice = signup => {
+      const skater = Number(signup.skaterValue ?? signup.value) || 0;
+      const goalie = Number(signup.goalieValue ?? signup.value) || 0;
+      return signup.position === 'Goalie' ? goalie : signup.position === 'Flexible' ? Math.max(skater, goalie) : skater;
+    };
+    const orderedTeams = D.draft.order.filter(Boolean);
+    const missingCaptain = orderedTeams.some(id => {
+      const team = D.teams.find(item => item.id === id);
+      return !team || !team.captainSignupId;
+    });
+    const add = h('button', { class: 'btn sm', type: 'button', disabled: D.draft.active, onclick: () => {
+      const team = { id: uid(), name: 'New team', short: '', color: '#c8102e', logo: '', photo: '', slug: '', captainSignupId: '' };
+      D.teams.push(team); D.draft.order.push(''); touch(); draw();
     } }, 'Add team');
-    return [
-      head('Teams', add),
-      h('p', { class: 'help' }, 'The short code (2 to 4 letters) shows on scoreboards. The page address is the end of the team page link, for example /team/ice-giants. Leave it empty to make one from the name. Changing it later breaks links people already shared.'),
-      D.teams.length ? D.teams.map(t => h('div', { class: 'ed' },
+    const toggleDraft = h('button', {
+      class: 'btn sm', type: 'button',
+      disabled: !D.draft.active && (!orderedTeams.length || missingCaptain),
+      onclick: () => { D.draft.active = !D.draft.active; touch(); draw(); },
+    }, D.draft.active ? 'Stop draft' : 'Start draft');
+    const orderList = D.draft.order.map((teamId, index) => {
+      const usedElsewhere = id => id && D.draft.order.some((otherId, otherIndex) => otherIndex !== index && otherId === id);
+      return h('li', { class: 'draft-order-item' },
+        h('span', { class: 'draft-order-number' }, index + 1),
+        h('select', {
+          'aria-label': `Draft pick ${index + 1}`,
+          disabled: D.draft.active || D.draft.picks.length > 0,
+          onchange: e => { D.draft.order[index] = e.target.value; D.draft.manualOrder = true; touch(); draw(); },
+        },
+          h('option', { value: '', selected: !teamId }, 'Choose team'),
+          D.teams.map(team => h('option', {
+            value: team.id,
+            selected: team.id === teamId,
+            disabled: usedElsewhere(team.id),
+          }, team.name))));
+    });
+    const teamCards = D.teams.length ? D.teams.map(t => {
+      const teamPicks = D.draft.picks.filter(pick => pick.teamId === t.id);
+      const spent = teamPicks.reduce((sum, pick) => sum + (Number(pick.price) || 0), 0);
+      const assigned = D.signups.filter(signup => signup.team === t.id);
+      const captain = h('select', {
+        'aria-label': `Season 2 captain for ${t.name}`,
+        onchange: e => { t.captainSignupId = e.target.value; touch(); draw(); },
+      },
+        h('option', { value: '', selected: !t.captainSignupId }, 'Choose captain'),
+        D.signups.map(signup => {
+          const usedByOther = D.teams.some(other => other !== t && other.captainSignupId === signup.id);
+          const accountLabel = signup.steamId ? '' : ' (Steam sign-in required)';
+          return h('option', {
+            value: signup.id,
+            selected: signup.id === t.captainSignupId,
+            disabled: usedByOther,
+          }, signup.name + accountLabel);
+        }));
+      return h('div', { class: 'ed' },
         h('div', { class: 'row teams-row' },
           field('Team name', text(t, 'name', { maxlength: 40 })),
           field('Short code', text(t, 'short', { maxlength: 4, style: 'text-transform:uppercase' })),
           field('Colour', h('input', { type: 'color', value: t.color, oninput: e => { t.color = e.target.value; touch(); } })),
           field('Page address', text(t, 'slug', { maxlength: 40, placeholder: 'made from the name' }))),
+        h('div', { class: 'team-draft-settings' },
+          field('Season 2 captain', captain),
+          h('div', { class: 'team-budget' }, 'Draft budget remaining', h('b', {}, formatEuro.format(Math.max(0, teamCap - spent))))),
+        h('div', { class: 'team-drafted-players' },
+          h('h4', {}, 'Season 2 players'),
+          assigned.length ? h('ul', {}, assigned.map(signup => {
+            const pick = teamPicks.find(item => item.signupId === signup.id);
+            const skaterValue = Number(signup.skaterValue ?? signup.value) || 0;
+            const goalieValue = Number(signup.goalieValue ?? signup.value) || 0;
+            return h('li', {},
+              h('span', {}, signup.name, h('small', {}, `Skater ${formatEuro.format(skaterValue)} / Goalie ${formatEuro.format(goalieValue)}`)),
+              h('strong', {}, `Draft ${formatEuro.format(pick ? pick.price : draftPrice(signup))}`));
+          })) : h('p', { class: 'help', style: 'margin:0' }, 'No Season 2 players assigned yet.')),
         h('div', { class: 'imgs' }, imgPicker(t, 'logo', 'Logo'), imgPicker(t, 'photo', 'Team photo (landscape)'),
-          h('div', { class: 'acts', style: 'margin-left:auto' }, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
-            const nm = D.matches.filter(m => m.a === t.id || m.b === t.id).length, np = D.players.filter(p => p.team === t.id).length;
-            if (!confirm(`Delete ${t.name}?` + (nm || np ? ` Its ${nm} match(es) and ${np} player(s) are deleted too.` : ''))) return;
-            D.teams = D.teams.filter(x => x !== t);
-            D.matches = D.matches.filter(m => m.a !== t.id && m.b !== t.id);
-            D.players = D.players.filter(p => p.team !== t.id);
-            touch(); draw();
-          } }, 'Delete team'))))) : h('div', { class: 'empty' }, h('b', {}, 'No teams yet'), 'Press Add team to create the first one.'),
+          h('div', { class: 'acts', style: 'margin-left:auto' }, h('button', {
+            class: 'btn del sm', type: 'button', disabled: D.draft.active,
+            onclick: () => {
+              const nm = D.matches.filter(m => m.a === t.id || m.b === t.id).length;
+              const np = D.players.filter(p => p.team === t.id).length;
+              const picks = D.draft.picks.filter(pick => pick.teamId === t.id);
+              if (!confirm(`Delete ${t.name}?` + (nm || np || picks.length ? ` Its ${nm} match(es), ${np} roster player(s), and ${picks.length} draft pick(s) are removed too.` : ''))) return;
+              picks.forEach(pick => {
+                const signup = D.signups.find(item => item.id === pick.signupId);
+                if (signup && signup.team === t.id) signup.team = '';
+              });
+              D.teams = D.teams.filter(x => x !== t);
+              D.draft.order = D.draft.order.map(id => id === t.id ? '' : id).slice(0, D.teams.length);
+              D.draft.picks = D.draft.picks.filter(pick => pick.teamId !== t.id);
+              D.matches = D.matches.filter(m => m.a !== t.id && m.b !== t.id);
+              D.players = D.players.filter(p => p.team !== t.id);
+              D.signups.forEach(signup => { if (signup.team === t.id) signup.team = ''; });
+              touch(); draw();
+            },
+          }, 'Delete team'))));
+    }) : h('div', { class: 'empty' }, h('b', {}, 'No teams yet'), 'Press Add team to create the first one.');
+    return [
+      head('Teams', add, toggleDraft),
+      h('p', { class: 'help' }, 'The short code (2 to 4 letters) shows on scoreboards. The page address is the end of the team page link, for example /team/ice-giants. Captains must sign in with Steam. Fill the numbered draft slots manually; blank slots are skipped. Draft changes take effect after Save changes.'),
+      !D.draft.active && !orderedTeams.length ? h('p', { class: 'help', role: 'status' }, 'Choose at least one team in the draft order before starting.') : null,
+      !D.draft.active && orderedTeams.length && missingCaptain ? h('p', { class: 'help', role: 'status' }, 'Assign a Season 2 captain to each team selected in the draft order.') : null,
+      h('div', { class: 'team-management' },
+        h('aside', { class: 'draft-order-panel ed' },
+          h('h3', {}, 'Draft pick order'),
+          h('p', {}, D.draft.active || D.draft.picks.length ? 'The order is fixed while the draft is active or has picks.' : 'Choose a team for each numbered slot.'),
+          D.teams.length ? h('ol', { class: 'draft-order' }, orderList) : h('p', {}, 'Add teams to set the draft order.')),
+        h('div', { class: 'team-list' }, teamCards)),
     ];
   }
 
@@ -419,6 +529,10 @@ const MHLA = (() => {
   function signups() {
     D.site = D.site || {};
     const list = [...D.signups];
+    const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const averageValue = key => D.signups.length
+      ? averageValueFormat.format(D.signups.reduce((sum, signup) => sum + (Number(signup[key] ?? signup.value) || 0), 0) / D.signups.length)
+      : '—';
     const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
     const captainRank = { Yes: 0, Maybe: 1, No: 2 };
     const valueOf = signup => Math.max(
@@ -464,7 +578,7 @@ const MHLA = (() => {
         field('Ice Cap €', capInput('iceCap', 'Ice Cap €')),
         field('Team Cap €', capInput('teamCap', 'Team Cap €'))),
       h('div', { class: 'signup-sortbar' },
-        h('p', { class: 'note', style: 'margin:0' }, `${list.length} ${list.length === 1 ? 'signup' : 'signups'}`),
+        h('p', { class: 'note', style: 'margin:0' }, `${list.length} ${list.length === 1 ? 'signup' : 'signups'} (est possible teams ${Math.floor(list.length / 8)}) · Avg Skater Value ${averageValue('skaterValue')} · Avg Goalie Value ${averageValue('goalieValue')}`),
         h('label', {}, 'Sort signups',
           h('select', {
             'aria-label': 'Sort signups',

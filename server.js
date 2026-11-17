@@ -23,7 +23,7 @@ const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] } };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -215,6 +215,62 @@ const signupValues = signup => ({
   skaterValue: num(signup.skaterValue ?? signup.value, Number.MAX_SAFE_INTEGER),
   goalieValue: num(signup.goalieValue ?? signup.value, Number.MAX_SAFE_INTEGER),
 });
+const draftPrice = signup => {
+  const { skaterValue, goalieValue } = signupValues(signup);
+  if (signup.position === 'Goalie') return goalieValue;
+  return signup.position === 'Flexible' ? Math.max(skaterValue, goalieValue) : skaterValue;
+};
+const normalizeDraft = (raw, teams, signups) => {
+  const teamIds = new Set(teams.map(team => team.id));
+  const signupIds = new Set(signups.map(signup => signup.id));
+  const picked = new Set(), picks = [];
+  for (const pick of Array.isArray(raw && raw.picks) ? raw.picks : []) {
+    const teamId = str(pick && pick.teamId, 40), signupId = str(pick && pick.signupId, 40);
+    if (!teamIds.has(teamId) || !signupIds.has(signupId) || picked.has(signupId)) continue;
+    picked.add(signupId);
+    picks.push({ teamId, signupId, price: num(pick.price, Number.MAX_SAFE_INTEGER) });
+  }
+  const manualOrder = !!(raw && raw.manualOrder) || !!(raw && raw.active) || picks.length > 0;
+  const order = [], ordered = new Set();
+  const rawOrder = Array.isArray(raw && raw.order) ? raw.order : [];
+  for (let index = 0; index < teams.length; index++) {
+    const id = rawOrder[index];
+    if (manualOrder && teamIds.has(id) && !ordered.has(id)) {
+      ordered.add(id);
+      order.push(id);
+    } else order.push('');
+  }
+  return {
+    active: !!(raw && raw.active),
+    manualOrder,
+    order,
+    nextIndex: order.length ? num(raw && raw.nextIndex, Number.MAX_SAFE_INTEGER) % order.length : 0,
+    picks,
+  };
+};
+const draftBudget = (data, draft, teamId) => Math.max(0,
+  num(data.site && data.site.teamCap, Number.MAX_SAFE_INTEGER) -
+  draft.picks.filter(pick => pick.teamId === teamId).reduce((sum, pick) => sum + pick.price, 0));
+const currentDraftTurn = (data, draft) => {
+  if (!draft.active || !draft.order.length) return null;
+  const picked = new Set(draft.picks.map(pick => pick.signupId));
+  const available = data.signups.filter(signup => !picked.has(signup.id));
+  if (!available.length) return null;
+  const cheapest = Math.min(...available.map(draftPrice));
+  for (let offset = 0; offset < draft.order.length; offset++) {
+    const index = (draft.nextIndex + offset) % draft.order.length;
+    const team = data.teams.find(item => item.id === draft.order[index]);
+    if (team && team.captainSignupId && draftBudget(data, draft, team.id) >= cheapest) return { team, index };
+  }
+  return null;
+};
+const signupForPlayer = (data, player) => {
+  const profileKey = steamKey(player.profileUrl);
+  const matches = data.signups.filter(signup =>
+    (player.steamId && signup.steamId === player.steamId) ||
+    (profileKey && steamKey(signup.steam) === profileKey));
+  return matches.length === 1 ? matches[0] : null;
+};
 const score = v => (v === null || v === '' || v === undefined) ? null : num(v, 99);
 const okImage = u => UPLOAD_RE.test(u) && fs.existsSync(uploadFile(u));
 const steamProfile = v => {
@@ -260,6 +316,7 @@ function sanitize(d) {
     color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#c8102e',
     logo: okImage(t.logo) ? t.logo : '',
     photo: okImage(t.photo) ? t.photo : '',   // optional team photo
+    captainSignupId: str(t.captainSignupId, 40),
     slug: str(t.slug, 40),   // /team/<slug>, fixed up below
   }));
   // slug doesn't change on rename so shared links keep working
@@ -336,7 +393,16 @@ function sanitize(d) {
     photo: okImage(p.photo) ? p.photo : '',
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
-  return { site, teams, rounds, matches, players, news, rules, signups };
+  const signupIds = new Set(signups.map(signup => signup.id));
+  const captains = new Set();
+  for (const team of teams) {
+    if (!signupIds.has(team.captainSignupId) || captains.has(team.captainSignupId)) team.captainSignupId = '';
+    else captains.add(team.captainSignupId);
+  }
+  const draft = normalizeDraft(d.draft, teams, signups);
+  const signupById = new Map(signups.map(signup => [signup.id, signup]));
+  draft.picks.forEach(pick => { signupById.get(pick.signupId).team = pick.teamId; });
+  return { site, teams, rounds, matches, players, news, rules, signups, draft };
 }
 
 // team pages
@@ -485,6 +551,49 @@ const server = http.createServer(async (req, res) => {
         profileLookupFailed: !!(player && player.lookupFailed),
       });
     }
+    if (p === '/api/draft' && req.method === 'GET') {
+      const data = readData();
+      const draft = normalizeDraft(data.draft, data.teams, data.signups);
+      const player = playerSession(req);
+      const signup = player && signupForPlayer(data, player);
+      const captainTeam = signup && data.teams.find(team => team.captainSignupId === signup.id);
+      const turn = currentDraftTurn(data, draft);
+      return send(res, 200, {
+        active: draft.active,
+        captainTeamId: captainTeam ? captainTeam.id : '',
+        currentTeamId: turn ? turn.team.id : '',
+        pickedSignupIds: draft.picks.map(pick => pick.signupId),
+        teamBudgets: Object.fromEntries(data.teams.map(team => [team.id, draftBudget(data, draft, team.id)])),
+        complete: draft.active && !turn,
+      });
+    }
+    if (p === '/api/draft/pick' && req.method === 'POST') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with the Steam account assigned as captain.' });
+      const data = readData();
+      const draft = normalizeDraft(data.draft, data.teams, data.signups);
+      if (!draft.active) return send(res, 409, { error: 'The draft is not active.' });
+      const captainSignup = signupForPlayer(data, player);
+      const captainTeam = captainSignup && data.teams.find(team => team.captainSignupId === captainSignup.id);
+      if (!captainTeam) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
+      const { signupId } = JSON.parse(await readBody(req) || '{}');
+      const selectedId = str(signupId, 40);
+      if (!selectedId) return send(res, 400, { error: 'Choose a player to draft.' });
+      const turn = currentDraftTurn(data, draft);
+      if (!turn) return send(res, 409, { error: 'The draft has no affordable players remaining.' });
+      if (turn.team.id !== captainTeam.id) return send(res, 409, { error: 'It is not your team’s turn to pick.' });
+      const signup = data.signups.find(item => item.id === selectedId);
+      if (!signup) return send(res, 404, { error: 'That signup could not be found.' });
+      if (draft.picks.some(pick => pick.signupId === signup.id)) return send(res, 409, { error: 'That player has already been drafted.' });
+      const price = draftPrice(signup), budget = draftBudget(data, draft, captainTeam.id);
+      if (price > budget) return send(res, 409, { error: 'That player costs more than your team’s remaining budget.' });
+      signup.team = captainTeam.id;
+      draft.picks.push({ teamId: captainTeam.id, signupId: signup.id, price });
+      draft.nextIndex = (turn.index + 1) % draft.order.length;
+      data.draft = draft;
+      writeData(data);
+      return send(res, 200, { ok: true });
+    }
     if (p === '/api/player/signup' && req.method === 'GET') {
       const player = playerSession(req);
       if (!player) return send(res, 401, { error: 'Sign in with Steam to find your signup.' });
@@ -560,8 +669,10 @@ const server = http.createServer(async (req, res) => {
       // logoUrl: pages swap the wordmark for the logo when there is one
       const logo = findLogo();
       const data = readData();
+      data.draft = normalizeDraft(data.draft, data.teams, data.signups);
       if (!isAdmin(req)) {
         data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
+        data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
       return send(res, 200, { ...data, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
@@ -595,6 +706,17 @@ const server = http.createServer(async (req, res) => {
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
       clean.signups.forEach(signup => byId.set(signup.id, signup));
       clean.signups = [...byId.values()].slice(0, 5000);
+      const currentDraft = normalizeDraft(current.draft, current.teams, current.signups);
+      const keepCurrentOrder = currentDraft.active || currentDraft.picks.length > 0;
+      clean.draft = normalizeDraft({
+        ...clean.draft,
+        manualOrder: keepCurrentOrder ? true : clean.draft.manualOrder,
+        order: keepCurrentOrder ? currentDraft.order : clean.draft.order,
+        picks: currentDraft.picks,
+        nextIndex: currentDraft.nextIndex,
+      }, clean.teams, clean.signups);
+      const signupsById = new Map(clean.signups.map(signup => [signup.id, signup]));
+      clean.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
       writeData(clean);
       // delete uploads nothing uses anymore
       const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo]).concat(clean.signups.map(s => s.photo)).map(u => path.basename(u || '')));

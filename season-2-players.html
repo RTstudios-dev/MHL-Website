@@ -23,6 +23,7 @@
 .signup-table{min-width:1080px}
 .signup-table .name-cell{min-width:190px}
 .signup-table .value-cell{font-family:var(--disp);font-size:24px;color:var(--gold)}
+.pick-btn[disabled]{opacity:.45;cursor:default}
 .own-signup{margin-bottom:40px}
 .own-signup .signup-table{min-width:1180px}
 .own-signup .tbl-wrap{overflow:visible}
@@ -66,6 +67,7 @@
   </label>
 </div>
 <div id="players"><div class="sk"></div></div>
+<p id="draftNotice" class="note" role="status" hidden></p>
 </main>
 </div>
 </div>
@@ -77,9 +79,12 @@
 (async () => {
   const host = document.getElementById('players');
   const ownHost = document.getElementById('yourEntry');
+  const draftNotice = document.getElementById('draftNotice');
   const select = document.getElementById('sort');
   const signups = () => window.seasonSignups || [];
+  let draftState = { active: false, captainTeamId: '', currentTeamId: '', pickedSignupIds: [], teamBudgets: {} };
   const capFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const formatCap = raw => {
     const value = Number(raw);
     return capFormat.format(Number.isSafeInteger(value) && value >= 0 ? value : 0);
@@ -105,6 +110,20 @@
     const tag = team.logo ? `<b class="signup-team-tag">${MHL.esc(MHL.code(team))}</b>` : '';
     return `<span class="signup-team-display" title="${MHL.esc(team.name)}">${MHL.badge(team)}${tag}</span>`;
   };
+  const draftPrice = player => {
+    const skater = Number(player.skaterValue ?? player.value) || 0;
+    const goalie = Number(player.goalieValue ?? player.value) || 0;
+    return player.position === 'Goalie' ? goalie : player.position === 'Flexible' ? Math.max(skater, goalie) : skater;
+  };
+  const showPickControls = () => draftState.active && !!draftState.captainTeamId;
+  const pickButton = player => {
+    const picked = draftState.pickedSignupIds.includes(player.id);
+    const budget = Number(draftState.teamBudgets[draftState.captainTeamId]) || 0;
+    const disabled = draftState.currentTeamId !== draftState.captainTeamId || picked || draftPrice(player) > budget;
+    return `<button class="btn pick-btn" type="button" data-pick-signup="${MHL.esc(player.id)}"
+      aria-label="Pick ${MHL.esc(player.name)}"${disabled ? ' disabled' : ''}>Pick</button>`;
+  };
+  const pickCell = player => `<td class="edit-cell">${pickButton(player)}</td>`;
   const playerCells = player => `<td class="l name-cell"><span class="signup-person">${player.photo
     ? `<img src="${MHL.esc(player.photo)}" alt="">`
     : `<span class="avatar" aria-hidden="true">${MHL.esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -114,10 +133,10 @@
     <td class="l">${teamDisplay(player)}</td>
     <td class="value-cell">${formatValue(player.skaterValue ?? player.value)}</td>
     <td class="value-cell">${formatValue(player.goalieValue ?? player.value)}</td>`;
-  const tableHead = action => `<thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
+  const tableHead = (action, actionLabel = 'Edit entry') => `<thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
     <th scope="col">Hours on Puck</th><th scope="col">Position</th><th scope="col">Captain?</th>
     <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th>
-    ${action ? '<th scope="col">Action</th>' : ''}</tr></thead>`;
+    ${action ? `<th scope="col" aria-label="${MHL.esc(actionLabel)}"></th>` : ''}</tr></thead>`;
 
   function draw() {
     const list = signups().filter(player => player.id !== ownSignupId);
@@ -132,14 +151,53 @@
       'value-asc': (a, b) => valueOf(a) - valueOf(b) || byName(a, b),
     };
     list.sort(sorters[select.value]);
-    document.getElementById('count').textContent = `${list.length} ${list.length === 1 ? 'signup' : 'signups'}`;
+    const totalSignups = signups().length;
+    const averageValue = key => totalSignups
+      ? averageValueFormat.format(signups().reduce((sum, player) => sum + (Number(player[key] ?? player.value) || 0), 0) / totalSignups)
+      : '—';
+    document.getElementById('count').textContent = `${totalSignups} ${totalSignups === 1 ? 'signup' : 'signups'} (est possible teams ${Math.floor(totalSignups / 8)}) · Avg Skater Value ${averageValue('skaterValue')} · Avg Goalie Value ${averageValue('goalieValue')}`;
     if (!list.length) {
       host.innerHTML = MHL.empty('No Season 2 signups yet', 'Use Sign Up Here to add the first player.');
       return;
     }
-    host.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">${tableHead(false)}
-      <tbody>${list.map(player => `<tr>${playerCells(player)}</tr>`).join('')}</tbody>
+    const showPick = showPickControls();
+    host.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">${tableHead(showPick, 'Draft pick')}
+      <tbody>${list.map(player => `<tr>${playerCells(player)}${showPick ? pickCell(player) : ''}</tr>`).join('')}</tbody>
     </table></div>`;
+  }
+  async function loadDraftState() {
+    const response = await fetch('/api/draft', { cache: 'no-store' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load draft status.');
+    draftState = result;
+    if (result.complete) draftNotice.textContent = 'The draft has no affordable players remaining.';
+    else draftNotice.textContent = '';
+    draftNotice.hidden = !draftNotice.textContent;
+  }
+  async function pickPlayer(signupId, button) {
+    button.disabled = true;
+    draftNotice.hidden = true;
+    try {
+      const response = await fetch('/api/draft/pick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signupId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not draft that player.');
+      const dataResponse = await fetch('/api/data', { cache: 'no-store' });
+      if (!dataResponse.ok) throw new Error('The pick was saved, but the signup list could not be refreshed.');
+      const data = await dataResponse.json();
+      window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
+      teams = Array.isArray(data.teams) ? data.teams : [];
+      await loadDraftState();
+      draw();
+      await loadOwnEntry();
+    } catch (error) {
+      draftNotice.textContent = error.message || 'Could not complete the draft pick.';
+      draftNotice.hidden = false;
+      button.disabled = false;
+    }
   }
   async function loadOwnEntry() {
     try {
@@ -159,13 +217,19 @@
       if (!response.ok) throw new Error(result.error || 'Could not load your entry.');
       ownSignupId = result.signup.id;
       ownHost.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">${tableHead(true)}
-        <tbody><tr>${playerCells(result.signup)}<td class="edit-cell"><a class="btn" href="/player-login">Edit</a></td></tr></tbody>
+        <tbody><tr>${playerCells(result.signup)}<td class="edit-cell"><a class="btn" href="/player-login">Edit</a>${showPickControls() ? pickButton(result.signup) : ''}</td></tr></tbody>
       </table></div>`;
     } catch (error) {
       ownHost.innerHTML = MHL.empty('Could not load your entry', error.message || 'Please reload and try again.');
     }
   }
   select.addEventListener('change', draw);
+  const handlePickClick = event => {
+    const button = event.target.closest('[data-pick-signup]');
+    if (button && !button.disabled) pickPlayer(button.dataset.pickSignup, button);
+  };
+  host.addEventListener('click', handlePickClick);
+  ownHost.addEventListener('click', handlePickClick);
   let data;
   try {
     const response = await fetch('/api/data', { cache: 'no-store' });
@@ -177,6 +241,12 @@
   window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
   drawCaps(data.site || {});
   teams = Array.isArray(data.teams) ? data.teams : [];
+  try {
+    await loadDraftState();
+  } catch (error) {
+    draftNotice.textContent = error.message || 'Could not load draft status.';
+    draftNotice.hidden = false;
+  }
   draw();
   await loadOwnEntry();
   draw();
