@@ -41,10 +41,17 @@
   if (!D.teams.length) { $('list').innerHTML = MHL.empty('No teams yet', 'Teams appear here once they are added.'); return; }
   const ord = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
   const roster = id => D.players.filter(p => p.team === id).length;
+  const cap = Number(D.site && D.site.teamCap) || 0;
+  const spentByTeam = new Map();
+  (Array.isArray(D.draft && D.draft.picks) ? D.draft.picks : []).forEach(pick => {
+    spentByTeam.set(pick.teamId, (spentByTeam.get(pick.teamId) || 0) + (Number(pick.price) || 0));
+  });
+  const formatEuro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   $('list').innerHTML = `<div class="tgrid">${[...D.teams].sort((x, y) => x.name.localeCompare(y.name)).map(t => {
-    const r = S[t.id], n = roster(t.id);
+    const r = S[t.id], n = roster(t.id), budget = Math.max(0, cap - (spentByTeam.get(t.id) || 0));
     return `<a class="tile" href="${MHL.teamUrl(t)}" style="--c:${esc(t.color)}">${MHL.badge(t, 'md')}<div><h2>${esc(t.name)}</h2>
-      <p>${ord(r.place)} place, ${r.pts} pts</p><p>Series ${r.sw}-${r.sl}${n ? `, ${n} player${n > 1 ? 's' : ''}` : ''}</p></div></a>`;
+      <p>${ord(r.place)} place, ${r.pts} pts</p><p>Series ${r.sw}-${r.sl}${n ? `, ${n} player${n > 1 ? 's' : ''}` : ''}</p>
+      <p>Draft budget ${formatEuro.format(budget)} remaining</p></div></a>`;
   }).join('')}</div>`;
 })();
 </script>

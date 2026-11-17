@@ -14,26 +14,55 @@
 .sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
 .sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
 .sortbar select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:9px 12px;min-height:44px}
-.signup-person{display:flex;align-items:center;gap:12px;min-width:170px}
+.signup-person{display:flex;align-items:center;gap:12px;min-width:0}
 .signup-person img,.avatar{width:42px;height:42px;flex:none;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
 .avatar{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:22px}
 .signup-team-display{display:inline-flex;align-items:center;gap:8px}
 .signup-team-display .badge{width:30px;height:30px}
 .signup-team-tag{display:inline-flex;align-items:center;min-height:26px;padding:2px 8px;border:1px solid var(--line);color:var(--gold);font-size:11px;letter-spacing:.08em;white-space:nowrap}
-.signup-table{min-width:1080px}
-.signup-table .name-cell{min-width:190px}
+.signup-wrap{overflow:visible}
+.signup-table{width:100%;min-width:0;table-layout:fixed}
+.signup-table th,.signup-table td{padding-right:7px;padding-left:7px;overflow-wrap:anywhere}
+.signup-table th{white-space:normal}
+.signup-table.has-action th:last-child,.signup-table.has-action td:last-child{width:88px}
+.signup-table.has-action th:nth-child(1),.signup-table.has-action td:nth-child(1){width:17%}
+.signup-table.has-action th:nth-child(2),.signup-table.has-action td:nth-child(2){width:15%}
+.signup-table.has-action th:nth-child(3),.signup-table.has-action td:nth-child(3){width:8%}
+.signup-table.has-action th:nth-child(4),.signup-table.has-action td:nth-child(4){width:9%}
+.signup-table.has-action th:nth-child(5),.signup-table.has-action td:nth-child(5){width:8%}
+.signup-table.has-action th:nth-child(6),.signup-table.has-action td:nth-child(6){width:11%}
+.signup-table.has-action th:nth-child(7),.signup-table.has-action td:nth-child(7){width:10%}
+.signup-table.has-action th:nth-child(8),.signup-table.has-action td:nth-child(8){width:10%}
+.signup-table .name-cell{min-width:0}
+.signup-table .signup-person b{min-width:0;overflow-wrap:anywhere}
+.signup-table .edit-cell{width:1%;white-space:nowrap}
+.own-signup .signup-table.has-action th:last-child,.own-signup .signup-table.has-action td:last-child{width:160px}
 .signup-table .value-cell{font-family:var(--disp);font-size:24px;color:var(--gold)}
 .pick-btn[disabled]{opacity:.45;cursor:default}
+.captain-unavailable{color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.draft-budget-overlay{position:fixed;top:max(10px,env(safe-area-inset-top));left:50%;z-index:1000;transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:10px 18px;border:1px solid var(--gold);background:var(--paper);box-shadow:0 6px 24px #0009;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;pointer-events:none}
+.draft-budget-overlay strong{color:var(--gold);font-family:var(--disp);font-size:24px;font-weight:500;letter-spacing:0}
+.draft-budget-overlay[hidden]{display:none}
 .own-signup{margin-bottom:40px}
-.own-signup .signup-table{min-width:1180px}
-.own-signup .tbl-wrap{overflow:visible}
-.own-signup .edit-cell{width:1%;white-space:nowrap}
 .cap-banner{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 30px}
 .cap-item{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--paper);border:1px solid var(--line);padding:14px 18px}
 .cap-item span{color:var(--muted);font-size:14px}
 .cap-item strong{font-family:var(--disp);font-weight:500;font-size:26px;color:var(--gold)}
 .sign-in-entry{width:100%;min-height:84px;font-size:14px}
-@media(max-width:560px){.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}.cap-banner{grid-template-columns:1fr}}
+@media(max-width:700px){
+  .signup-table,.signup-table tbody{display:block;width:100%;min-width:0}
+  .signup-table thead{display:none}
+  .signup-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px;padding:0 12px;border-bottom:1px solid var(--line)}
+  .signup-table tbody td{display:flex;flex-direction:column;align-items:flex-start;min-width:0;padding:10px 4px;text-align:left;border:0}
+  .signup-table tbody td::before{content:attr(data-label);margin-bottom:4px;color:var(--muted);font-family:var(--body);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+  .signup-table .name-cell{grid-column:1/-1}
+  .signup-table .edit-cell{grid-column:1/-1;display:flex;flex-direction:row;align-items:center;gap:8px;width:auto;padding-top:12px;border-top:1px solid var(--line)}
+  .signup-table .edit-cell::before{margin:0 auto 0 0}
+  .signup-table .signup-person{gap:8px}
+  .signup-table .signup-person img,.signup-table .avatar{width:34px;height:34px}
+  .signup-table .value-cell{font-size:20px}
+}
+@media(max-width:560px){.draft-budget-overlay{top:max(8px,env(safe-area-inset-top));padding:8px 12px;font-size:10px}.draft-budget-overlay strong{font-size:21px}.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}.cap-banner{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -73,6 +102,7 @@
 </div>
 <nav class="tabbar" id="tabbar" aria-label="Main"></nav>
 <div class="more" id="more" hidden></div>
+<div id="draftBudgetOverlay" class="draft-budget-overlay" role="status" aria-live="polite" hidden></div>
 <script src="/standings.js"></script>
 <script src="/site.js"></script>
 <script>
@@ -80,14 +110,26 @@
   const host = document.getElementById('players');
   const ownHost = document.getElementById('yourEntry');
   const draftNotice = document.getElementById('draftNotice');
+  const budgetOverlay = document.getElementById('draftBudgetOverlay');
   const select = document.getElementById('sort');
   const signups = () => window.seasonSignups || [];
-  let draftState = { active: false, captainTeamId: '', currentTeamId: '', pickedSignupIds: [], teamBudgets: {} };
+  let draftState = { active: false, captainTeamId: '', captainSignupIds: [], currentTeamId: '', pickedSignupIds: [], teamBudgets: {} };
+  let pollingDraft = false, pickingPlayer = false, signupRefreshPending = false;
   const capFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const formatCap = raw => {
     const value = Number(raw);
     return capFormat.format(Number.isSafeInteger(value) && value >= 0 ? value : 0);
+  };
+  const updateBudgetOverlay = () => {
+    if (!draftState.active || !draftState.captainTeamId) {
+      budgetOverlay.hidden = true;
+      budgetOverlay.textContent = '';
+      return;
+    }
+    const budget = draftState.teamBudgets[draftState.captainTeamId];
+    budgetOverlay.innerHTML = `Your draft budget <strong>${MHL.esc(formatCap(budget))}</strong>`;
+    budgetOverlay.hidden = false;
   };
   const drawCaps = site => {
     document.getElementById('iceCapValue').textContent = formatCap(site.iceCap);
@@ -117,22 +159,25 @@
   };
   const showPickControls = () => draftState.active && !!draftState.captainTeamId;
   const pickButton = player => {
+    if ((draftState.captainSignupIds || []).includes(player.id)) {
+      return '<span class="captain-unavailable" aria-label="Team captains cannot be drafted">Captain</span>';
+    }
     const picked = draftState.pickedSignupIds.includes(player.id);
     const budget = Number(draftState.teamBudgets[draftState.captainTeamId]) || 0;
     const disabled = draftState.currentTeamId !== draftState.captainTeamId || picked || draftPrice(player) > budget;
     return `<button class="btn pick-btn" type="button" data-pick-signup="${MHL.esc(player.id)}"
       aria-label="Pick ${MHL.esc(player.name)}"${disabled ? ' disabled' : ''}>Pick</button>`;
   };
-  const pickCell = player => `<td class="edit-cell">${pickButton(player)}</td>`;
-  const playerCells = player => `<td class="l name-cell"><span class="signup-person">${player.photo
+  const pickCell = player => `<td class="edit-cell" data-label="Draft pick">${pickButton(player)}</td>`;
+  const playerCells = player => `<td class="l name-cell" data-label="Player"><span class="signup-person">${player.photo
     ? `<img src="${MHL.esc(player.photo)}" alt="">`
     : `<span class="avatar" aria-hidden="true">${MHL.esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
     <b>${MHL.esc(player.name)}</b></span></td>
-    <td class="l">${MHL.esc(player.discord)}</td><td>${Number(player.hours) || 0}</td>
-    <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain || '—')}</td>
-    <td class="l">${teamDisplay(player)}</td>
-    <td class="value-cell">${formatValue(player.skaterValue ?? player.value)}</td>
-    <td class="value-cell">${formatValue(player.goalieValue ?? player.value)}</td>`;
+    <td class="l" data-label="Discord Username">${MHL.esc(player.discord)}</td><td data-label="Hours on Puck">${Number(player.hours) || 0}</td>
+    <td data-label="Position">${MHL.esc(player.position || '—')}</td><td data-label="Captain?">${MHL.esc(player.captain || '—')}</td>
+    <td class="l" data-label="Team">${teamDisplay(player)}</td>
+    <td class="value-cell" data-label="Skater Value">${formatValue(player.skaterValue ?? player.value)}</td>
+    <td class="value-cell" data-label="Goalie Value">${formatValue(player.goalieValue ?? player.value)}</td>`;
   const tableHead = (action, actionLabel = 'Edit entry') => `<thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord Username</th>
     <th scope="col">Hours on Puck</th><th scope="col">Position</th><th scope="col">Captain?</th>
     <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th>
@@ -161,7 +206,7 @@
       return;
     }
     const showPick = showPickControls();
-    host.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">${tableHead(showPick, 'Draft pick')}
+    host.innerHTML = `<div class="tbl-wrap signup-wrap"><table class="tbl signup-table${showPick ? ' has-action' : ''}">${tableHead(showPick, 'Draft pick')}
       <tbody>${list.map(player => `<tr>${playerCells(player)}${showPick ? pickCell(player) : ''}</tr>`).join('')}</tbody>
     </table></div>`;
   }
@@ -170,11 +215,54 @@
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not load draft status.');
     draftState = result;
-    if (result.complete) draftNotice.textContent = 'The draft has no affordable players remaining.';
+    updateBudgetOverlay();
+    if (result.complete)     draftNotice.textContent = 'The draft has no eligible affordable players remaining.';
     else draftNotice.textContent = '';
     draftNotice.hidden = !draftNotice.textContent;
   }
+  async function loadPublicData() {
+    const response = await fetch('/api/data', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Could not refresh the Season 2 players.');
+    const data = await response.json();
+    window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
+    teams = Array.isArray(data.teams) ? data.teams : [];
+    return data;
+  }
+  async function refreshDraftState() {
+    if (pollingDraft || pickingPlayer || document.hidden) return;
+    pollingDraft = true;
+    const previous = draftState;
+    try {
+      await loadDraftState();
+      const stateChanged = JSON.stringify(previous) !== JSON.stringify(draftState);
+      const picksChanged = (previous.pickedSignupIds || []).join('|') !== (draftState.pickedSignupIds || []).join('|');
+      if (picksChanged) signupRefreshPending = true;
+      let dataChanged = false;
+      if (signupRefreshPending) {
+        try {
+          await loadPublicData();
+          signupRefreshPending = false;
+          dataChanged = true;
+        } catch (error) {
+          draftNotice.textContent = error.message || 'Could not refresh the Season 2 players.';
+          draftNotice.hidden = false;
+        }
+      }
+      if (stateChanged || dataChanged) {
+        draw();
+        if (dataChanged || previous.active !== draftState.active || previous.captainTeamId !== draftState.captainTeamId) await loadOwnEntry();
+      }
+    } catch (error) {
+      draftNotice.textContent = error.message || 'Could not refresh draft status.';
+      draftNotice.hidden = false;
+    } finally {
+      pollingDraft = false;
+    }
+  }
   async function pickPlayer(signupId, button) {
+    if (pickingPlayer) return;
+    pickingPlayer = true;
+    let pickSaved = false;
     button.disabled = true;
     draftNotice.hidden = true;
     try {
@@ -185,18 +273,29 @@
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not draft that player.');
-      const dataResponse = await fetch('/api/data', { cache: 'no-store' });
-      if (!dataResponse.ok) throw new Error('The pick was saved, but the signup list could not be refreshed.');
-      const data = await dataResponse.json();
-      window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
-      teams = Array.isArray(data.teams) ? data.teams : [];
+      pickSaved = true;
+      signupRefreshPending = true;
+      await loadPublicData();
+      signupRefreshPending = false;
       await loadDraftState();
       draw();
       await loadOwnEntry();
     } catch (error) {
-      draftNotice.textContent = error.message || 'Could not complete the draft pick.';
+      if (pickSaved) {
+        try {
+          await loadDraftState();
+          draw();
+        } catch (refreshError) {
+          draftNotice.textContent = refreshError.message || 'The pick was saved, but draft status could not be refreshed.';
+        }
+      }
+      if (!draftNotice.textContent || draftNotice.hidden) {
+        draftNotice.textContent = pickSaved ? 'The pick was saved, but the signup list could not be refreshed.' : error.message || 'Could not complete the draft pick.';
+      }
       draftNotice.hidden = false;
-      button.disabled = false;
+      if (!pickSaved) button.disabled = false;
+    } finally {
+      pickingPlayer = false;
     }
   }
   async function loadOwnEntry() {
@@ -216,8 +315,8 @@
       }
       if (!response.ok) throw new Error(result.error || 'Could not load your entry.');
       ownSignupId = result.signup.id;
-      ownHost.innerHTML = `<div class="tbl-wrap"><table class="tbl signup-table">${tableHead(true)}
-        <tbody><tr>${playerCells(result.signup)}<td class="edit-cell"><a class="btn" href="/player-login">Edit</a>${showPickControls() ? pickButton(result.signup) : ''}</td></tr></tbody>
+      ownHost.innerHTML = `<div class="tbl-wrap signup-wrap"><table class="tbl signup-table has-action">${tableHead(true)}
+        <tbody><tr>${playerCells(result.signup)}<td class="edit-cell" data-label="Actions"><a class="btn" href="/player-login">Edit</a>${showPickControls() ? pickButton(result.signup) : ''}</td></tr></tbody>
       </table></div>`;
     } catch (error) {
       ownHost.innerHTML = MHL.empty('Could not load your entry', error.message || 'Please reload and try again.');
@@ -231,16 +330,10 @@
   host.addEventListener('click', handlePickClick);
   ownHost.addEventListener('click', handlePickClick);
   let data;
-  try {
-    const response = await fetch('/api/data', { cache: 'no-store' });
-    if (!response.ok) throw new Error('Could not load player signups.');
-    data = await response.json();
-  } catch {
+  try { data = await loadPublicData(); } catch {
     return MHL.fail(host, 'the Season 2 players');
   }
-  window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
   drawCaps(data.site || {});
-  teams = Array.isArray(data.teams) ? data.teams : [];
   try {
     await loadDraftState();
   } catch (error) {
@@ -250,6 +343,10 @@
   draw();
   await loadOwnEntry();
   draw();
+  window.setInterval(refreshDraftState, 3000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshDraftState();
+  });
 })();
 </script>
 </body>

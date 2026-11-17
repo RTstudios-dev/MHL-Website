@@ -254,7 +254,8 @@ const draftBudget = (data, draft, teamId) => Math.max(0,
 const currentDraftTurn = (data, draft) => {
   if (!draft.active || !draft.order.length) return null;
   const picked = new Set(draft.picks.map(pick => pick.signupId));
-  const available = data.signups.filter(signup => !picked.has(signup.id));
+  const captains = new Set(data.teams.map(team => team.captainSignupId).filter(Boolean));
+  const available = data.signups.filter(signup => !picked.has(signup.id) && !captains.has(signup.id));
   if (!available.length) return null;
   const cheapest = Math.min(...available.map(draftPrice));
   for (let offset = 0; offset < draft.order.length; offset++) {
@@ -562,6 +563,7 @@ const server = http.createServer(async (req, res) => {
         active: draft.active,
         captainTeamId: captainTeam ? captainTeam.id : '',
         currentTeamId: turn ? turn.team.id : '',
+        captainSignupIds: captainTeam ? data.teams.map(team => team.captainSignupId).filter(Boolean) : [],
         pickedSignupIds: draft.picks.map(pick => pick.signupId),
         teamBudgets: Object.fromEntries(data.teams.map(team => [team.id, draftBudget(data, draft, team.id)])),
         complete: draft.active && !turn,
@@ -584,6 +586,7 @@ const server = http.createServer(async (req, res) => {
       if (turn.team.id !== captainTeam.id) return send(res, 409, { error: 'It is not your team’s turn to pick.' });
       const signup = data.signups.find(item => item.id === selectedId);
       if (!signup) return send(res, 404, { error: 'That signup could not be found.' });
+      if (data.teams.some(team => team.captainSignupId === signup.id)) return send(res, 409, { error: 'Team captains cannot be drafted.' });
       if (draft.picks.some(pick => pick.signupId === signup.id)) return send(res, 409, { error: 'That player has already been drafted.' });
       const price = draftPrice(signup), budget = draftBudget(data, draft, captainTeam.id);
       if (price > budget) return send(res, 409, { error: 'That player costs more than your team’s remaining budget.' });
@@ -701,20 +704,32 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/data' && req.method === 'PUT') {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
-      const clean = sanitize(JSON.parse(await readBody(req, 10_000_000)));
+      const incoming = JSON.parse(await readBody(req, 10_000_000));
+      const clearAllAssignments = !!(incoming && incoming.draft && incoming.draft.clearAllAssignments);
+      const clean = sanitize(incoming);
       const current = readData();
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
       clean.signups.forEach(signup => byId.set(signup.id, signup));
       clean.signups = [...byId.values()].slice(0, 5000);
       const currentDraft = normalizeDraft(current.draft, current.teams, current.signups);
-      const keepCurrentOrder = currentDraft.active || currentDraft.picks.length > 0;
-      clean.draft = normalizeDraft({
-        ...clean.draft,
-        manualOrder: keepCurrentOrder ? true : clean.draft.manualOrder,
-        order: keepCurrentOrder ? currentDraft.order : clean.draft.order,
-        picks: currentDraft.picks,
-        nextIndex: currentDraft.nextIndex,
-      }, clean.teams, clean.signups);
+      if (clearAllAssignments) {
+        clean.signups.forEach(signup => { signup.team = ''; });
+        clean.draft = normalizeDraft({
+          ...clean.draft,
+          active: false,
+          picks: [],
+          nextIndex: 0,
+        }, clean.teams, clean.signups);
+      } else {
+        const keepCurrentOrder = currentDraft.active || currentDraft.picks.length > 0;
+        clean.draft = normalizeDraft({
+          ...clean.draft,
+          manualOrder: keepCurrentOrder ? true : clean.draft.manualOrder,
+          order: keepCurrentOrder ? currentDraft.order : clean.draft.order,
+          picks: currentDraft.picks,
+          nextIndex: currentDraft.nextIndex,
+        }, clean.teams, clean.signups);
+      }
       const signupsById = new Map(clean.signups.map(signup => [signup.id, signup]));
       clean.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
       writeData(clean);

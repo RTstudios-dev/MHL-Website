@@ -528,6 +528,8 @@ const MHLA = (() => {
   // season 2 signups
   function signups() {
     D.site = D.site || {};
+    D.draft = D.draft || { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] };
+    D.draft.picks = Array.isArray(D.draft.picks) ? D.draft.picks : [];
     const list = [...D.signups];
     const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
     const averageValue = key => D.signups.length
@@ -571,8 +573,23 @@ const MHLA = (() => {
         touch();
       },
     });
+    const clearTeams = h('button', {
+      class: 'btn del sm',
+      type: 'button',
+      disabled: !D.draft.active && !D.draft.picks.length && !D.signups.some(signup => signup.team),
+      onclick: () => {
+        const pickCount = D.draft.picks.length;
+        if (!confirm(`Clear team assignments from all Season 2 players? This will stop the draft and remove ${pickCount} saved draft pick(s). Press Save changes to apply.`)) return;
+        D.signups.forEach(signup => { signup.team = ''; });
+        D.draft.active = false;
+        D.draft.picks = [];
+        D.draft.nextIndex = 0;
+        D.draft.clearAllAssignments = true;
+        touch(); draw();
+      },
+    }, 'Clear all team assignments');
     return [
-      head('Season 2 Players'),
+      head('Season 2 Players', clearTeams),
       h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Skater and Goalie Values in euros here. Steam profile links are only shown in admin."),
       h('div', { class: 'caps-edit ed' },
         field('Ice Cap €', capInput('iceCap', 'Ice Cap €')),
