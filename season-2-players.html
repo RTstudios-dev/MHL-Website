@@ -59,6 +59,7 @@
   const host = document.getElementById('players');
   const select = document.getElementById('sort');
   const signups = () => window.seasonSignups || [];
+  let teams = [];
   function draw() {
     const list = [...signups()];
     const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
@@ -88,21 +89,23 @@
         <td class="l">${player.steam ? `<a href="${MHL.esc(player.steam)}" target="_blank" rel="noopener">Steam profile</a>` : '—'}</td>
         <td>${player.hours}</td>
         <td>${MHL.esc(player.position || '—')}</td><td>${MHL.esc(player.captain)}</td>
-        <td class="l">${MHL.esc((data.teams || []).find(team => team.id === player.team)?.name || '—')}</td>
+        <td class="l">${MHL.esc(teams.find(team => team.id === player.team)?.name || '—')}</td>
         <td class="value-cell">${player.value}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
   }
   select.addEventListener('change', draw);
+  let data;
   try {
     const response = await fetch('/api/data', { cache: 'no-store' });
     if (!response.ok) throw new Error('Could not load player signups.');
-    const data = await response.json();
-    window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
-    draw();
+    data = await response.json();
   } catch {
-    MHL.fail(host, 'the Season 2 players');
+    return MHL.fail(host, 'the Season 2 players');
   }
+  window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
+  teams = Array.isArray(data.teams) ? data.teams : [];
+  draw();
 })();
 </script>
 </body>
