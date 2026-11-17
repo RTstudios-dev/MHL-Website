@@ -444,12 +444,12 @@ const MHLA = (() => {
           }, [h('option', { value: '', selected: !signup.team }, 'Unassigned'),
             D.teams.map(team => h('option', { value: team.id, selected: team.id === signup.team }, team.name))])),
           h('td', {}, h('input', {
-            type: 'number', min: 0, max: 1000000, step: 1, class: 'n',
+            type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
             'aria-label': `Value for ${signup.name}`,
             value: signup.value ?? 0,
             oninput: e => {
               const value = Number(e.target.value);
-              if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) return;
+              if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
               signup.value = value;
               touch();
             },

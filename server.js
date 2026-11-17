@@ -325,7 +325,7 @@ function sanitize(d) {
     captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
     team: ids.has(p.team) ? p.team : '',
     photo: okImage(p.photo) ? p.photo : '',
-    value: num(p.value, 1000000),
+    value: num(p.value, Number.MAX_SAFE_INTEGER),
   })).filter(p => p.discord && p.name);
   return { site, teams, rounds, matches, players, news, rules, signups };
 }
