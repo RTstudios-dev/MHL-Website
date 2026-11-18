@@ -20,6 +20,7 @@
 .signup label{display:grid;gap:6px;color:var(--ink);font-weight:500}
 .signup input,.signup select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:10px 12px;min-height:46px}
 .signup input:focus-visible,.signup select:focus-visible{outline:1px solid var(--gold);border-color:var(--gold)}
+.signup label[hidden]{display:none}
 .signup small{font-size:13px;font-weight:400;color:var(--muted)}
 .picrow{display:flex;align-items:center;gap:16px}
 .picrow img{width:76px;height:76px;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--ice)}
@@ -48,7 +49,7 @@
     <div class="steam-options">
       <label>Steam profile link
         <input name="steam" type="url" maxlength="300" placeholder="https://steamcommunity.com/id/yourname" required>
-        <small>Enter your public Steam Community profile URL.</small>
+        <small>Enter your public Steam profile URL. If it does not contain your Steam ID, you will be asked to enter it.</small>
       </label>
       <div class="steam-option">
         <span>Or sign in and add it automatically</span>
@@ -56,6 +57,10 @@
         <p id="steamStatus" class="steam-status" role="status" aria-live="polite"></p>
       </div>
     </div>
+    <label id="steamIdField" hidden>17-digit Steam ID
+      <input name="steamId" type="text" inputmode="numeric" maxlength="17" pattern="[0-9]{17}" autocomplete="off" title="Enter your 17-digit numeric Steam ID">
+      <small>Your profile link does not include your Steam ID. Paste the 17-digit ID here.</small>
+    </label>
     <label>Type your in-game name here
       <input name="name" type="text" maxlength="40" required>
     </label>
@@ -115,7 +120,20 @@
   const steamStatus = document.getElementById('steamStatus');
   const signupSuccessPopup = document.getElementById('signupSuccessPopup');
   const steamField = form.elements.namedItem('steam');
+  const steamIdField = document.getElementById('steamIdField');
+  const steamIdInput = form.elements.namedItem('steamId');
   const button = document.getElementById('submit');
+  const steamIdUrl = /^https:\/\/(?:www\.)?steamcommunity\.com\/profiles\/(\d{17})\/?$/i;
+  const customSteamUrl = /^https:\/\/(?:www\.)?steamcommunity\.com\/id\/[a-z0-9_-]+\/?$/i;
+  const steamIdMessage = 'This Steam link does not contain a Steam ID. Please enter your 17-digit Steam ID in the field below.';
+  const updateSteamIdField = () => {
+    const needsSteamId = customSteamUrl.test(steamField.value.trim());
+    steamIdField.hidden = !needsSteamId;
+    steamIdInput.required = needsSteamId;
+    if (!needsSteamId) steamIdInput.value = '';
+  };
+  steamField.addEventListener('input', updateSteamIdField);
+  updateSteamIdField();
 
   async function fillSteamProfile() {
     const loginStatus = new URLSearchParams(location.search).get('steam');
@@ -132,7 +150,11 @@
         steamStatus.textContent = 'Steam could not resolve your profile URL. Try again later or enter it manually.';
         return;
       }
-      if (!steamField.value || loginStatus === 'connected') steamField.value = player.profileUrl;
+      const profileUrl = /^\d{17}$/.test(player.steamId)
+        ? `https://steamcommunity.com/profiles/${player.steamId}`
+        : player.profileUrl;
+      if (!steamField.value || loginStatus === 'connected') steamField.value = profileUrl;
+      updateSteamIdField();
       steamStatus.textContent = 'Steam profile added. You can change the link if needed.';
     } catch (error) {
       if (loginStatus === 'connected') {
@@ -172,6 +194,14 @@
     status.textContent = 'Submitting...';
     status.className = 'signup-status';
     try {
+      const values = new FormData(form);
+      const steam = String(values.get('steam') || '').trim();
+      const profileMatch = steam.match(steamIdUrl);
+      if (!profileMatch && !customSteamUrl.test(steam)) {
+        throw new Error('Enter a valid Steam Community profile URL.');
+      }
+      const steamId = profileMatch ? profileMatch[1] : String(values.get('steamId') || '').trim();
+      if (!/^\d{17}$/.test(steamId)) throw new Error(steamIdMessage);
       let photo = '';
       const file = fileInput.files[0];
       if (file) {
@@ -180,13 +210,13 @@
         if (!upload.ok) throw new Error(uploaded.error || 'Could not upload the profile picture.');
         photo = uploaded.url;
       }
-      const values = new FormData(form);
       const response = await fetch('/api/sign-up', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           discord: values.get('discord'),
-          steam: values.get('steam'),
+          steam,
+          steamId,
           name: values.get('name'),
           hours: Number(values.get('hours')),
           position: values.get('position'),
@@ -198,12 +228,14 @@
       if (!response.ok) {
         if (response.status === 409) {
           form.reset();
+          updateSteamIdField();
           preview.removeAttribute('src');
           preview.hidden = true;
         }
         throw new Error(result.error || 'Could not submit your signup.');
       }
       form.reset();
+      updateSteamIdField();
       preview.removeAttribute('src');
       preview.hidden = true;
       if (MHL.refreshPlayerButton) {

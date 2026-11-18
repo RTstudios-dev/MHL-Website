@@ -118,6 +118,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .signup-sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
 .signup-sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
 .signup-sortbar select{width:auto;min-width:220px}
+.signup-sortbar .signup-search{display:grid;flex:1;max-width:300px;gap:4px}
+.signup-search input{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:8px 10px;min-height:42px;width:100%;border-radius:0}
+.signup-table[hidden]{display:none}
 .caps-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:640px;margin-bottom:16px}
 .checkline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
 
@@ -143,7 +146,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc';
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '';
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   // h('div', {class: 'x', onclick: fn}, ...children)
@@ -163,6 +166,38 @@ const MHLA = (() => {
   const field = (label, input, help) => h('label', { class: 'f' }, h('span', {}, label), input, help ? h('small', {}, help) : null);
   const text = (obj, key, attrs = {}) => h('input', { type: 'text', value: obj[key] ?? '', ...attrs, oninput: e => { obj[key] = e.target.value; touch(); attrs.after && attrs.after(); } });
   const teamName = id => (D.teams.find(t => t.id === id) || {}).name || 'Unknown team';
+  const steamIdInUrl = value => {
+    const match = String(value || '').trim().match(/^https:\/\/(?:www\.)?steamcommunity\.com\/profiles\/(\d{17})\/?$/i);
+    return match ? match[1] : '';
+  };
+  const manualSteamIdInput = signup => h('input', {
+    type: 'text', inputmode: 'numeric', maxlength: 17,
+    'aria-label': `Steam ID for ${signup.name}`,
+    value: signup.steamId || '',
+    oninput: e => {
+      const value = e.target.value.replace(/\D/g, '').slice(0, 17);
+      signup.steamId = value;
+      e.target.value = value;
+      touch();
+    },
+  });
+  const steamUrlInput = signup => h('input', {
+    type: 'text', maxlength: 300,
+    'aria-label': `Steam profile link for ${signup.name}`,
+    value: signup.steam || '',
+    oninput: e => {
+      signup.steam = e.target.value;
+      touch();
+      const cell = e.target.closest('tr').querySelector('[data-manual-steam-id]');
+      if (!cell) return;
+      if (steamIdInUrl(signup.steam)) {
+        signup.steamId = '';
+        cell.replaceChildren(document.createTextNode('—'));
+      } else {
+        cell.replaceChildren(manualSteamIdInput(signup));
+      }
+    },
+  });
 
   function touch() {
     dirty = true;
@@ -549,15 +584,27 @@ const MHLA = (() => {
     D.site = D.site || {};
     D.draft = D.draft || { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] };
     D.draft.picks = Array.isArray(D.draft.picks) ? D.draft.picks : [];
-    const list = [...D.signups];
+    const allSignups = [...D.signups];
+    const normalizedSearch = signupSearch.trim().toLocaleLowerCase();
+    const signupSearchText = signup => [
+      signup.name, signup.discord, signup.steam, signup.position, teamName(signup.team),
+    ].join(' ').toLocaleLowerCase();
+    const matchesSearch = signup => !normalizedSearch || signupSearchText(signup).includes(normalizedSearch);
+    const list = [...allSignups];
     const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
     const averageValue = key => {
-      const otherKey = key === 'skaterValue' ? 'goalieValue' : 'skaterValue';
       const valueOf = (signup, valueKey) => Number(signup[valueKey] ?? signup.value) || 0;
-      const eligible = D.signups.filter(signup => valueOf(signup, key) >= valueOf(signup, otherKey));
+      const eligible = D.signups.filter(signup => key === 'goalieValue'
+        ? signup.position === 'Goalie'
+        : signup.position !== 'Goalie');
       if (!eligible.length) return '—';
       const average = eligible.reduce((sum, signup) => sum + valueOf(signup, key), 0) / eligible.length;
       return averageValueFormat.format(Math.ceil(average / 100000) * 100000);
+    };
+    const summaryText = () => `${allSignups.length} ${allSignups.length === 1 ? 'signup' : 'signups'} (est possible teams ${Math.floor(allSignups.length / 8)}) · Avg Skater Value ${averageValue('skaterValue')} · Avg Goalie Value ${averageValue('goalieValue')}`;
+    const updateSummary = () => {
+      const summary = document.getElementById('signupSummary');
+      if (summary) summary.textContent = summaryText();
     };
     const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
     const captainRank = { Yes: 0, Maybe: 1, No: 2 };
@@ -573,6 +620,7 @@ const MHLA = (() => {
       'value-asc': (a, b) => valueOf(a) - valueOf(b) || byName(a, b),
     };
     list.sort(sorters[signupSort]);
+    const visibleSignupCount = list.filter(matchesSearch).length;
     const positionOptions = ['', 'Goalie', 'Attacker', 'Defender', 'Flexible'];
     const captainOptions = ['Yes', 'No', 'Maybe'];
     const valueInput = (signup, key, label) => h('input', {
@@ -584,6 +632,7 @@ const MHLA = (() => {
         if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
         signup[key] = value;
         touch();
+        updateSummary();
       },
     });
     const capInput = (key, label) => h('input', {
@@ -619,7 +668,28 @@ const MHLA = (() => {
         field('Ice Cap €', capInput('iceCap', 'Ice Cap €')),
         field('Team Cap €', capInput('teamCap', 'Team Cap €'))),
       h('div', { class: 'signup-sortbar' },
-        h('p', { class: 'note', style: 'margin:0' }, `${list.length} ${list.length === 1 ? 'signup' : 'signups'} (est possible teams ${Math.floor(list.length / 8)}) · Avg Skater Value ${averageValue('skaterValue')} · Avg Goalie Value ${averageValue('goalieValue')}`),
+        h('p', { id: 'signupSummary', class: 'note', style: 'margin:0' }, summaryText()),
+        h('label', { class: 'signup-search' }, 'Search Season 2 players',
+          h('input', {
+            type: 'search',
+            'aria-label': 'Search Season 2 players',
+            value: signupSearch,
+            oninput: e => {
+              signupSearch = e.target.value;
+              const query = signupSearch.trim().toLocaleLowerCase();
+              const rows = [...document.querySelectorAll('.signup-table tbody tr')];
+              let visible = 0;
+              rows.forEach(row => {
+                const signup = D.signups.find(item => item.id === row.dataset.signupId);
+                row.hidden = !!query && (!signup || !signupSearchText(signup).includes(query));
+                if (!row.hidden) visible++;
+              });
+              const table = document.querySelector('.signup-table');
+              if (table) table.hidden = !!rows.length && visible === 0;
+              const noResults = document.getElementById('signupNoResults');
+              if (noResults) noResults.hidden = !rows.length || visible > 0;
+            },
+          })),
         h('label', {}, 'Sort signups',
           h('select', {
             'aria-label': 'Sort signups',
@@ -630,12 +700,14 @@ const MHLA = (() => {
             h('option', { value: 'hours-asc', selected: signupSort === 'hours-asc' }, 'Lowest Hours'),
             h('option', { value: 'value-desc', selected: signupSort === 'value-desc' }, 'Highest Value'),
             h('option', { value: 'value-asc', selected: signupSort === 'value-asc' }, 'Lowest Value')))),
-      list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Skater Value (€)', 'Goalie Value (€)', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
-        h('tbody', {}, list.map(signup => h('tr', {},
+      allSignups.length ? h('p', { id: 'signupNoResults', class: 'help', hidden: visibleSignupCount > 0 }, 'No Season 2 players match your search.') : null,
+      list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable signup-table', hidden: visibleSignupCount === 0 },
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Manual Steam ID', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Skater Value (€)', 'Goalie Value (€)', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
+        h('tbody', {}, list.map(signup => h('tr', { hidden: !matchesSearch(signup), 'data-signup-id': signup.id },
           h('td', {}, text(signup, 'name', { maxlength: 40, 'aria-label': `In-game name for ${signup.name}`, required: true })),
           h('td', {}, text(signup, 'discord', { maxlength: 80, 'aria-label': `Discord username for ${signup.name}`, required: true })),
-          h('td', {}, text(signup, 'steam', { maxlength: 300, 'aria-label': `Steam profile link for ${signup.name}` })),
+          h('td', {}, steamUrlInput(signup)),
+          h('td', { 'data-manual-steam-id': '' }, steamIdInUrl(signup.steam) ? '—' : manualSteamIdInput(signup)),
           h('td', {}, h('input', {
             type: 'number', min: 0, max: 100000, step: 1, class: 'n',
             'aria-label': `Hours on Puck for ${signup.name}`,
@@ -649,7 +721,7 @@ const MHLA = (() => {
           })),
           h('td', {}, h('select', {
             'aria-label': `Position for ${signup.name}`,
-            onchange: e => { signup.position = e.target.value; touch(); },
+            onchange: e => { signup.position = e.target.value; touch(); updateSummary(); },
           }, positionOptions.map(value => h('option', { value, selected: value === (signup.position || '') }, value || 'Unassigned')))),
           h('td', {}, h('select', {
             'aria-label': `Captain preference for ${signup.name}`,

@@ -850,14 +850,23 @@ const server = http.createServer(async (req, res) => {
       const discord = str(signup.discord, 80), name = str(signup.name, 40);
       const steam = steamProfile(signup.steam);
       const player = playerSession(req);
+      const profileSteamId = steamIdFromProfileUrl(steam);
+      const manualSteamId = /^\d{17}$/.test(String(signup.steamId || '')) ? String(signup.steamId) : '';
+      const submittedSteamId = profileSteamId || manualSteamId;
       const steamId = player
-        ? (steamKey(steam) === steamKey(player.profileUrl) ? player.steamId : '')
-        : steamIdFromProfileUrl(steam);
+        ? (submittedSteamId === player.steamId ? player.steamId : '')
+        : submittedSteamId;
       const hours = Number(signup.hours);
       if (!discord || !name || !steam || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
           !['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(signup.position) ||
           !['Yes', 'No', 'Maybe'].includes(signup.captain)) {
         return send(res, 400, { error: 'Complete all fields with valid answers before submitting.' });
+      }
+      if (!submittedSteamId) {
+        return send(res, 400, { error: 'This Steam link does not contain a Steam ID. Please enter your 17-digit Steam ID.' });
+      }
+      if (player && submittedSteamId !== player.steamId) {
+        return send(res, 400, { error: 'The Steam ID must match the Steam account you are signed in with.' });
       }
       const data = readData();
       const discordKey = discord.toLowerCase(), profileKey = steamKey(steam);

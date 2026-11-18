@@ -14,6 +14,8 @@
 .sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
 .sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
 .sortbar select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:9px 12px;min-height:44px}
+.sortbar .signup-search{display:grid;flex:1;max-width:320px;gap:4px}
+.sortbar input{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);padding:9px 12px;min-height:44px;width:100%}
 .signup-person{display:flex;align-items:center;gap:12px;min-width:0}
 .signup-person img,.avatar{width:42px;height:42px;flex:none;object-fit:cover;border:1px solid var(--line);border-radius:50%;background:var(--paper)}
 .avatar{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:22px}
@@ -94,6 +96,9 @@
       <option value="value-asc">Lowest Value</option>
     </select>
   </label>
+  <label class="signup-search" for="playerSearch">Search Season 2 players
+    <input id="playerSearch" type="search" autocomplete="off">
+  </label>
 </div>
 <div id="players"><div class="sk"></div></div>
 <p id="draftNotice" class="note" role="status" hidden></p>
@@ -121,9 +126,10 @@
   const budgetOverlay = document.getElementById('draftBudgetOverlay');
   const yourPickPopup = document.getElementById('yourPickPopup');
   const select = document.getElementById('sort');
+  const searchInput = document.getElementById('playerSearch');
   const signups = () => window.seasonSignups || [];
   let draftState = { active: false, captainTeamId: '', captainSignupIds: [], currentTeamId: '', pickedSignupIds: [], teamBudgets: {} };
-  let pollingDraft = false, pickingPlayer = false, signupRefreshPending = false;
+  let pollingDraft = false, pickingPlayer = false, signupRefreshPending = false, signupSearch = '';
   let wasYourTurn = false, observedTurnKey = '';
   const capFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -194,7 +200,11 @@
     ${action ? `<th scope="col" aria-label="${MHL.esc(actionLabel)}"></th>` : ''}</tr></thead>`;
 
   function draw() {
-    const list = signups().filter(player => player.id !== ownSignupId);
+    const query = signupSearch.trim().toLocaleLowerCase();
+    const list = signups().filter(player => player.id !== ownSignupId && (!query || [
+      player.name, player.discord, player.position, player.captain,
+      (teams.find(team => team.id === player.team) || {}).name,
+    ].some(value => String(value || '').toLocaleLowerCase().includes(query))));
     const byName = (a, b) => a.name.localeCompare(b.name) || a.discord.localeCompare(b.discord);
     const captainRank = { Yes: 0, Maybe: 1, No: 2 };
     const valueOf = player => Math.max(Number(player.skaterValue ?? player.value) || 0, Number(player.goalieValue ?? player.value) || 0);
@@ -208,16 +218,19 @@
     list.sort(sorters[select.value]);
     const totalSignups = signups().length;
     const averageValue = key => {
-      const otherKey = key === 'skaterValue' ? 'goalieValue' : 'skaterValue';
       const valueOf = (player, valueKey) => Number(player[valueKey] ?? player.value) || 0;
-      const eligible = signups().filter(player => valueOf(player, key) >= valueOf(player, otherKey));
+      const eligible = signups().filter(player => key === 'goalieValue'
+        ? player.position === 'Goalie'
+        : player.position !== 'Goalie');
       if (!eligible.length) return '—';
       const average = eligible.reduce((sum, player) => sum + valueOf(player, key), 0) / eligible.length;
       return averageValueFormat.format(Math.ceil(average / 100000) * 100000);
     };
     document.getElementById('count').textContent = `${totalSignups} ${totalSignups === 1 ? 'signup' : 'signups'} (est possible teams ${Math.floor(totalSignups / 8)}) · Avg Skater Value ${averageValue('skaterValue')} · Avg Goalie Value ${averageValue('goalieValue')}`;
     if (!list.length) {
-      host.innerHTML = MHL.empty('No Season 2 signups yet', 'Use Sign Up Here to add the first player.');
+      host.innerHTML = query
+        ? MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.')
+        : MHL.empty('No Season 2 signups yet', 'Use Sign Up Here to add the first player.');
       return;
     }
     const showPick = showPickControls();
@@ -342,6 +355,10 @@
       ownHost.innerHTML = MHL.empty('Could not load your entry', error.message || 'Please reload and try again.');
     }
   }
+  searchInput.addEventListener('input', () => {
+    signupSearch = searchInput.value;
+    draw();
+  });
   select.addEventListener('change', draw);
   const handlePickClick = event => {
     const button = event.target.closest('[data-pick-signup]');
