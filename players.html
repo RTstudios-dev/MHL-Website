@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Players | MHL</title>
-<meta name="description" content="MHL scoring leaders: goals, assists and points.">
+<title>Player Stats | MHL</title>
+<meta name="description" content="Pug and Season 2 player stats for MHL.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Players | MHL">
-<meta property="og:description" content="MHL scoring leaders: goals, assists and points.">
+<meta property="og:title" content="Player Stats | MHL">
+<meta property="og:description" content="Pug and Season 2 player stats for MHL.">
 <meta name="theme-color" content="#111013">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,17 +21,45 @@
 <header class="mtop" id="mtop"></header>
 <main class="main" id="main">
 <div class="ph">
-  <h1>Players</h1>
-  <p>Scoring leaders. Points are goals plus assists.</p>
+  <h1>Player Stats</h1>
 </div>
-<div class="seg" role="tablist" aria-label="Stat" id="tabs">
-  <button type="button" role="tab" data-k="p" aria-selected="true">Points</button>
-  <button type="button" role="tab" data-k="g" aria-selected="false">Goals</button>
-  <button type="button" role="tab" data-k="a" aria-selected="false">Assists</button>
+<div class="player-stats-top-row" id="playerStatsTopRow">
+  <div class="stats-source-switch" role="group" aria-label="Stats source" id="statsSource">
+    <button type="button" data-source="pug" aria-pressed="true">Pug Stats</button>
+    <button type="button" data-source="season2" aria-pressed="false">Season 2 Stats</button>
+  </div>
+</div>
+<div class="player-stats-controls" id="playerStatsControls">
+  <div class="player-stats-filter-row">
+    <div class="player-filter" role="group" aria-label="Player filter" id="playerFilters">
+      <button type="button" data-filter="all" aria-pressed="true">All Players</button>
+      <button type="button" data-filter="goalie" aria-pressed="false">Goalies</button>
+      <button type="button" data-filter="skater" aria-pressed="false">Skaters</button>
+    </div>
+  </div>
 </div>
 <div id="leaders"><div class="sk"></div></div>
 <section aria-labelledby="hAll" id="allBlock" hidden>
   <div class="bh"><h2 id="hAll">All players</h2></div>
+  <div class="player-stats-list-toolbar">
+    <label class="signup-search player-stats-search" for="playerSearch">Search Season 2 players
+      <input id="playerSearch" type="search" autocomplete="off">
+    </label>
+    <div class="player-stats-row-controls">
+      <div class="player-stats-direction" role="group" aria-label="Sort direction" id="statDirection">
+        <button type="button" data-direction="high" aria-pressed="true">Highest</button>
+        <button type="button" data-direction="low" aria-pressed="false">Lowest</button>
+      </div>
+      <label for="statSelect">Filter
+        <select id="statSelect">
+          <option value="p">Points</option>
+          <option value="gs">Goals/Saves</option>
+          <option value="a">Assists</option>
+          <option value="value">Value</option>
+        </select>
+      </label>
+    </div>
+  </div>
   <div id="all"></div>
 </section>
 </main>
@@ -47,49 +75,142 @@
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('leaders'), 'the players'); }
   const { esc } = MHL;
-  const P = D.players.filter(p => p.team && D.T[p.team]).map(p => ({ ...p, p: p.g + p.a, t: D.T[p.team] }));
-  if (!P.length) { $('tabs').hidden = true; $('leaders').innerHTML = MHL.empty('No players yet', 'Players and their stats appear here once they are added.'); return; }
+  const P = (D.signups || []).map(player => {
+    const stats = player.trackedStats || {};
+    const g = Number(stats.goals) || 0, a = Number(stats.assists) || 0, s = Number(stats.saves) || 0;
+    return {
+      ...player, g, a, s, p: g + a + Math.floor(s / 2),
+      value: Number(player.position === 'Goalie' ? player.goalieValue : player.skaterValue) || 0,
+      goalie: player.position === 'Goalie',
+      t: D.T[player.team] || null,
+    };
+  });
+  const statControls = $('playerStatsControls');
+  if (!P.length) {
+    $('playerStatsTopRow').hidden = true;
+    statControls.hidden = true;
+    $('playerFilters').hidden = true;
+    $('statsSource').hidden = true;
+    $('leaders').innerHTML = MHL.empty('No Season 2 players yet', 'Season 2 signups appear here once they are added.');
+    return;
+  }
   const euroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   const formatValue = value => Number(value) > 0 ? euroFormat.format(Number(value)) : '—';
-  const NAMES = { p: 'Points', g: 'Goals', a: 'Assists' };
-  const tie = { p: ['g', 'a'], g: ['p', 'a'], a: ['p', 'g'] };
-  const rank = k => [...P].sort((x, y) => y[k] - x[k] || y[tie[k][0]] - x[tie[k][0]] || y[tie[k][1]] - x[tie[k][1]] || x.name.localeCompare(y.name));
-  let key = 'p', sortKey = 'p';
+  const NAMES = { p: 'Points', gs: 'Goals/Saves', a: 'Assists', value: 'Value' };
+  let key = 'p', direction = 'high', filter = 'all', source = 'pug', search = '';
+  const filtered = () => {
+    const query = search.trim().toLocaleLowerCase();
+    return P.filter(player => {
+      const matchesPosition = filter === 'all' || (filter === 'goalie' ? player.goalie : !player.goalie);
+      const matchesSearch = !query || [player.name, player.discord, player.position, player.t && player.t.name]
+        .some(value => String(value || '').toLocaleLowerCase().includes(query));
+      return matchesPosition && matchesSearch;
+    });
+  };
+  const compareName = (x, y) => String(x.name || '').localeCompare(String(y.name || ''));
+  const metricValue = player => key === 'p' ? player.p
+    : key === 'gs' ? (player.goalie ? player.s : player.g)
+      : key === 'a' ? player.a : player.value;
+  const rank = () => {
+    const list = [...filtered()];
+    if (source === 'season2' && key !== 'value') return list.sort(compareName);
+    return list.sort((x, y) => (direction === 'high' ? metricValue(y) - metricValue(x) : metricValue(x) - metricValue(y))
+      || compareName(x, y));
+  };
 
   function leaders() {
-    const list = rank(key).filter(p => p[key] > 0);
-    if (!list.length) { $('leaders').innerHTML = MHL.empty('No ' + NAMES[key].toLowerCase() + ' yet', 'Leaders show here once stats are entered.'); return; }
+    if (!filtered().length) {
+      $('leaders').innerHTML = MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.');
+      return;
+    }
+    if (source === 'season2' && key !== 'value') {
+      $('leaders').innerHTML = MHL.empty('Season 2 stats are not available yet', 'Season 2 stats will be added later.');
+      return;
+    }
+    if (direction === 'low') {
+      $('leaders').innerHTML = '';
+      return;
+    }
+    const list = rank().filter(player => metricValue(player) > 0);
+    if (!list.length) {
+      $('leaders').innerHTML = MHL.empty('No ' + NAMES[key].toLowerCase() + ' yet', 'Leaders show here once stats or values are available.');
+      return;
+    }
     const [one, ...rest] = list;
     $('leaders').innerHTML = `<div class="leaders">
-      <div class="top1" style="--c:${esc(one.t.color)}"><div><span class="k">${NAMES[key]} leader</span><h2>${esc(one.name)}</h2>
-        <p>${MHL.teamLink(one.t)}${one.number ? ', #' + esc(one.number) : ''}</p></div><span class="big num">${one[key]}</span></div>
-      <div class="rest">${rest.slice(0, 5).map((p, i) => `<div class="lm"><span class="r">${i + 2}</span>${MHL.badge(p.t)}<span class="nm">${esc(p.name)}<small>${esc(p.t.name)}</small></span><span class="v">${p[key]}</span></div>`).join('')
+    <div class="top1"${one.t ? ` style="--c:${esc(one.t.color)}"` : ''}><div><span class="k">${NAMES[key]} leader</span><h2>${esc(one.name)}</h2>
+        <p>${one.t ? MHL.teamLink(one.t) : 'Unassigned'}</p></div><span class="big num">${key === 'value' ? formatValue(one.value) : metricValue(one)}</span></div>
+    <div class="rest">${rest.slice(0, 5).map((p, i) => `<div class="lm"><span class="r">${i + 2}</span>${MHL.badge(p.t)}<span class="nm">${esc(p.name)}<small>${esc(p.t ? p.t.name : 'Unassigned')}</small></span><span class="v">${key === 'value' ? formatValue(p.value) : metricValue(p)}</span></div>`).join('')
         || '<div class="lm"><span></span><span></span><span class="nm"><small>No one else has any yet.</small></span><span></span></div>'}</div>
     </div>`;
   }
+  const lineLabel = () => filter === 'all' ? 'G/S' : filter === 'goalie' ? 'S' : 'G';
+  const playerLine = player => {
+    const empty = source === 'season2';
+    const goalLabel = player.goalie ? 'S' : 'G';
+    const goalValue = empty ? '—' : player.goalie ? player.s : player.g;
+    const assistValue = empty ? '—' : player.a;
+    return `<span>${goalLabel} ${goalValue}</span><span>A ${assistValue}</span>`;
+  };
   function table() {
     $('allBlock').hidden = false;
-    const cols = [['g', 'G', 'Goals'], ['a', 'A', 'Assists'], ['p', 'P', 'Points']];
-    $('all').innerHTML = `<div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th class="l" scope="col">Team</th><th class="l" scope="col">Pos</th>
-        <th scope="col">Hours</th><th scope="col">Skater value</th><th scope="col">Goalie value</th>
-        ${cols.map(([k, s, t]) => `<th scope="col"${k === sortKey ? ' aria-sort="descending"' : ''}><button type="button" data-s="${k}" title="Sort by ${t}">${s}</button></th>`).join('')}</tr></thead>
-      <tbody>${rank(sortKey).map(p => `<tr><td class="l"><b>${esc(p.name)}</b>${p.number ? ` <span style="color:var(--muted)">#${esc(p.number)}</span>` : ''}</td>
-        <td class="l">${esc(p.discord || '—')}</td><td class="l"><span class="team">${MHL.badge(p.t)}${MHL.teamLink(p.t)}</span></td><td class="l">${esc(p.signupPosition || (p.role === 'goalie' ? 'Goalie' : 'Skater'))}</td>
-        <td>${Number(p.hours) || 0}</td><td>${formatValue(p.skaterValue)}</td><td>${formatValue(p.goalieValue)}</td>
-        <td>${p.g}</td><td>${p.a}</td><td class="pts">${p.p}</td></tr>`).join('')}</tbody>
+    const rows = rank();
+    if (!rows.length) {
+      $('all').innerHTML = MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.');
+      return;
+    }
+    $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
+      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
+        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">${lineLabel()}</th></tr></thead>
+      <tbody>${rows.map(player => `<tr><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
+        ? `<img src="${esc(player.photo)}" alt="">`
+        : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
+        <b>${esc(player.name)}</b></span></td>
+        <td class="l" data-label="Discord username">${esc(player.discord || '—')}</td>
+        <td data-label="Position">${esc(player.position || 'Unassigned')}</td>
+        <td class="l" data-label="Team"><span class="team">${player.t ? `${MHL.badge(player.t)}${MHL.teamLink(player.t)}` : '—'}</span></td>
+        <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
+        <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
+        <td class="player-stat-line player-stat-cell" data-label="${lineLabel()}">${playerLine(player)}</td></tr>`).join('')}</tbody>
     </table></div>`;
   }
-  $('tabs').addEventListener('click', e => {
-    const b = e.target.closest('button[data-k]'); if (!b) return;
-    key = b.dataset.k;
-    $('tabs').querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+  $('statSelect').addEventListener('change', event => {
+    key = event.target.value;
     leaders();
+    table();
   });
-  $('all').addEventListener('click', e => {
-    const b = e.target.closest('button[data-s]'); if (!b) return;
-    sortKey = b.dataset.s; table();
-    $('all').querySelector(`button[data-s="${sortKey}"]`).focus();
+  $('statDirection').addEventListener('click', event => {
+    const button = event.target.closest('button[data-direction]');
+    if (!button) return;
+    direction = button.dataset.direction;
+    $('statDirection').querySelectorAll('button').forEach(item =>
+      item.setAttribute('aria-pressed', String(item === button)));
+    leaders();
+    table();
+  });
+  $('playerFilters').addEventListener('click', event => {
+    const button = event.target.closest('button[data-filter]');
+    if (!button) return;
+    filter = button.dataset.filter;
+    $('playerFilters').querySelectorAll('button').forEach(item =>
+      item.setAttribute('aria-pressed', String(item === button)));
+    $('hAll').textContent = button.textContent;
+    leaders();
+    table();
+  });
+  $('playerSearch').addEventListener('input', event => {
+    search = event.target.value;
+    leaders();
+    table();
+  });
+  $('statsSource').addEventListener('click', event => {
+    const button = event.target.closest('button[data-source]');
+    if (!button) return;
+    source = button.dataset.source;
+    $('statsSource').querySelectorAll('button').forEach(item =>
+      item.setAttribute('aria-pressed', String(item === button)));
+    leaders();
+    table();
   });
   leaders(); table();
 })();

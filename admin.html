@@ -535,6 +535,17 @@ const MHLA = (() => {
     const tot = MHL.playerTotals(D);
     const signupForPlayer = player => player.signupId && D.signups.find(signup => signup.id === player.signupId);
     const editablePlayerData = player => signupForPlayer(player) || player;
+    const playerStatLine = player => {
+      const signup = signupForPlayer(player);
+      if (!signup) {
+        const stats = tot[player.id] || { g: 0, a: 0 };
+        return `G ${stats.g} · A ${stats.a}`;
+      }
+      const stats = signup.trackedStats || { goals: 0, assists: 0, saves: 0 };
+      return signup.position === 'Goalie'
+        ? `S ${Number(stats.saves) || 0}`
+        : `G ${Number(stats.goals) || 0} · A ${Number(stats.assists) || 0}`;
+    };
     const playerValue = (player, key, label) => h('input', {
       type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
       'aria-label': `${label} for ${player.name}`,
@@ -551,11 +562,11 @@ const MHLA = (() => {
         D.players.push({ id: uid(), name: '', team: playerFilter || D.teams[0].id, role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
         const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
       } }, 'Add player')),
-      h('p', { class: 'help' }, 'Assigned Season 2 signups appear here automatically with their in-game name, Discord username, hours and values. Change their team and signup details in the Season 2 Player Sign Ups tab. Goals and assists are logged under Matches.'),
+      h('p', { class: 'help' }, 'Assigned Season 2 signups appear here automatically. Change their team, position and values in the Season 2 Player Sign Ups tab. Live goals, assists and goalie saves are tracked by the game mod; saves count toward points at one point per two saves.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Hours', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'G/S', ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {},
           h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
           h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
@@ -564,11 +575,10 @@ const MHLA = (() => {
           h('td', {}, h('input', { type: 'text', inputmode: 'numeric', maxlength: 3, class: 'n', 'aria-label': 'Jersey number', value: p.number, oninput: e => { p.number = e.target.value.replace(/\D/g, ''); touch(); } })),
           h('td', {}, h('select', { 'aria-label': 'Position', disabled: !!p.signupId, onchange: e => { p.role = e.target.value; touch(); } },
             h('option', { value: 'skater', selected: p.role !== 'goalie' }, 'Skater'), h('option', { value: 'goalie', selected: p.role === 'goalie' }, 'Goalie')),
-            p.signupId ? h('small', {}, `Signup: ${p.signupPosition || 'Unassigned'} · Captain: ${p.captain || '—'}`) : null),
-          h('td', {}, playerValue(p, 'hours', 'Hours on Puck')),
+            p.signupId ? h('small', {}, `Signup: ${p.signupPosition || 'Unassigned'}`) : null),
           h('td', {}, playerValue(p, 'skaterValue', 'Skater value')),
           h('td', {}, playerValue(p, 'goalieValue', 'Goalie value')),
-          h('td', { class: 'tot' }, tot[p.id] ? tot[p.id].g : 0), h('td', { class: 'tot' }, tot[p.id] ? tot[p.id].a : 0),
+          h('td', { class: 'tot' }, playerStatLine(p)),
           h('td', {}, h('button', { class: 'btn del sm', type: 'button', disabled: !!p.signupId, title: p.signupId ? 'Manage this player through the Season 2 Player Sign Ups tab.' : '', onclick: () => {
             const t = tot[p.id] || { g: 0, a: 0 };
             if (!confirm(`Delete ${p.name || 'this player'}?` + (t.g || t.a ? ` Their ${t.g} goals and ${t.a} assists are removed from the matches too.` : ''))) return;

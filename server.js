@@ -6,7 +6,7 @@
 //   ADMIN_PASSWORD_HASH  from `node hash-password.js` (use this when hosted)
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
 //   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
-//   MHL_MOD_API_KEY      optional, read-only key for the game mod's roster endpoint
+//   MHL_MOD_API_KEY      key for protected roster access and game-stat uploads; the public roster needs no key
 //   The public mod roster endpoint exposes only linked Steam IDs, player values, and the Ice Cap.
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
@@ -26,7 +26,7 @@ const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] } };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -332,6 +332,31 @@ const signupSteamId = signup => {
   if (profileId) return profileId;
   const storedId = String(signup.steamId || '');
   return /^\d{17}$/.test(storedId) ? storedId : '';
+};
+const emptyTrackedStats = () => ({ goals: 0, assists: 0, saves: 0 });
+const increaseTrackedStat = (value, amount = 1) =>
+  Math.min(Number.MAX_SAFE_INTEGER, num(value, Number.MAX_SAFE_INTEGER) + amount);
+const trackedStatsFor = (data, signupId) => {
+  const raw = data.playerStats && Object.prototype.hasOwnProperty.call(data.playerStats, signupId)
+    ? data.playerStats[signupId]
+    : null;
+  return {
+    goals: num(raw && raw.goals, Number.MAX_SAFE_INTEGER),
+    assists: num(raw && raw.assists, Number.MAX_SAFE_INTEGER),
+    saves: num(raw && raw.saves, Number.MAX_SAFE_INTEGER),
+  };
+};
+const attachTrackedStats = data => {
+  data.signups = data.signups.map(signup => ({
+    ...signup,
+    trackedStats: trackedStatsFor(data, signup.id),
+  }));
+  const statsBySignupId = new Map(data.signups.map(signup => [signup.id, signup.trackedStats]));
+  data.players = data.players.map(player => ({
+    ...player,
+    trackedStats: statsBySignupId.get(player.signupId) || emptyTrackedStats(),
+  }));
+  return data;
 };
 const steamKey = v => steamProfile(v).replace(/^https:\/\/www\./i, 'https://').replace(/\/+$/, '').toLowerCase();
 async function steamProfileUrl(steamId) {
@@ -766,6 +791,115 @@ const server = http.createServer(async (req, res) => {
       if (roster.error) return send(res, 409, { error: roster.error });
       return send(res, 200, roster);
     }
+    if (p === '/api/mod/stats' && req.method === 'POST') {
+      if (!allowPublic('mod-stats:' + clientIp(req), 120, 60 * 1000)) {
+        return send(res, 429, { error: 'Too many stats requests. Try again shortly.' });
+      }
+      if (MHL_MOD_API_KEY.length < 32) {
+        return send(res, 503, { error: 'The mod stats API is not configured.' });
+      }
+
+      const authorization = String(req.headers.authorization || '');
+      const apiKey = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+      if (!apiKey || apiKey.length > 256 || !safeEq(apiKey, MHL_MOD_API_KEY)) {
+        return send(res, 401, { error: 'A valid mod API key is required.' });
+      }
+
+      const payload = JSON.parse(await readBody(req, 500_000) || '{}');
+      if (!payload || typeof payload !== 'object') {
+        return send(res, 400, { error: 'The stats payload is invalid.' });
+      }
+      const rawGameId = String(payload.gameId ?? '').trim();
+      const gameId = str(rawGameId, 120);
+      if (rawGameId.length > 120 || !/^[a-zA-Z0-9._:-]{1,120}$/.test(gameId) ||
+          !Array.isArray(payload.events) || payload.events.length > 2000) {
+        return send(res, 400, { error: 'The stats payload is invalid.' });
+      }
+
+      const events = [];
+      for (const raw of payload.events) {
+        const rawEventId = String((raw && raw.eventId) ?? '').trim();
+        const eventId = str(rawEventId, 180);
+        const type = raw && raw.type;
+        if (!eventId || rawEventId.length > 180 || !eventId.startsWith(gameId + ':')) {
+          return send(res, 400, { error: 'A stats event has an invalid event ID.' });
+        }
+        if (type === 'goal') {
+          const scorerSteamId = str(raw.scorerSteamId, 17);
+          const assist1SteamId = str(raw.assist1SteamId, 17);
+          const assist2SteamId = str(raw.assist2SteamId, 17);
+          if (!/^\d{17}$/.test(scorerSteamId) ||
+              (assist1SteamId && !/^\d{17}$/.test(assist1SteamId)) ||
+              (assist2SteamId && !/^\d{17}$/.test(assist2SteamId))) {
+            return send(res, 400, { error: 'A goal event has an invalid Steam ID.' });
+          }
+          events.push({ eventId, type, scorerSteamId, assist1SteamId, assist2SteamId });
+        } else if (type === 'save') {
+          const steamId = str(raw.steamId, 17);
+          const count = Number(raw.count);
+          if (!/^\d{17}$/.test(steamId) || !Number.isSafeInteger(count) || count < 1 || count > 1000) {
+            return send(res, 400, { error: 'A save event is invalid.' });
+          }
+          events.push({ eventId, type, steamId, count });
+        } else {
+          return send(res, 400, { error: 'A stats event has an unknown type.' });
+        }
+      }
+
+      const data = readData();
+      const signupBySteamId = new Map();
+      for (const signup of data.signups) {
+        const steamId = signupSteamId(signup);
+        if (!/^\d{17}$/.test(steamId)) continue;
+        if (signupBySteamId.has(steamId)) {
+          return send(res, 409, { error: 'Duplicate Steam accounts are linked to MHL signups.' });
+        }
+        signupBySteamId.set(steamId, signup);
+      }
+
+      const playerStats = data.playerStats && typeof data.playerStats === 'object'
+        ? data.playerStats
+        : {};
+      const trackedIds = Array.isArray(data.modStatEventIds)
+        ? data.modStatEventIds.filter(id => typeof id === 'string')
+        : [];
+      const seen = new Set(trackedIds);
+      const acceptedIds = [];
+      const countsFor = signupId => {
+        if (!Object.prototype.hasOwnProperty.call(playerStats, signupId) ||
+            !playerStats[signupId] || typeof playerStats[signupId] !== 'object')
+          playerStats[signupId] = emptyTrackedStats();
+        return playerStats[signupId];
+      };
+      for (const event of events) {
+        if (seen.has(event.eventId)) continue;
+        seen.add(event.eventId);
+        acceptedIds.push(event.eventId);
+
+        if (event.type === 'goal') {
+          const scorer = signupBySteamId.get(event.scorerSteamId);
+          if (scorer) countsFor(scorer.id).goals = increaseTrackedStat(countsFor(scorer.id).goals);
+          const creditedAssists = new Set([event.assist1SteamId, event.assist2SteamId]
+            .filter(steamId => steamId && steamId !== event.scorerSteamId));
+          for (const steamId of creditedAssists) {
+            const signup = signupBySteamId.get(steamId);
+            if (signup) countsFor(signup.id).assists = increaseTrackedStat(countsFor(signup.id).assists);
+          }
+        } else {
+          const signup = signupBySteamId.get(event.steamId);
+          if (signup && signup.position === 'Goalie') {
+            countsFor(signup.id).saves = increaseTrackedStat(countsFor(signup.id).saves, event.count);
+          }
+        }
+      }
+
+      if (acceptedIds.length) {
+        data.playerStats = playerStats;
+        data.modStatEventIds = [...seen];
+        writeData(data);
+      }
+      return send(res, 200, { accepted: acceptedIds.length, ignored: events.length - acceptedIds.length });
+    }
     if (p === '/api/data' && req.method === 'GET') {
       // logoUrl: pages swap the wordmark for the logo when there is one
       const logo = findLogo();
@@ -774,13 +908,15 @@ const server = http.createServer(async (req, res) => {
       const signupsById = new Map(data.signups.map(signup => [signup.id, signup]));
       data.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
       if (syncSignupPlayers(data)) writeData(data);
+      attachTrackedStats(data);
       if (!isAdmin(req)) {
         data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
         data.players = data.players.map(({ steam, ...player }) => player);
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
-      return send(res, 200, { ...data, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
+      const { playerStats, modStatEventIds, ...responseData } = data;
+      return send(res, 200, { ...responseData, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/me') return send(res, 200, { admin: isAdmin(req) });
 
@@ -810,6 +946,8 @@ const server = http.createServer(async (req, res) => {
       const clearAllAssignments = !!(incoming && incoming.draft && incoming.draft.clearAllAssignments);
       const clean = sanitize(incoming);
       const current = readData();
+      clean.playerStats = current.playerStats && typeof current.playerStats === 'object' ? current.playerStats : {};
+      clean.modStatEventIds = Array.isArray(current.modStatEventIds) ? current.modStatEventIds : [];
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
       clean.signups.forEach(signup => byId.set(signup.id, signup));
       clean.signups = [...byId.values()].slice(0, 5000);
@@ -840,7 +978,9 @@ const server = http.createServer(async (req, res) => {
       const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo]).concat(clean.signups.map(s => s.photo)).map(u => path.basename(u || '')));
       for (const f of fs.readdirSync(UPLOAD_DIR)) if (!used.has(f)) fs.unlink(path.join(UPLOAD_DIR, f), () => {});
       const logo = findLogo();
-      return send(res, 200, { ...clean, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
+      attachTrackedStats(clean);
+      const { playerStats, modStatEventIds, ...responseData } = clean;
+      return send(res, 200, { ...responseData, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/sign-up' && req.method === 'POST') {
       if (!allowPublic('signup:' + clientIp(req), 5, 60 * 60 * 1000)) {
