@@ -7,6 +7,7 @@
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
 //   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
 //   MHL_MOD_API_KEY      optional, read-only key for the game mod's roster endpoint
+//   The public mod roster endpoint exposes only linked Steam IDs, player values, and the Ice Cap.
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
@@ -217,6 +218,19 @@ const signupValues = signup => ({
   skaterValue: num(signup.skaterValue ?? signup.value, Number.MAX_SAFE_INTEGER),
   goalieValue: num(signup.goalieValue ?? signup.value, Number.MAX_SAFE_INTEGER),
 });
+const modRosterSnapshot = data => {
+  const seenSteamIds = new Set();
+  const players = [];
+  for (const signup of data.signups) {
+    const steamId = String(signup.steamId || '');
+    if (!/^\d{17}$/.test(steamId)) continue;
+    if (seenSteamIds.has(steamId))
+      return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
+    seenSteamIds.add(steamId);
+    players.push({ steamId, ...signupValues(signup) });
+  }
+  return { iceCap: num(data.site && data.site.iceCap, Number.MAX_SAFE_INTEGER), players };
+};
 function syncSignupPlayers(data) {
   const playersBySignupId = new Map(data.players.filter(player => player.signupId).map(player => [player.signupId, player]));
   let changed = false;
@@ -715,6 +729,15 @@ const server = http.createServer(async (req, res) => {
         'Set-Cookie': `mhl_player=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
       });
     }
+    if (p === '/api/mod/public-roster' && req.method === 'GET') {
+      if (!allowPublic('mod-public-roster:' + clientIp(req), 60, 60 * 1000)) {
+        return send(res, 429, { error: 'Too many roster requests. Try again shortly.' });
+      }
+
+      const roster = modRosterSnapshot(readData());
+      if (roster.error) return send(res, 409, { error: roster.error });
+      return send(res, 200, roster);
+    }
     if (p === '/api/mod/roster' && req.method === 'GET') {
       if (!allowPublic('mod-roster:' + clientIp(req), 30, 60 * 1000)) {
         return send(res, 429, { error: 'Too many roster requests. Try again shortly.' });
@@ -729,20 +752,9 @@ const server = http.createServer(async (req, res) => {
         return send(res, 401, { error: 'A valid mod API key is required.' });
       }
 
-      const data = readData();
-      const seenSteamIds = new Set();
-      const players = [];
-      for (const signup of data.signups) {
-        const steamId = String(signup.steamId || '');
-        if (!/^\d{17}$/.test(steamId)) continue;
-        if (seenSteamIds.has(steamId)) {
-          return send(res, 409, { error: 'Duplicate Steam accounts are linked to MHL signups.' });
-        }
-        seenSteamIds.add(steamId);
-        players.push({ steamId, ...signupValues(signup) });
-      }
-
-      return send(res, 200, { iceCap: data.site.iceCap, players });
+      const roster = modRosterSnapshot(readData());
+      if (roster.error) return send(res, 409, { error: roster.error });
+      return send(res, 200, roster);
     }
     if (p === '/api/data' && req.method === 'GET') {
       // logoUrl: pages swap the wordmark for the logo when there is one
