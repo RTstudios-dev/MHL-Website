@@ -222,7 +222,7 @@ const modRosterSnapshot = data => {
   const seenSteamIds = new Set();
   const players = [];
   for (const signup of data.signups) {
-    const steamId = String(signup.steamId || '');
+    const steamId = signupSteamId(signup);
     if (!/^\d{17}$/.test(steamId)) continue;
     if (seenSteamIds.has(steamId))
       return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
@@ -322,6 +322,16 @@ const okImage = u => UPLOAD_RE.test(u) && fs.existsSync(uploadFile(u));
 const steamProfile = v => {
   const u = str(v, 300);
   return /^https:\/\/(?:www\.)?steamcommunity\.com\/(?:id\/[a-z0-9_-]+|profiles\/\d{17})\/?$/i.test(u) ? u : '';
+};
+const steamIdFromProfileUrl = v => {
+  const match = steamProfile(v).match(/^https:\/\/(?:www\.)?steamcommunity\.com\/profiles\/(\d{17})\/?$/i);
+  return match ? match[1] : '';
+};
+const signupSteamId = signup => {
+  const profileId = steamIdFromProfileUrl(signup.steam);
+  if (profileId) return profileId;
+  const storedId = String(signup.steamId || '');
+  return /^\d{17}$/.test(storedId) ? storedId : '';
 };
 const steamKey = v => steamProfile(v).replace(/^https:\/\/www\./i, 'https://').replace(/\/+$/, '').toLowerCase();
 async function steamProfileUrl(steamId) {
@@ -840,7 +850,9 @@ const server = http.createServer(async (req, res) => {
       const discord = str(signup.discord, 80), name = str(signup.name, 40);
       const steam = steamProfile(signup.steam);
       const player = playerSession(req);
-      const steamId = player && steamKey(steam) === steamKey(player.profileUrl) ? player.steamId : '';
+      const steamId = player
+        ? (steamKey(steam) === steamKey(player.profileUrl) ? player.steamId : '')
+        : steamIdFromProfileUrl(steam);
       const hours = Number(signup.hours);
       if (!discord || !name || !steam || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
           !['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(signup.position) ||
@@ -852,7 +864,7 @@ const server = http.createServer(async (req, res) => {
       if (player && player.lookupFailed && profileKey === steamKey(player.profileUrl)) {
         return send(res, 503, { error: 'Steam could not resolve your profile link right now. Please try Steam sign-in again or enter your profile URL manually.' });
       }
-      if (data.signups.some(existing => (steamId && existing.steamId === steamId) ||
+      if (data.signups.some(existing => (steamId && signupSteamId(existing) === steamId) ||
           String(existing.discord || '').trim().toLowerCase() === discordKey ||
           (profileKey && steamKey(existing.steam) === profileKey))) {
         return send(res, 409, { error: 'You have already signed up. Sign in on Player Login using the Steam account on your signup; if it cannot find your signup, ask staff via Discord.' });
