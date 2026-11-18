@@ -113,7 +113,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .ptable td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .ptable .n{width:76px}
 .pwrap{overflow-x:auto}
-.ptable{min-width:760px}
+.ptable{min-width:1120px}
 .filter{max-width:280px;margin-bottom:14px}
 .signup-sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
 .signup-sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
@@ -215,7 +215,7 @@ const MHLA = (() => {
   }
 
   // frame
-  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Players'], ['news', 'News'], ['rules', 'Rules'], ['settings', 'Settings']];
+  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Player Sign Ups'], ['news', 'News'], ['rules', 'Rules'], ['settings', 'Settings']];
   function draw() {
     const y = scrollY;
     const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
@@ -498,24 +498,43 @@ const MHLA = (() => {
     if (!D.teams.length) return [head('Players'), h('div', { class: 'empty' }, h('b', {}, 'Add teams first'), 'Players belong to a team.')];
     const list = D.players.filter(p => !playerFilter || p.team === playerFilter);
     const tot = MHL.playerTotals(D);
+    const signupForPlayer = player => player.signupId && D.signups.find(signup => signup.id === player.signupId);
+    const editablePlayerData = player => signupForPlayer(player) || player;
+    const playerValue = (player, key, label) => h('input', {
+      type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
+      'aria-label': `${label} for ${player.name}`,
+      value: editablePlayerData(player)[key] || 0,
+      oninput: e => {
+        const value = Number(e.target.value);
+        if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
+        editablePlayerData(player)[key] = value;
+        touch();
+      },
+    });
     return [
       head('Players', h('button', { class: 'btn sm', type: 'button', onclick: () => {
-        D.players.push({ id: uid(), name: '', team: playerFilter || D.teams[0].id, role: 'skater', number: '' }); touch(); draw();
+        D.players.push({ id: uid(), name: '', team: playerFilter || D.teams[0].id, role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
         const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
       } }, 'Add player')),
-      h('p', { class: 'help' }, 'Goals and assists are logged goal by goal under each match in the Matches tab. The totals here count themselves.'),
+      h('p', { class: 'help' }, 'Assigned Season 2 signups appear here automatically with their in-game name, Discord username, hours and values. Change their team and signup details in the Season 2 Player Sign Ups tab. Goals and assists are logged under Matches.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['Name', 'Team', 'Number', 'Position', 'Goals', 'Assists', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Hours', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {},
-          h('td', {}, text(p, 'name', { maxlength: 40, 'aria-label': 'Player name', placeholder: 'Player name' })),
-          h('td', {}, h('select', { 'aria-label': 'Team', onchange: e => { p.team = e.target.value; touch(); } }, D.teams.map(t => h('option', { value: t.id, selected: t.id === p.team }, t.name)))),
+          h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
+          h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
+          h('td', {}, h('select', { 'aria-label': 'Team', disabled: !!p.signupId, onchange: e => { p.team = e.target.value; touch(); } },
+            [h('option', { value: '', selected: !p.team }, 'Unassigned'), D.teams.map(t => h('option', { value: t.id, selected: t.id === p.team }, t.name))])),
           h('td', {}, h('input', { type: 'text', inputmode: 'numeric', maxlength: 3, class: 'n', 'aria-label': 'Jersey number', value: p.number, oninput: e => { p.number = e.target.value.replace(/\D/g, ''); touch(); } })),
-          h('td', {}, h('select', { 'aria-label': 'Position', onchange: e => { p.role = e.target.value; touch(); } },
-            h('option', { value: 'skater', selected: p.role !== 'goalie' }, 'Skater'), h('option', { value: 'goalie', selected: p.role === 'goalie' }, 'Goalie'))),
+          h('td', {}, h('select', { 'aria-label': 'Position', disabled: !!p.signupId, onchange: e => { p.role = e.target.value; touch(); } },
+            h('option', { value: 'skater', selected: p.role !== 'goalie' }, 'Skater'), h('option', { value: 'goalie', selected: p.role === 'goalie' }, 'Goalie')),
+            p.signupId ? h('small', {}, `Signup: ${p.signupPosition || 'Unassigned'} · Captain: ${p.captain || '—'}`) : null),
+          h('td', {}, playerValue(p, 'hours', 'Hours on Puck')),
+          h('td', {}, playerValue(p, 'skaterValue', 'Skater value')),
+          h('td', {}, playerValue(p, 'goalieValue', 'Goalie value')),
           h('td', { class: 'tot' }, tot[p.id] ? tot[p.id].g : 0), h('td', { class: 'tot' }, tot[p.id] ? tot[p.id].a : 0),
-          h('td', {}, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+          h('td', {}, h('button', { class: 'btn del sm', type: 'button', disabled: !!p.signupId, title: p.signupId ? 'Manage this player through the Season 2 Player Sign Ups tab.' : '', onclick: () => {
             const t = tot[p.id] || { g: 0, a: 0 };
             if (!confirm(`Delete ${p.name || 'this player'}?` + (t.g || t.a ? ` Their ${t.g} goals and ${t.a} assists are removed from the matches too.` : ''))) return;
             D.players = D.players.filter(x => x !== p);
@@ -594,7 +613,7 @@ const MHLA = (() => {
       },
     }, 'Clear all team assignments');
     return [
-      head('Season 2 Players', clearTeams),
+      head('Season 2 Player Sign Ups', clearTeams),
       h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Skater and Goalie Values in euros here. Steam profile links are only shown in admin."),
       h('div', { class: 'caps-edit ed' },
         field('Ice Cap €', capInput('iceCap', 'Ice Cap €')),

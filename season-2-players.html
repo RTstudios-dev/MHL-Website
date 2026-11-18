@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Season 2 Players | MHL</title>
-<meta name="description" content="Season 2 player signups for the Miniature Hockey League.">
+<title>Season 2 Player Sign Ups | MHL</title>
+<meta name="description" content="Season 2 player sign ups for the Miniature Hockey League.">
 <meta name="theme-color" content="#111013">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -72,7 +72,7 @@
 <header class="mtop" id="mtop"></header>
 <main class="main" id="main">
 <div class="ph">
-  <h1>Season 2 Players</h1>
+  <h1>Season 2 Player Sign Ups</h1>
   <p>Player signups and their Season 2 details.</p>
 </div>
 <section class="own-signup" aria-labelledby="ownSignupTitle">
@@ -103,6 +103,14 @@
 <nav class="tabbar" id="tabbar" aria-label="Main"></nav>
 <div class="more" id="more" hidden></div>
 <div id="draftBudgetOverlay" class="draft-budget-overlay" role="status" aria-live="polite" hidden></div>
+<dialog id="yourPickPopup" class="prompt-dialog" aria-labelledby="yourPickTitle">
+  <h2 id="yourPickTitle">It’s your pick!</h2>
+  <p>Choose a player from the list below.</p>
+  <div class="actions">
+    <button id="goToSeasonPlayers" class="btn" type="button">Go To Season 2 players</button>
+    <button id="dismissYourPick" class="btn line" type="button">Dismiss</button>
+  </div>
+</dialog>
 <script src="/standings.js"></script>
 <script src="/site.js"></script>
 <script>
@@ -111,10 +119,12 @@
   const ownHost = document.getElementById('yourEntry');
   const draftNotice = document.getElementById('draftNotice');
   const budgetOverlay = document.getElementById('draftBudgetOverlay');
+  const yourPickPopup = document.getElementById('yourPickPopup');
   const select = document.getElementById('sort');
   const signups = () => window.seasonSignups || [];
   let draftState = { active: false, captainTeamId: '', captainSignupIds: [], currentTeamId: '', pickedSignupIds: [], teamBudgets: {} };
   let pollingDraft = false, pickingPlayer = false, signupRefreshPending = false;
+  let wasYourTurn = false, observedTurnKey = '';
   const capFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   const averageValueFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const formatCap = raw => {
@@ -219,6 +229,11 @@
     const response = await fetch('/api/draft', { cache: 'no-store' });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not load draft status.');
+    const turnKey = JSON.stringify(result.pickedSignupIds || []);
+    const isYourTurn = !!result.active && !!result.captainTeamId && result.currentTeamId === result.captainTeamId;
+    if (isYourTurn && (!wasYourTurn || turnKey !== observedTurnKey) && !yourPickPopup.open) yourPickPopup.showModal();
+    wasYourTurn = isYourTurn;
+    observedTurnKey = turnKey;
     draftState = result;
     updateBudgetOverlay();
     if (result.complete)     draftNotice.textContent = 'The draft has no eligible affordable players remaining.';
@@ -332,6 +347,11 @@
     const button = event.target.closest('[data-pick-signup]');
     if (button && !button.disabled) pickPlayer(button.dataset.pickSignup, button);
   };
+  document.getElementById('goToSeasonPlayers').addEventListener('click', () => {
+    yourPickPopup.close();
+    document.getElementById('players').scrollIntoView({ behavior: 'smooth' });
+  });
+  document.getElementById('dismissYourPick').addEventListener('click', () => yourPickPopup.close());
   host.addEventListener('click', handlePickClick);
   ownHost.addEventListener('click', handlePickClick);
   let data;

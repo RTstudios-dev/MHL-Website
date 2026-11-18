@@ -6,13 +6,15 @@
   const NAV = [
     ['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Standings'], ['/teams', 'Teams'],
     ['/players', 'Player Stats (coming S2)'], ['/news', 'News'], ['/rules', 'Rules'],
-    ['/season-2-players', 'Season 2 Players'], ['/sign-up', 'Sign Up Here'],
+    ['/season-2-players', 'Season 2 Player Sign Ups'], ['/sign-up', 'Sign Up Here'],
   ];
   // phone tab bar: 4 pages + More
   const TABS = [['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Table'], ['/teams', 'Teams']];
   const here = location.pathname.replace(/\/+$/, '') || '/';
   const current = here.startsWith('/team/') ? '/teams' : here;
+  const draftBoard = '/season-2-players';
   const cur = href => href === current ? ' aria-current="page"' : '';
+  let checkingDraftTurn = false;
 
   const wordmark = '<span class="wm">M<i>H</i>L</span>';
   let steamLoginButton;
@@ -43,6 +45,20 @@
     const result = await signupResponse.json();
     showSteamProfileButton(result.signup);
   };
+  M.checkDraftTurn = async function () {
+    if (current === draftBoard || document.hidden || checkingDraftTurn) return;
+    checkingDraftTurn = true;
+    try {
+      const response = await fetch('/api/draft', { cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not check the draft turn.');
+      if (result.active && result.captainTeamId && result.currentTeamId === result.captainTeamId) {
+        location.replace(draftBoard);
+      }
+    } finally {
+      checkingDraftTurn = false;
+    }
+  };
   function shell() {
     const side = document.getElementById('side');
     side.innerHTML = `
@@ -57,6 +73,12 @@
     steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
     document.body.appendChild(steamLoginButton);
     M.refreshPlayerButton().catch(error => console.error('Could not update the Steam profile button:', error));
+    if (current !== draftBoard) {
+      const checkDraftTurn = () => M.checkDraftTurn().catch(error => console.error('Could not check the draft turn:', error));
+      checkDraftTurn();
+      window.setInterval(checkDraftTurn, 3000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDraftTurn(); });
+    }
     const inMore = !TABS.some(([h]) => h === current);
     document.getElementById('tabbar').innerHTML = TABS.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')
       + `<button type="button" id="moreBtn" aria-expanded="false" aria-controls="more"${inMore ? ' aria-current="page"' : ''}>More</button>`;

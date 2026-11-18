@@ -58,6 +58,11 @@ footer.foot{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);fo
 .steam-login-top.is-profile{width:50px;height:50px;padding:0;border-radius:50%;overflow:hidden;background:var(--paper)}
 .steam-login-top.is-profile img{width:100%;height:100%;object-fit:cover}
 .steam-login-top.is-profile span{display:grid;place-items:center;width:100%;height:100%;font-size:20px;color:var(--gold)}
+dialog.prompt-dialog{position:fixed;inset:50% auto auto 50%;margin:0;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));padding:30px;border:1px solid var(--gold);background:var(--paper);color:var(--ink);box-shadow:0 12px 48px #000b;text-align:center}
+dialog.prompt-dialog::backdrop{background:#000b}
+.prompt-dialog h2{margin:0 0 8px;color:var(--gold);font-family:var(--disp);font-size:36px;font-weight:500}
+.prompt-dialog p{margin:0 0 22px;color:var(--muted)}
+.prompt-dialog .actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px}
 .seg{display:inline-flex;flex-wrap:wrap;gap:4px 26px;margin-bottom:32px;max-width:100%;border-bottom:1px solid var(--line)}
 .seg button{min-height:40px;padding:0;border:0;background:transparent;color:var(--muted);box-shadow:inset 0 -1px transparent;transition:color .2s,box-shadow .2s}
 .seg button:hover{color:var(--ink)}

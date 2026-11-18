@@ -215,6 +215,36 @@ const signupValues = signup => ({
   skaterValue: num(signup.skaterValue ?? signup.value, Number.MAX_SAFE_INTEGER),
   goalieValue: num(signup.goalieValue ?? signup.value, Number.MAX_SAFE_INTEGER),
 });
+function syncSignupPlayers(data) {
+  const playersBySignupId = new Map(data.players.filter(player => player.signupId).map(player => [player.signupId, player]));
+  let changed = false;
+  for (const signup of data.signups) {
+    let player = playersBySignupId.get(signup.id);
+    if (!player) {
+      if (!signup.team) continue;
+      player = { id: crypto.randomUUID(), signupId: signup.id, number: '' };
+      data.players.push(player);
+      playersBySignupId.set(signup.id, player);
+      changed = true;
+    }
+    const values = {
+      signupId: signup.id,
+      name: signup.name,
+      team: signup.team || '',
+      role: signup.position === 'Goalie' ? 'goalie' : 'skater',
+      discord: signup.discord,
+      steam: signup.steam,
+      hours: signup.hours,
+      signupPosition: signup.position,
+      captain: signup.captain,
+      photo: signup.photo,
+      ...signupValues(signup),
+    };
+    if (Object.entries(values).some(([key, value]) => player[key] !== value)) changed = true;
+    Object.assign(player, values);
+  }
+  return changed;
+}
 const draftPrice = signup => {
   const { skaterValue, goalieValue } = signupValues(signup);
   return Math.max(skaterValue, goalieValue);
@@ -333,11 +363,19 @@ function sanitize(d) {
     name: str(r.name, 40) || 'Round',
   }));
   const roundIds = new Set(rounds.map(r => r.id));
-  const players = (Array.isArray(d.players) ? d.players : []).slice(0, 1000).filter(p => ids.has(p.team)).map(p => ({
+  const players = (Array.isArray(d.players) ? d.players : []).slice(0, 5000).filter(p => !p.team || ids.has(p.team)).map(p => ({
     id: str(p.id, 40) || crypto.randomUUID(),
-    name: str(p.name, 40) || 'Player', team: p.team,
+    signupId: str(p.signupId, 40),
+    name: str(p.name, 40) || 'Player', team: ids.has(p.team) ? p.team : '',
     role: p.role === 'goalie' ? 'goalie' : 'skater',
     number: str(p.number, 3).replace(/[^0-9]/g, ''),
+    discord: str(p.discord, 80),
+    steam: steamProfile(p.steam),
+    hours: num(p.hours, 100000),
+    signupPosition: ['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(p.signupPosition) ? p.signupPosition : '',
+    captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : '',
+    photo: okImage(p.photo) ? p.photo : '',
+    ...signupValues(p),
   }));
   const pids = new Set(players.map(p => p.id));
   const pid = v => pids.has(v) ? v : '';
@@ -394,6 +432,11 @@ function sanitize(d) {
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
   const signupIds = new Set(signups.map(signup => signup.id));
+  const linkedSignupIds = new Set();
+  for (const player of players) {
+    if (!signupIds.has(player.signupId) || linkedSignupIds.has(player.signupId)) player.signupId = '';
+    else linkedSignupIds.add(player.signupId);
+  }
   const captains = new Set();
   for (const team of teams) {
     if (!signupIds.has(team.captainSignupId) || captains.has(team.captainSignupId)) team.captainSignupId = '';
@@ -402,6 +445,7 @@ function sanitize(d) {
   const draft = normalizeDraft(d.draft, teams, signups);
   const signupById = new Map(signups.map(signup => [signup.id, signup]));
   draft.picks.forEach(pick => { signupById.get(pick.signupId).team = pick.teamId; });
+  syncSignupPlayers({ players, signups });
   return { site, teams, rounds, matches, players, news, rules, signups, draft };
 }
 
@@ -593,6 +637,7 @@ const server = http.createServer(async (req, res) => {
       draft.picks.push({ teamId: captainTeam.id, signupId: signup.id, price });
       draft.nextIndex = (turn.index + 1) % draft.order.length;
       data.draft = draft;
+      syncSignupPlayers(data);
       writeData(data);
       return send(res, 200, { ok: true });
     }
@@ -656,6 +701,7 @@ const server = http.createServer(async (req, res) => {
       signup.steam = player.profileUrl;
       signup.steamId = player.steamId;
       if (changes.photo !== undefined) signup.photo = okImage(changes.photo) ? changes.photo : '';
+      syncSignupPlayers(data);
       writeData(data);
       return send(res, 200, { ok: true });
     }
@@ -672,9 +718,13 @@ const server = http.createServer(async (req, res) => {
       const logo = findLogo();
       const data = readData();
       data.draft = normalizeDraft(data.draft, data.teams, data.signups);
+      const signupsById = new Map(data.signups.map(signup => [signup.id, signup]));
+      data.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
+      if (syncSignupPlayers(data)) writeData(data);
       if (!isAdmin(req)) {
         data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
+        data.players = data.players.map(({ steam, ...player }) => player);
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
       return send(res, 200, { ...data, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
@@ -731,6 +781,7 @@ const server = http.createServer(async (req, res) => {
       }
       const signupsById = new Map(clean.signups.map(signup => [signup.id, signup]));
       clean.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
+      syncSignupPlayers(clean);
       writeData(clean);
       // delete uploads nothing uses anymore
       const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo]).concat(clean.signups.map(s => s.photo)).map(u => path.basename(u || '')));

@@ -47,8 +47,10 @@
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('leaders'), 'the players'); }
   const { esc } = MHL;
-  if (!D.players.length) { $('tabs').hidden = true; $('leaders').innerHTML = MHL.empty('No players yet', 'Players and their stats appear here once they are added.'); return; }
-  const P = D.players.map(p => ({ ...p, p: p.g + p.a, t: D.T[p.team] }));
+  const P = D.players.filter(p => p.team && D.T[p.team]).map(p => ({ ...p, p: p.g + p.a, t: D.T[p.team] }));
+  if (!P.length) { $('tabs').hidden = true; $('leaders').innerHTML = MHL.empty('No players yet', 'Players and their stats appear here once they are added.'); return; }
+  const euroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const formatValue = value => Number(value) > 0 ? euroFormat.format(Number(value)) : '—';
   const NAMES = { p: 'Points', g: 'Goals', a: 'Assists' };
   const tie = { p: ['g', 'a'], g: ['p', 'a'], a: ['p', 'g'] };
   const rank = k => [...P].sort((x, y) => y[k] - x[k] || y[tie[k][0]] - x[tie[k][0]] || y[tie[k][1]] - x[tie[k][1]] || x.name.localeCompare(y.name));
@@ -69,10 +71,12 @@
     $('allBlock').hidden = false;
     const cols = [['g', 'G', 'Goals'], ['a', 'A', 'Assists'], ['p', 'P', 'Points']];
     $('all').innerHTML = `<div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Team</th><th class="l" scope="col">Pos</th>
+      <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th class="l" scope="col">Team</th><th class="l" scope="col">Pos</th>
+        <th scope="col">Hours</th><th scope="col">Skater value</th><th scope="col">Goalie value</th>
         ${cols.map(([k, s, t]) => `<th scope="col"${k === sortKey ? ' aria-sort="descending"' : ''}><button type="button" data-s="${k}" title="Sort by ${t}">${s}</button></th>`).join('')}</tr></thead>
       <tbody>${rank(sortKey).map(p => `<tr><td class="l"><b>${esc(p.name)}</b>${p.number ? ` <span style="color:var(--muted)">#${esc(p.number)}</span>` : ''}</td>
-        <td class="l"><span class="team">${MHL.badge(p.t)}${MHL.teamLink(p.t)}</span></td><td class="l">${p.role === 'goalie' ? 'Goalie' : 'Skater'}</td>
+        <td class="l">${esc(p.discord || '—')}</td><td class="l"><span class="team">${MHL.badge(p.t)}${MHL.teamLink(p.t)}</span></td><td class="l">${esc(p.signupPosition || (p.role === 'goalie' ? 'Goalie' : 'Skater'))}</td>
+        <td>${Number(p.hours) || 0}</td><td>${formatValue(p.skaterValue)}</td><td>${formatValue(p.goalieValue)}</td>
         <td>${p.g}</td><td>${p.a}</td><td class="pts">${p.p}</td></tr>`).join('')}</tbody>
     </table></div>`;
   }

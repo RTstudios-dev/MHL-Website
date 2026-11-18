@@ -44,6 +44,8 @@
   if (!t) return notFound();
 
   const r = D.table.S[t.id], n = D.teams.length;
+  const euroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const formatValue = value => Number(value) > 0 ? euroFormat.format(Number(value)) : '—';
   const ord = k => k + (['th', 'st', 'nd', 'rd'][(k % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][k % 100] || 'th');
   const gd = r.gf - r.ga;
   const mine = D.matches.filter(m => m.a === t.id || m.b === t.id);
@@ -66,8 +68,8 @@
     <div class="split">
       <section aria-labelledby="hRoster"><div class="bh"><h2 id="hRoster">Roster</h2></div>
         ${players.length ? `<div class="tbl-wrap"><table class="tbl mini">
-          <thead><tr><th scope="col" class="pos">#</th><th scope="col" class="l">Player</th><th scope="col" class="l">Pos</th><th scope="col" title="Goals">G</th><th scope="col" title="Assists">A</th><th scope="col" title="Points">P</th></tr></thead>
-          <tbody>${players.map(p => `<tr><td class="pos">${esc(p.number || '-')}</td><td class="l">${esc(p.name)}</td><td class="l">${p.role === 'goalie' ? 'Goalie' : 'Skater'}</td><td>${p.g}</td><td>${p.a}</td><td class="pts">${p.g + p.a}</td></tr>`).join('')}</tbody>
+          <thead><tr><th scope="col" class="pos">#</th><th scope="col" class="l">In-game name</th><th scope="col" class="l">Discord username</th><th scope="col" class="l">Pos</th><th scope="col">Hours</th><th scope="col">Skater value</th><th scope="col">Goalie value</th><th scope="col" title="Goals">G</th><th scope="col" title="Assists">A</th><th scope="col" title="Points">P</th></tr></thead>
+          <tbody>${players.map(p => `<tr><td class="pos">${esc(p.number || '-')}</td><td class="l">${esc(p.name)}</td><td class="l">${esc(p.discord || '—')}</td><td class="l">${esc(p.signupPosition || (p.role === 'goalie' ? 'Goalie' : 'Skater'))}</td><td>${Number(p.hours) || 0}</td><td>${formatValue(p.skaterValue)}</td><td>${formatValue(p.goalieValue)}</td><td>${p.g}</td><td>${p.a}</td><td class="pts">${p.g + p.a}</td></tr>`).join('')}</tbody>
         </table></div>` : MHL.empty('No players listed', 'The roster appears here once players are added.')}
       </section>
       <div>
