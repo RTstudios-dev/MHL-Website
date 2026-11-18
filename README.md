@@ -44,6 +44,7 @@ Remember to press **Save changes**, nothing goes live until you do.
 - News: pinned posts stay on top, the newest one also shows on the home page.
 - Rules: shown in the same order as in the admin.
 - Season 2 Player Sign Ups: signups include position and Steam profile. Steam links are admin-only; after signing up, players can choose to visit the Season 2 Player Sign Ups page. Admins can edit signup answers, assign a team, set separate Skater and Goalie Values in euros, and set the Ice Cap and Team Cap amounts. Assigned signups automatically appear as roster players with their signup details; the Players tab also lets admins edit their in-game name, Discord username, hours, and values. The caps appear between the signed-in player's entry and the public signup list. Team budgets and assigned Season 2 player values are shown in Teams. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
+- The game mod uses the read-only `GET /api/mod/roster` endpoint. It returns the Ice Cap and the SteamID/Skater Value/Goalie Value tuples for linked signups. This endpoint requires `Authorization: Bearer <MHL_MOD_API_KEY>` and does not include Steam profile URLs or other signup details.
 - Player Profile: the top-right Steam button becomes the player's profile picture when signed in. The profile page shows Discord and roster goals, assists, and points above the editable Season 2 signup. This does not change Admin login.
 - Settings: season name and Discord link (leave it empty to hide the Discord button).
 
@@ -90,10 +91,13 @@ The host needs Node 18+ and a **persistent disk**. Without one, every redeploy w
 4. Set these env vars:
    - `NODE_ENV=production`
    - `ADMIN_PASSWORD_HASH=` the line from step 1
+   - `MHL_MOD_API_KEY=` a separate random key of at least 32 characters for the game mod (never use the admin password)
    - `DATA_DIR=/data`
    - `TRUST_PROXY=1`
 
 Check `https://your-site/healthz` says `ok` and that you can log in at `/admin`.
+
+Generate a mod API key with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Set the same value as `MHL_MOD_API_KEY` in the website host environment and in the host game's MHL tab. Keep it private; the mod sends only the roster values needed for active players to clients in that game session.
 
 On the first start it copies `data.json` and `uploads/` onto the disk, after that the disk is what counts.
 So content changes go through `/admin` on the live site, and code/design changes get pushed to GitHub (redeploying doesn't touch the content).

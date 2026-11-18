@@ -6,6 +6,7 @@
 //   ADMIN_PASSWORD_HASH  from `node hash-password.js` (use this when hosted)
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
 //   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
+//   MHL_MOD_API_KEY      optional, read-only key for the game mod's roster endpoint
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
@@ -18,6 +19,7 @@ const PW_FILE = path.join(DATA_DIR, '.admin-password');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const STEAM_OPENID = 'https://steamcommunity.com/openid/login';
 const STEAM_API_KEY = (process.env.STEAM_API_KEY || '').trim();
+const MHL_MOD_API_KEY = (process.env.MHL_MOD_API_KEY || '').trim();
 // league logo: logo.png, logo.webp or logo.jpg next to server.js (optional)
 const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
@@ -712,6 +714,35 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true }, 'application/json', {
         'Set-Cookie': `mhl_player=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
       });
+    }
+    if (p === '/api/mod/roster' && req.method === 'GET') {
+      if (!allowPublic('mod-roster:' + clientIp(req), 30, 60 * 1000)) {
+        return send(res, 429, { error: 'Too many roster requests. Try again shortly.' });
+      }
+      if (MHL_MOD_API_KEY.length < 32) {
+        return send(res, 503, { error: 'The mod roster API is not configured.' });
+      }
+
+      const authorization = String(req.headers.authorization || '');
+      const apiKey = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+      if (!apiKey || apiKey.length > 256 || !safeEq(apiKey, MHL_MOD_API_KEY)) {
+        return send(res, 401, { error: 'A valid mod API key is required.' });
+      }
+
+      const data = readData();
+      const seenSteamIds = new Set();
+      const players = [];
+      for (const signup of data.signups) {
+        const steamId = String(signup.steamId || '');
+        if (!/^\d{17}$/.test(steamId)) continue;
+        if (seenSteamIds.has(steamId)) {
+          return send(res, 409, { error: 'Duplicate Steam accounts are linked to MHL signups.' });
+        }
+        seenSteamIds.add(steamId);
+        players.push({ steamId, ...signupValues(signup) });
+      }
+
+      return send(res, 200, { iceCap: data.site.iceCap, players });
     }
     if (p === '/api/data' && req.method === 'GET') {
       // logoUrl: pages swap the wordmark for the logo when there is one
