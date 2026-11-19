@@ -195,6 +195,7 @@
     const list = [...filtered()];
     if (source === 'season2' && key !== 'value') return list.sort(compareName);
     return list.sort((x, y) => (direction === 'high' ? metricValue(y) - metricValue(x) : metricValue(x) - metricValue(y))
+      || y.value - x.value
       || compareName(x, y));
   };
 
