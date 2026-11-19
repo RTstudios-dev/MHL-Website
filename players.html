@@ -191,14 +191,17 @@
   const compareName = (x, y) => String(x.name || '').localeCompare(String(y.name || ''));
   const isGoalieInCurrentFilter = player => player.goalie
     || (filter === 'goalie' && String(player.position || '').toLocaleLowerCase() === 'flexible');
+  const valueForCurrentFilter = player => filter === 'goalie'
+    ? Number(player.goalieValue) || 0
+    : filter === 'skater' ? Number(player.skaterValue) || 0 : player.value;
   const metricValue = player => key === 'p' ? player.p
     : key === 'gs' ? (isGoalieInCurrentFilter(player) ? player.s : player.g)
-      : key === 'a' ? player.a : player.value;
+      : key === 'a' ? player.a : valueForCurrentFilter(player);
   const rank = () => {
     const list = [...filtered()];
     if (source === 'season2' && key !== 'value') return list.sort(compareName);
     return list.sort((x, y) => (direction === 'high' ? metricValue(y) - metricValue(x) : metricValue(x) - metricValue(y))
-      || y.value - x.value
+      || valueForCurrentFilter(y) - valueForCurrentFilter(x)
       || compareName(x, y));
   };
 
@@ -224,12 +227,15 @@
     }
     const [one, ...rest] = list;
     $('leaders').innerHTML = `<div class="leaders">
-    <div class="top1"><div class="top1-person">${playerAvatar(one, 'leader-photo featured-photo')}<div><span class="k">${NAMES[key]} leader</span><h2>${esc(one.name)}</h2></div></div><span class="big num">${key === 'value' ? formatValue(one.value) : metricValue(one)}</span></div>
-    <div class="rest">${rest.slice(0, 4).map((p, i) => `<div class="lm"><span class="r">${i + 2}</span>${playerAvatar(p, 'leader-photo')}<span class="nm">${esc(p.name)}</span><span class="v">${key === 'value' ? formatValue(p.value) : metricValue(p)}</span></div>`).join('')
+    <div class="top1"><div class="top1-person">${playerAvatar(one, 'leader-photo featured-photo')}<div><span class="k">${leaderLabel()}</span><h2>${esc(one.name)}</h2></div></div><span class="big num">${key === 'value' ? formatValue(valueForCurrentFilter(one)) : metricValue(one)}</span></div>
+    <div class="rest">${rest.slice(0, 4).map((p, i) => `<div class="lm"><span class="r">${i + 2}</span>${playerAvatar(p, 'leader-photo')}<span class="nm">${esc(p.name)}</span><span class="v">${key === 'value' ? formatValue(valueForCurrentFilter(p)) : metricValue(p)}</span></div>`).join('')
         || '<div class="lm"><span></span><span></span><span class="nm">No one else has any yet.</span><span></span></div>'}</div>
     </div>`;
   }
   const goalColumnLabel = () => filter === 'all' ? 'G/S' : filter === 'goalie' ? 'S' : 'G';
+  const leaderLabel = () => key === 'value'
+    ? `Most Valuable ${filter === 'goalie' ? 'Goalie' : filter === 'skater' ? 'Skater' : 'Player'}`
+    : `${NAMES[key]} leader`;
   function table() {
     $('allBlock').hidden = false;
     const rows = rank();
@@ -274,6 +280,10 @@
     const button = event.target.closest('button[data-filter]');
     if (!button) return;
     filter = button.dataset.filter;
+    if (filter === 'goalie') {
+      key = 'value';
+      $('statSelect').value = key;
+    }
     $('playerFilters').querySelectorAll('button').forEach(item =>
       item.setAttribute('aria-pressed', String(item === button)));
     $('hAll').textContent = button.textContent;
