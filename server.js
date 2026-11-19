@@ -545,6 +545,137 @@ const writeData = d => {
   fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(d, null, 2));
   fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
 };
+const normalizeStatsReports = rawReports => {
+  if (!Array.isArray(rawReports) || rawReports.length > 10_000)
+    return { error: 'The stats payload is invalid.' };
+
+  const reports = [];
+  let totalEvents = 0;
+  for (const rawReport of rawReports) {
+    if (!rawReport || typeof rawReport !== 'object' || Array.isArray(rawReport))
+      return { error: 'The stats payload is invalid.' };
+
+    const rawGameId = String(rawReport.gameId ?? '').trim();
+    const gameId = str(rawGameId, 120);
+    if (rawGameId.length > 120 || !/^[a-zA-Z0-9._:-]{1,120}$/.test(gameId) ||
+        !Array.isArray(rawReport.events) || rawReport.events.length > 2000) {
+      return { error: 'The stats payload is invalid.' };
+    }
+
+    totalEvents += rawReport.events.length;
+    if (totalEvents > 50_000)
+      return { error: 'The stats payload contains too many events.' };
+
+    const events = [];
+    for (const raw of rawReport.events) {
+      const rawEventId = String((raw && raw.eventId) ?? '').trim();
+      const eventId = str(rawEventId, 180);
+      const type = raw && raw.type;
+      if (!eventId || rawEventId.length > 180 || !eventId.startsWith(gameId + ':'))
+        return { error: 'A stats event has an invalid event ID.' };
+
+      if (type === 'goal') {
+        const scorerSteamId = str(raw.scorerSteamId, 17);
+        const assist1SteamId = str(raw.assist1SteamId, 17);
+        const assist2SteamId = str(raw.assist2SteamId, 17);
+        if (!/^\d{17}$/.test(scorerSteamId) ||
+            (assist1SteamId && !/^\d{17}$/.test(assist1SteamId)) ||
+            (assist2SteamId && !/^\d{17}$/.test(assist2SteamId))) {
+          return { error: 'A goal event has an invalid Steam ID.' };
+        }
+        events.push({ eventId, type, scorerSteamId, assist1SteamId, assist2SteamId });
+      } else if (type === 'save') {
+        const steamId = str(raw.steamId, 17);
+        const count = Number(raw.count);
+        if (!/^\d{17}$/.test(steamId) || !Number.isSafeInteger(count) || count < 1 || count > 1000)
+          return { error: 'A save event is invalid.' };
+        events.push({ eventId, type, steamId, count });
+      } else {
+        return { error: 'A stats event has an unknown type.' };
+      }
+    }
+
+    reports.push({ gameId, events });
+  }
+
+  if (totalEvents === 0)
+    return { error: 'The stats payload contains no events.' };
+  return { reports };
+};
+const applyStatsReports = (data, reports) => {
+  const signupBySteamId = new Map();
+  for (const signup of data.signups) {
+    const steamId = signupSteamId(signup);
+    if (!/^\d{17}$/.test(steamId)) continue;
+    if (signupBySteamId.has(steamId))
+      return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
+    signupBySteamId.set(steamId, signup);
+  }
+
+  const playerStats = data.playerStats && typeof data.playerStats === 'object'
+    ? data.playerStats
+    : {};
+  const trackedIds = Array.isArray(data.modStatEventIds)
+    ? data.modStatEventIds.filter(id => typeof id === 'string')
+    : [];
+  const seen = new Set(trackedIds);
+  let accepted = 0;
+  let ignored = 0;
+  let credited = 0;
+  let unmatched = 0;
+  const countsFor = signupId => {
+    if (!Object.prototype.hasOwnProperty.call(playerStats, signupId) ||
+        !playerStats[signupId] || typeof playerStats[signupId] !== 'object')
+      playerStats[signupId] = emptyTrackedStats();
+    return playerStats[signupId];
+  };
+
+  for (const report of reports) {
+    for (const event of report.events) {
+      if (seen.has(event.eventId)) {
+        ignored++;
+        continue;
+      }
+      seen.add(event.eventId);
+      accepted++;
+
+      if (event.type === 'goal') {
+        let eventCredited = false;
+        const scorer = signupBySteamId.get(event.scorerSteamId);
+        if (scorer) {
+          const stats = countsFor(scorer.id);
+          stats.goals = increaseTrackedStat(stats.goals);
+          eventCredited = true;
+        }
+        const creditedAssists = new Set([event.assist1SteamId, event.assist2SteamId]
+          .filter(steamId => steamId && steamId !== event.scorerSteamId));
+        for (const steamId of creditedAssists) {
+          const signup = signupBySteamId.get(steamId);
+          if (signup) {
+            const stats = countsFor(signup.id);
+            stats.assists = increaseTrackedStat(stats.assists);
+            eventCredited = true;
+          }
+        }
+        if (eventCredited) credited++;
+        else unmatched++;
+      } else {
+        const signup = signupBySteamId.get(event.steamId);
+        if (signup && signup.position === 'Goalie') {
+          const stats = countsFor(signup.id);
+          stats.saves = increaseTrackedStat(stats.saves, event.count);
+          credited++;
+        } else unmatched++;
+      }
+    }
+  }
+
+  if (accepted > 0) {
+    data.playerStats = playerStats;
+    data.modStatEventIds = [...seen];
+  }
+  return { accepted, ignored, credited, unmatched };
+};
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -810,119 +941,29 @@ const server = http.createServer(async (req, res) => {
       }
 
       const payload = JSON.parse(await readBody(req, 500_000) || '{}');
-      if (!payload || typeof payload !== 'object') {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload))
         return send(res, 400, { error: 'The stats payload is invalid.' });
-      }
-      const rawGameId = String(payload.gameId ?? '').trim();
-      const gameId = str(rawGameId, 120);
-      if (rawGameId.length > 120 || !/^[a-zA-Z0-9._:-]{1,120}$/.test(gameId) ||
-          !Array.isArray(payload.events) || payload.events.length > 2000) {
-        return send(res, 400, { error: 'The stats payload is invalid.' });
-      }
-
-      const events = [];
-      for (const raw of payload.events) {
-        const rawEventId = String((raw && raw.eventId) ?? '').trim();
-        const eventId = str(rawEventId, 180);
-        const type = raw && raw.type;
-        if (!eventId || rawEventId.length > 180 || !eventId.startsWith(gameId + ':')) {
-          return send(res, 400, { error: 'A stats event has an invalid event ID.' });
-        }
-        if (type === 'goal') {
-          const scorerSteamId = str(raw.scorerSteamId, 17);
-          const assist1SteamId = str(raw.assist1SteamId, 17);
-          const assist2SteamId = str(raw.assist2SteamId, 17);
-          if (!/^\d{17}$/.test(scorerSteamId) ||
-              (assist1SteamId && !/^\d{17}$/.test(assist1SteamId)) ||
-              (assist2SteamId && !/^\d{17}$/.test(assist2SteamId))) {
-            return send(res, 400, { error: 'A goal event has an invalid Steam ID.' });
-          }
-          events.push({ eventId, type, scorerSteamId, assist1SteamId, assist2SteamId });
-        } else if (type === 'save') {
-          const steamId = str(raw.steamId, 17);
-          const count = Number(raw.count);
-          if (!/^\d{17}$/.test(steamId) || !Number.isSafeInteger(count) || count < 1 || count > 1000) {
-            return send(res, 400, { error: 'A save event is invalid.' });
-          }
-          events.push({ eventId, type, steamId, count });
-        } else {
-          return send(res, 400, { error: 'A stats event has an unknown type.' });
-        }
-      }
+      const normalized = normalizeStatsReports([{ gameId: payload.gameId, events: payload.events }]);
+      if (normalized.error) return send(res, 400, { error: normalized.error });
 
       const data = readData();
-      const signupBySteamId = new Map();
-      for (const signup of data.signups) {
-        const steamId = signupSteamId(signup);
-        if (!/^\d{17}$/.test(steamId)) continue;
-        if (signupBySteamId.has(steamId)) {
-          return send(res, 409, { error: 'Duplicate Steam accounts are linked to MHL signups.' });
-        }
-        signupBySteamId.set(steamId, signup);
-      }
+      const result = applyStatsReports(data, normalized.reports);
+      if (result.error) return send(res, 409, { error: result.error });
+      if (result.accepted > 0) writeData(data);
+      return send(res, 200, result);
+    }
+    if (p === '/api/admin/import-stats' && req.method === 'POST') {
+      if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
 
-      const playerStats = data.playerStats && typeof data.playerStats === 'object'
-        ? data.playerStats
-        : {};
-      const trackedIds = Array.isArray(data.modStatEventIds)
-        ? data.modStatEventIds.filter(id => typeof id === 'string')
-        : [];
-      const seen = new Set(trackedIds);
-      const acceptedIds = [];
-      let creditedEvents = 0;
-      let unmatchedEvents = 0;
-      const countsFor = signupId => {
-        if (!Object.prototype.hasOwnProperty.call(playerStats, signupId) ||
-            !playerStats[signupId] || typeof playerStats[signupId] !== 'object')
-          playerStats[signupId] = emptyTrackedStats();
-        return playerStats[signupId];
-      };
-      for (const event of events) {
-        if (seen.has(event.eventId)) continue;
-        seen.add(event.eventId);
-        acceptedIds.push(event.eventId);
+      const payload = JSON.parse(await readBody(req, 20_000_000) || '{}');
+      const normalized = normalizeStatsReports(payload && payload.reports);
+      if (normalized.error) return send(res, 400, { error: normalized.error });
 
-        if (event.type === 'goal') {
-          let credited = false;
-          const scorer = signupBySteamId.get(event.scorerSteamId);
-          if (scorer) {
-            const stats = countsFor(scorer.id);
-            stats.goals = increaseTrackedStat(stats.goals);
-            credited = true;
-          }
-          const creditedAssists = new Set([event.assist1SteamId, event.assist2SteamId]
-            .filter(steamId => steamId && steamId !== event.scorerSteamId));
-          for (const steamId of creditedAssists) {
-            const signup = signupBySteamId.get(steamId);
-            if (signup) {
-              const stats = countsFor(signup.id);
-              stats.assists = increaseTrackedStat(stats.assists);
-              credited = true;
-            }
-          }
-          if (credited) creditedEvents++;
-          else unmatchedEvents++;
-        } else {
-          const signup = signupBySteamId.get(event.steamId);
-          if (signup && signup.position === 'Goalie') {
-            const stats = countsFor(signup.id);
-            stats.saves = increaseTrackedStat(stats.saves, event.count);
-            creditedEvents++;
-          } else unmatchedEvents++;
-        }
-      }
-
-      if (acceptedIds.length) {
-        data.playerStats = playerStats;
-        data.modStatEventIds = [...seen];
-        writeData(data);
-      }
-      return send(res, 200, {
-        accepted: acceptedIds.length,
-        ignored: events.length - acceptedIds.length,
-        credited: creditedEvents,
-        unmatched: unmatchedEvents,
-      });
+      const data = readData();
+      const result = applyStatsReports(data, normalized.reports);
+      if (result.error) return send(res, 409, { error: result.error });
+      if (result.accepted > 0) writeData(data);
+      return send(res, 200, result);
     }
     if (p === '/api/data' && req.method === 'GET') {
       // logoUrl: pages swap the wordmark for the logo when there is one

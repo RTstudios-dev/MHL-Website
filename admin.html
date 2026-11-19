@@ -146,7 +146,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {};
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '';
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   // h('div', {class: 'x', onclick: fn}, ...children)
@@ -249,6 +249,35 @@ const MHLA = (() => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { alert(j.error || 'Upload failed'); return null; }
     return j.url;
+  }
+
+  async function importStatsReports(reports) {
+    if (!Array.isArray(reports)) return;
+    if (dirty && !confirm('Importing stats will discard your unsaved admin changes. Continue?')) return;
+    dirty = false;
+    trackedStatsEdits = {};
+    statsImportMessage = 'Importing stats...';
+    const status = document.getElementById('statsImportStatus');
+    if (status) status.textContent = statsImportMessage;
+
+    try {
+      const r = await fetch('/api/admin/import-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reports }),
+      });
+      const result = await r.json().catch(() => ({}));
+      if (r.status === 401) return login('Your session ended. Log in again to import stats.');
+      if (!r.ok) throw new Error(result.error || 'Stats import failed.');
+
+      statsImportMessage = `Import complete: ${result.credited || 0} event(s) credited, ${result.unmatched || 0} unmatched, ${result.ignored || 0} duplicate(s) skipped.`;
+      statsImportReports = null;
+      await start();
+    } catch (error) {
+      statsImportMessage = 'Stats import failed: ' + error.message;
+      const currentStatus = document.getElementById('statsImportStatus');
+      if (currentStatus) currentStatus.textContent = statsImportMessage;
+    }
   }
 
   // frame
@@ -589,6 +618,46 @@ const MHLA = (() => {
         D.players.push({ id: uid(), name: '', team: playerFilter || (D.teams[0] && D.teams[0].id) || '', role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
         const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
       } }, 'Add player')),
+      (() => {
+        const status = h('p', { id: 'statsImportStatus', class: 'help', role: 'status' },
+          statsImportMessage || 'Choose the pending JSON file produced by the game server.');
+        const importButton = h('button', {
+          class: 'btn sm', type: 'button', id: 'statsImportButton', disabled: true,
+          onclick: () => importStatsReports(statsImportReports),
+        }, 'Import stats');
+        const fileInput = h('input', {
+          type: 'file', accept: '.json,application/json', 'aria-label': 'Pending game stats JSON',
+          onchange: async e => {
+            const file = e.target.files && e.target.files[0];
+            statsImportReports = null;
+            statsImportMessage = '';
+            importButton.disabled = true;
+            if (!file) return;
+            try {
+              if (file.size > 20_000_000) throw new Error('The JSON file must be 20 MB or smaller.');
+              const payload = JSON.parse(await file.text());
+              if (!payload || !Array.isArray(payload.reports))
+                throw new Error('This is not an MHL pending-stats JSON file.');
+              const eventCount = payload.reports.reduce(
+                (count, report) => count + (Array.isArray(report && report.events) ? report.events.length : 0), 0);
+              if (payload.reports.length > 10_000 || eventCount > 50_000)
+                throw new Error('The JSON file contains too many reports or events.');
+              if (eventCount === 0) throw new Error('The JSON file contains no stats events.');
+              statsImportReports = payload.reports;
+              statsImportMessage = `Read ${eventCount} event(s) from ${payload.reports.length} report(s). Import to credit linked signups; duplicates will be skipped.`;
+              status.textContent = statsImportMessage;
+              importButton.disabled = false;
+            } catch (error) {
+              statsImportMessage = 'Could not read stats JSON: ' + error.message;
+              status.textContent = statsImportMessage;
+            }
+          },
+        });
+        return h('div', { class: 'help' },
+          h('b', {}, 'Import game stats JSON'),
+          h('p', {}, 'Select the pending stats file from the game server. The file is read automatically; review the preview, then import.'),
+          fileInput, ' ', importButton, status);
+      })(),
       h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists and saves here. Game mod events continue adding to the tracked stats; saves count toward points at one point per two saves.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
