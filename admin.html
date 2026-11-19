@@ -114,6 +114,14 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .ptable .n{width:76px}
 .pwrap{overflow-x:auto}
 .ptable{min-width:1120px}
+.logtable{min-width:1320px}
+.logtable td{font-size:13px}
+.logtable td small{display:block;color:var(--muted);max-width:260px;white-space:normal}
+.logtable code{font-size:12px;white-space:nowrap}
+.log-status{font-weight:600;white-space:nowrap}
+.log-status.imported{color:var(--gold)}
+.log-status.duplicate{color:var(--muted)}
+.log-status.failed{color:var(--danger)}
 .filter{max-width:280px;margin-bottom:14px}
 .signup-sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
 .signup-sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
@@ -147,6 +155,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 const MHLA = (() => {
   const root = document.getElementById('root');
   let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '';
+  let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   // h('div', {class: 'x', onclick: fn}, ...children)
@@ -231,6 +240,29 @@ const MHLA = (() => {
     draw();
   }
 
+  async function loadStatsImportLogs() {
+    if (statsImportLogsLoading) return;
+    statsImportLogsLoading = true;
+    statsImportLogsError = '';
+    draw();
+    scrollTo(0, 0);
+    try {
+      const r = await fetch('/api/admin/stats-import-logs', { cache: 'no-store' });
+      const result = await r.json().catch(() => ({}));
+      if (r.status === 401) {
+        statsImportLogsLoading = false;
+        dirty = false;
+        return login('Your admin session ended. Log in again to view import logs.');
+      }
+      if (!r.ok) throw new Error(result.error || 'Could not load import logs.');
+      statsImportLogs = Array.isArray(result.logs) ? result.logs : [];
+    } catch (error) {
+      statsImportLogsError = error.message || 'Could not load import logs.';
+    }
+    statsImportLogsLoading = false;
+    if (tab === 'logs') draw();
+  }
+
   async function save() {
     const b = document.getElementById('saveBtn'), s = document.getElementById('status');
     b.disabled = true; s.textContent = 'Saving...'; s.className = 'status';
@@ -281,11 +313,15 @@ const MHLA = (() => {
   }
 
   // frame
-  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Player Sign Ups'], ['news', 'News'], ['rules', 'Rules'], ['settings', 'Settings']];
+  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Player Sign Ups'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
   function draw() {
     const y = scrollY;
     const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
-      TABS.map(([k, t]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(k === tab), onclick: () => { tab = k; draw(); scrollTo(0, 0); } }, t)));
+      TABS.map(([k, t]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(k === tab), onclick: () => {
+        tab = k;
+        if (k === 'logs') loadStatsImportLogs();
+        else { draw(); scrollTo(0, 0); }
+      } }, t)));
     const bar = h('header', { class: 'bar' }, h('div', { class: 'wrap' },
       h('b', {}, 'MHL Admin'), seg,
       h('div', { class: 'right' },
@@ -297,7 +333,7 @@ const MHLA = (() => {
           if (dirty && !confirm('You have unsaved changes. Log out anyway?')) return;
           dirty = false; await fetch('/api/logout', { method: 'POST' }); login();
         } }, 'Log out'))));
-    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, signups, news, rules, settings })[tab]());
+    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, signups, news, rules, logs, settings })[tab]());
     root.replaceChildren(bar, panel);
     scrollTo(0, y);
   }
@@ -884,6 +920,55 @@ const MHLA = (() => {
             if (!confirm(`Delete rule ${i + 1}?`)) return;
             D.rules = D.rules.filter(x => x !== r); touch(); draw();
           } }, 'Delete')))) : h('div', { class: 'empty' }, h('b', {}, 'No rules yet'), 'Press Add rule to write the first one.'),
+    ];
+  }
+
+  function logs() {
+    const entries = Array.isArray(statsImportLogs) ? statsImportLogs : [];
+    const dateFormat = new Intl.DateTimeFormat(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', second: '2-digit',
+    });
+    const formatDate = value => {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? 'Unknown time' : dateFormat.format(date);
+    };
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    const statusLabel = { imported: 'Imported', duplicate: 'Duplicate', failed: 'Failed' };
+    return [
+      head('Logs', h('button', {
+        class: 'btn sm', type: 'button', disabled: statsImportLogsLoading,
+        onclick: loadStatsImportLogs,
+      }, statsImportLogsLoading ? 'Loading...' : 'Refresh')),
+      h('p', { class: 'help' }, 'The latest 500 automatic stats JSON imports from server push and SFTP are shown here. Times use your browser’s local time. Each entry includes the file hash and event totals; a pushed file may not provide its original filename.'),
+      statsImportLogsError ? h('p', { class: 'err', role: 'alert' }, statsImportLogsError) : null,
+      statsImportLogsLoading ? h('p', { class: 'help', role: 'status' }, 'Loading import logs...') : null,
+      !statsImportLogsLoading && !statsImportLogsError && !entries.length
+        ? h('div', { class: 'empty' }, h('b', {}, 'No automatic imports yet'), 'Successful uploads, duplicates, and file validation failures will appear here.')
+        : null,
+      entries.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable logtable' },
+        h('thead', {}, h('tr', {}, [
+          'Date / time', 'Source', 'Server', 'File', 'Status', 'Reports',
+          'Events', 'Accepted', 'Credited', 'Unmatched', 'Duplicates', 'SHA-256',
+        ].map(label => h('th', { scope: 'col' }, label)))),
+        h('tbody', {}, entries.map(entry => {
+          const status = ['imported', 'duplicate', 'failed'].includes(entry.status) ? entry.status : 'failed';
+          const hash = typeof entry.fileHash === 'string' ? entry.fileHash : '';
+          return h('tr', {},
+            h('td', {}, formatDate(entry.timestamp)),
+            h('td', {}, String(entry.source || '—').toUpperCase()),
+            h('td', {}, entry.server || '—'),
+            h('td', {}, entry.fileName || 'Not provided'),
+            h('td', {}, h('span', { class: 'log-status ' + status }, statusLabel[status]),
+              entry.error ? h('small', {}, entry.error) : null),
+            h('td', { class: 'tot' }, count(entry.reportCount)),
+            h('td', { class: 'tot' }, count(entry.eventCount)),
+            h('td', { class: 'tot' }, count(entry.accepted)),
+            h('td', { class: 'tot' }, count(entry.credited)),
+            h('td', { class: 'tot' }, count(entry.unmatched)),
+            h('td', { class: 'tot' }, count(entry.duplicates)),
+            h('td', {}, hash ? h('code', { title: hash }, hash.slice(0, 12) + '…') : '—'));
+        })))) : null,
     ];
   }
 

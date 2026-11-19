@@ -9,6 +9,7 @@
 //   MHL_MOD_API_KEY      key for protected roster access and game-stat uploads; the public roster needs no key
 //   MHL_STATS_SFTP_CONFIG optional SFTP sources for pulling pending game-stat JSON
 //   MHL_STATS_SFTP_POLL_SECONDS polling interval for SFTP sources; default 60
+//   MHL_STATS_PUSH_KEY   optional key for the server-script stats import endpoint
 //   The public mod roster endpoint exposes linked Steam IDs, player values, tracked stats, and the Ice Cap.
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
@@ -23,12 +24,14 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const STEAM_OPENID = 'https://steamcommunity.com/openid/login';
 const STEAM_API_KEY = (process.env.STEAM_API_KEY || '').trim();
 const MHL_MOD_API_KEY = (process.env.MHL_MOD_API_KEY || '').trim();
+const MHL_STATS_PUSH_KEY = (process.env.MHL_STATS_PUSH_KEY || '').trim();
 // league logo: logo.png, logo.webp or logo.jpg next to server.js (optional)
 const LOGO_TYPES = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg' };
 const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file = path.join(DIR, 'logo.' + ext); if (fs.existsSync(file)) return { file, url: '/logo.' + ext, type: LOGO_TYPES[ext] }; } return null; };
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [] };
+const MAX_STATS_IMPORT_LOGS = 500;
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -210,6 +213,30 @@ const readRaw = (req, max = 300_000) => new Promise((resolve, reject) => {
   req.on('data', c => { size += c.length; if (size > max) { reject(new Error('too large')); req.destroy(); } else chunks.push(c); });
   req.on('end', () => resolve(Buffer.concat(chunks)));
   req.on('error', reject);
+});
+const readRawLimited = (req, max) => new Promise((resolve, reject) => {
+  let size = 0;
+  let tooLarge = false;
+  const chunks = [];
+  req.on('data', chunk => {
+    if (tooLarge) return;
+    size += chunk.length;
+    if (size > max) {
+      tooLarge = true;
+      chunks.length = 0;
+      const error = new Error('Request body too large.');
+      error.statusCode = 413;
+      reject(error);
+    } else {
+      chunks.push(chunk);
+    }
+  });
+  req.on('end', () => {
+    if (!tooLarge) resolve(Buffer.concat(chunks));
+  });
+  req.on('error', error => {
+    if (!tooLarge) reject(error);
+  });
 });
 
 // clean up whatever the admin page sends
@@ -547,6 +574,38 @@ const writeData = d => {
   fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(d, null, 2));
   fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
 };
+const appendStatsImportLog = (data, entry) => {
+  const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  const safeText = (value, maxLength) => String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .slice(0, maxLength);
+  const status = ['imported', 'duplicate', 'failed'].includes(entry.status) ? entry.status : 'failed';
+  const logs = Array.isArray(data.statsImportLogs)
+    ? data.statsImportLogs.filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    : [];
+  logs.unshift({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    source: entry.source === 'sftp' ? 'sftp' : 'push',
+    server: safeText(entry.server, 80),
+    fileName: safeText(entry.fileName, 255),
+    fileHash: /^[a-f0-9]{64}$/i.test(entry.fileHash || '') ? entry.fileHash.toLowerCase() : '',
+    status,
+    reportCount: count(entry.reportCount),
+    eventCount: count(entry.eventCount),
+    accepted: count(entry.accepted),
+    credited: count(entry.credited),
+    unmatched: count(entry.unmatched),
+    duplicates: count(entry.duplicates),
+    error: safeText(entry.error, 240),
+  });
+  data.statsImportLogs = logs.slice(0, MAX_STATS_IMPORT_LOGS);
+};
+const writeStatsImportLog = entry => {
+  const data = readData();
+  appendStatsImportLog(data, entry);
+  writeData(data);
+};
 const normalizeStatsReports = rawReports => {
   if (!Array.isArray(rawReports) || rawReports.length > 10_000)
     return { error: 'The stats payload is invalid.' };
@@ -677,6 +736,41 @@ const applyStatsReports = (data, reports) => {
     data.modStatEventIds = [...seen];
   }
   return { accepted, ignored, credited, unmatched };
+};
+
+const importStatsReports = (rawReports, logContext = null) => {
+  const normalized = normalizeStatsReports(rawReports);
+  if (normalized.error) {
+    if (logContext) writeStatsImportLog({ ...logContext, status: 'failed', error: normalized.error });
+    return { error: normalized.error };
+  }
+
+  const data = readData();
+  const result = applyStatsReports(data, normalized.reports);
+  if (result.error) {
+    if (logContext) {
+      appendStatsImportLog(data, { ...logContext, status: 'failed', error: result.error });
+      writeData(data);
+    }
+    throw new Error(result.error);
+  }
+  if (logContext) {
+    const eventCount = normalized.reports.reduce((count, report) => count + report.events.length, 0);
+    appendStatsImportLog(data, {
+      ...logContext,
+      status: result.accepted === 0 && result.ignored > 0 ? 'duplicate' : 'imported',
+      reportCount: normalized.reports.length,
+      eventCount,
+      accepted: result.accepted,
+      credited: result.credited,
+      unmatched: result.unmatched,
+      duplicates: result.ignored,
+    });
+    writeData(data);
+  } else if (result.accepted > 0) {
+    writeData(data);
+  }
+  return result;
 };
 
 const loadStatsSftpConfig = () => {
@@ -833,22 +927,21 @@ const pollStatsSftpSource = async (config, source) => {
       return;
     }
 
+    const logContext = {
+      source: 'sftp',
+      server: source.name,
+      fileName: path.basename(source.remotePath),
+      fileHash: hash,
+    };
     let payload;
     try {
       payload = JSON.parse(jsonText);
     } catch {
+      writeStatsImportLog({ ...logContext, status: 'failed', error: 'The pending JSON file is not valid JSON.' });
       throw new Error('The pending JSON file is not valid JSON.');
     }
-    const normalized = normalizeStatsReports(payload && payload.reports);
-    if (normalized.error)
-      throw new Error(normalized.error);
-
-    const data = readData();
-    const result = applyStatsReports(data, normalized.reports);
-    if (result.error)
-      throw new Error(result.error);
-    if (result.accepted > 0)
-      writeData(data);
+    const result = importStatsReports(payload && payload.reports, logContext);
+    if (result.error) throw new Error(result.error);
 
     statsSftpHashes.set(source.name, hash);
     statsSftpErrors.delete(source.name);
@@ -888,6 +981,87 @@ const pollStatsSftpSources = async () => {
   }
 };
 
+const handleStatsPush = async (req, res) => {
+  const rejectBeforeBody = (status, message) => {
+    req.resume();
+    return send(res, status, { error: message });
+  };
+
+  let serverId = 'unknown';
+  try {
+    if (!MHL_STATS_PUSH_KEY)
+      return rejectBeforeBody(503, 'Stats push is not configured.');
+    if (!allowPublic('stats-import:' + clientIp(req), 30, 60 * 1000))
+      return rejectBeforeBody(429, 'Too many stats imports. Try again shortly.');
+
+    const authorization = req.headers.authorization;
+    const suppliedKey = typeof authorization === 'string' && authorization.startsWith('Bearer ')
+      ? authorization.slice(7)
+      : '';
+    const expectedKeyBytes = Buffer.from(MHL_STATS_PUSH_KEY, 'utf8');
+    const suppliedKeyBytes = Buffer.from(suppliedKey, 'utf8');
+    if (suppliedKeyBytes.length !== expectedKeyBytes.length ||
+        !crypto.timingSafeEqual(suppliedKeyBytes, expectedKeyBytes)) {
+      return rejectBeforeBody(401, 'A valid stats push key is required.');
+    }
+
+    const contentType = String(req.headers['content-type'] || '')
+      .split(';', 1)[0].trim().toLowerCase();
+    if (contentType !== 'application/json')
+      return rejectBeforeBody(400, 'Content-Type must be application/json.');
+
+    serverId = req.headers['x-mhl-server'];
+    if (typeof serverId !== 'string' || !['server1', 'server2', 'server3'].includes(serverId))
+      return rejectBeforeBody(400, 'X-MHL-Server must identify server1, server2, or server3.');
+
+    const fileHashHeader = req.headers['x-mhl-file-hash'];
+    if (typeof fileHashHeader !== 'string' || !/^[a-f0-9]{64}$/i.test(fileHashHeader.trim()))
+      return rejectBeforeBody(400, 'X-MHL-File-Hash must be a SHA-256 hex digest.');
+
+    let rawBody;
+    try {
+      rawBody = await readRawLimited(req, 2 * 1024 * 1024);
+    } catch (error) {
+      if (error && error.statusCode === 413)
+        return send(res, 413, { error: 'Stats JSON exceeds the 2 MB limit.' });
+      throw error;
+    }
+
+    const actualHash = crypto.createHash('sha256').update(rawBody).digest('hex');
+    if (actualHash !== fileHashHeader.trim().toLowerCase())
+      return send(res, 400, { error: 'X-MHL-File-Hash does not match the request body.' });
+
+    let payload;
+    const logContext = {
+      source: 'push',
+      server: serverId,
+      fileHash: actualHash,
+    };
+    try {
+      payload = JSON.parse(rawBody.toString('utf8'));
+    } catch {
+      writeStatsImportLog({ ...logContext, status: 'failed', error: 'The request body is not valid JSON.' });
+      return send(res, 400, { error: 'The request body is not valid JSON.' });
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      writeStatsImportLog({ ...logContext, status: 'failed', error: 'The stats payload is invalid.' });
+      return send(res, 400, { error: 'The stats payload is invalid.' });
+    }
+
+    const result = importStatsReports(payload.reports, logContext);
+    if (result.error)
+      return send(res, 400, { error: result.error });
+    if (result.accepted === 0 && result.ignored > 0)
+      return send(res, 200, { status: 'duplicate' });
+    return send(res, 200, { status: 'imported', ...result });
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    console.error('[stats-import] Failed to store stats for ' + serverId + ': ' + message);
+    if (!res.headersSent)
+      return send(res, 500, { error: 'Stats import failed. Please retry.' });
+  }
+};
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   let p = url.pathname;
@@ -895,6 +1069,8 @@ const server = http.createServer(async (req, res) => {
   if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=15552000');
   try {
     if (p === '/healthz') return send(res, 200, 'ok', 'text/plain');
+    if (p === '/api/stats-import' && req.method === 'POST')
+      return handleStatsPush(req, res);
     if (p === '/auth/steam' && req.method === 'GET') {
       const origin = requestOrigin(req);
       if (!origin) return send(res, 503, 'Steam sign-in requires a valid HTTPS site origin.', 'text/plain; charset=utf-8');
@@ -1176,6 +1352,13 @@ const server = http.createServer(async (req, res) => {
       if (result.accepted > 0) writeData(data);
       return send(res, 200, result);
     }
+    if (p === '/api/admin/stats-import-logs' && req.method === 'GET') {
+      if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
+      const logs = readData().statsImportLogs;
+      return send(res, 200, {
+        logs: Array.isArray(logs) ? logs.slice(0, MAX_STATS_IMPORT_LOGS) : [],
+      });
+    }
     if (p === '/api/data' && req.method === 'GET') {
       // logoUrl: pages swap the wordmark for the logo when there is one
       const logo = findLogo();
@@ -1191,7 +1374,7 @@ const server = http.createServer(async (req, res) => {
         data.players = data.players.map(({ steam, ...player }) => player);
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
-      const { playerStats, modStatEventIds, ...responseData } = data;
+      const { playerStats, modStatEventIds, statsImportLogs, ...responseData } = data;
       return send(res, 200, { ...responseData, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/me') return send(res, 200, { admin: isAdmin(req) });
@@ -1230,6 +1413,9 @@ const server = http.createServer(async (req, res) => {
       const current = readData();
       clean.playerStats = current.playerStats && typeof current.playerStats === 'object' ? { ...current.playerStats } : {};
       clean.modStatEventIds = Array.isArray(current.modStatEventIds) ? current.modStatEventIds : [];
+      clean.statsImportLogs = Array.isArray(current.statsImportLogs)
+        ? current.statsImportLogs.slice(0, MAX_STATS_IMPORT_LOGS)
+        : [];
       const trackedStatKeys = new Set(['goals', 'assists', 'saves']);
       const currentSignupIds = new Set(current.signups.map(signup => signup.id));
       for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
@@ -1385,7 +1571,11 @@ const server = http.createServer(async (req, res) => {
     send(res, 400, { error: 'Bad request' });
   }
 });
-server.listen(PORT, () => console.log(`MHL site running on http://localhost:${PORT}  (admin: /admin)  data: ${DATA_DIR}`));
+server.listen(PORT, () => {
+  console.log(`MHL site running on http://localhost:${PORT}  (admin: /admin)  data: ${DATA_DIR}`);
+  if (!MHL_STATS_PUSH_KEY)
+    console.warn('[stats-import] Disabled: MHL_STATS_PUSH_KEY is unset.');
+});
 
 if (statsSftpConfig) {
   console.log('[MHL stats SFTP] Polling ' + statsSftpConfig.sources.length
