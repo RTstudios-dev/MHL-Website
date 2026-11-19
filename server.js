@@ -7,7 +7,7 @@
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
 //   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
 //   MHL_MOD_API_KEY      key for protected roster access and game-stat uploads; the public roster needs no key
-//   The public mod roster endpoint exposes only linked Steam IDs, player values, and the Ice Cap.
+//   The public mod roster endpoint exposes linked Steam IDs, player values, tracked stats, and the Ice Cap.
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
@@ -227,7 +227,12 @@ const modRosterSnapshot = data => {
     if (seenSteamIds.has(steamId))
       return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
     seenSteamIds.add(steamId);
-    players.push({ steamId, ...signupValues(signup) });
+    players.push({
+      steamId,
+      ...signupValues(signup),
+      ...trackedStatsFor(data, signup.id),
+      statsAvailable: true,
+    });
   }
   return { iceCap: num(data.site && data.site.iceCap, Number.MAX_SAFE_INTEGER), players };
 };
