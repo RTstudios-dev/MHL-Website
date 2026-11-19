@@ -158,6 +158,7 @@ const MHLA = (() => {
   const root = document.getElementById('root');
   let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '';
   let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
+  const playoffMatchLimits = { quarterfinals: 4, semifinals: 2, finals: 1 };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   // h('div', {class: 'x', onclick: fn}, ...children)
@@ -177,6 +178,10 @@ const MHLA = (() => {
   const field = (label, input, help) => h('label', { class: 'f' }, h('span', {}, label), input, help ? h('small', {}, help) : null);
   const text = (obj, key, attrs = {}) => h('input', { type: 'text', value: obj[key] ?? '', ...attrs, oninput: e => { obj[key] = e.target.value; touch(); attrs.after && attrs.after(); } });
   const teamName = id => (D.teams.find(t => t.id === id) || {}).name || 'Unknown team';
+  const playoffMatchCount = stage => {
+    const roundIds = new Set(D.rounds.filter(round => round.playoffStage === stage).map(round => round.id));
+    return D.matches.filter(match => roundIds.has(match.round)).length;
+  };
   const steamIdInUrl = value => {
     const match = String(value || '').trim().match(/^https:\/\/(?:www\.)?steamcommunity\.com\/profiles\/(\d{17})\/?$/i);
     return match ? match[1] : '';
@@ -272,7 +277,11 @@ const MHLA = (() => {
     if (Object.keys(trackedStatsEdits).length) body.trackedStatsEdits = trackedStatsEdits;
     const r = await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (r.status === 401) { dirty = false; return login('Your session ended. Log in again, then redo the last changes.'); }
-    if (!r.ok) { s.textContent = 'Saving failed. Try again.'; s.className = 'status dirty'; b.disabled = false; return; }
+    if (!r.ok) {
+      const result = await r.json().catch(() => ({}));
+      s.textContent = result.error || 'Saving failed. Try again.';
+      s.className = 'status dirty'; b.disabled = false; return;
+    }
     D = await r.json(); trackedStatsEdits = {}; dirty = false;
     draw();
     const s2 = document.getElementById('status'); s2.textContent = 'Saved. The site is updated.';
@@ -476,15 +485,30 @@ const MHLA = (() => {
   function preview(m) {
     const st = MHL.state(m), pts = MHL.points(st), g = MHL.gamesOf(m);
     const A = teamName(m.a), B = teamName(m.b);
+    const round = D.rounds.find(item => item.id === m.round);
     const ties = g.filter(x => x && x.as != null && x.bs != null && x.as === x.bs).length;
     const extra = g.length === 3 && g[2] && (g[2].as != null || g[2].bs != null) && !st.counted.includes(g[2]);
     if (pts) {
-      const w = st.wa > st.wb ? A : B;
+      const aWon = st.wa > st.wb, w = aWon ? A : B, l = aWon ? B : A;
+      if (round && round.playoffStage) {
+        const outcome = round.playoffStage === 'finals'
+          ? `Champion: ${w}. Finalist: ${l}.`
+          : `Advances: ${w}. Eliminated: ${l}.`;
+        return { cls: extra ? 'warn' : 'done', html: `<b>${esc(w)} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}.</b> ${esc(outcome)}` + (extra ? ' Game 3 is ignored because the series ended 2-0.' : '') };
+      }
       return { cls: extra ? 'warn' : 'done', html: `<b>${esc(w)} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}.</b> Points: ${esc(A)} ${pts[0]}, ${esc(B)} ${pts[1]}.` + (extra ? ' Game 3 is ignored because the series ended 2-0.' : '') };
     }
     if (ties) return { cls: 'warn', html: 'A game has equal scores. Ties do not count: enter the final score after overtime.' };
-    if (st.started) return { cls: '', html: `Series ${st.wa}-${st.wb}. ${st.wa === 1 && st.wb === 1 ? 'Enter game 3 to finish it.' : 'Enter the next game to finish it.'} No points until the series is decided.` };
-    return { cls: '', html: 'Not played yet. Enter game scores and the points are given out automatically.' };
+    if (st.started) return {
+      cls: '',
+      html: `Series ${st.wa}-${st.wb}. ${st.wa === 1 && st.wb === 1 ? 'Enter game 3 to finish it.' : 'Enter the next game to finish it.'} ${round && round.playoffStage ? 'Playoff series do not award regular-season points.' : 'No points until the series is decided.'}`,
+    };
+    return {
+      cls: '',
+      html: round && round.playoffStage
+        ? 'Not played yet. The winner advances; playoff series do not award regular-season points.'
+        : 'Not played yet. Enter game scores and the points are given out automatically.',
+    };
   }
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   function teamSelect(m, key) {
@@ -569,30 +593,66 @@ const MHLA = (() => {
     const open = openGoals.has(m.id) ? openGoals.get(m.id) : missing;
     return h('details', { class: 'goals', open, ontoggle: e => openGoals.set(m.id, e.target.open) }, summary, body);
   }
-  function addMatch(round) {
+  function addMatch(round, playoffStage = '') {
+    if (playoffStage && playoffMatchCount(playoffStage) >= playoffMatchLimits[playoffStage]) return;
     const [a, b] = D.teams;
     D.matches.push({ id: uid(), date: '', a: a.id, b: b.id, round, goals: [], games: [{ as: null, bs: null }, { as: null, bs: null }, { as: null, bs: null }] });
     touch(); draw();
   }
   function matches() {
     if (D.teams.length < 2) return [head('Matches'), h('div', { class: 'empty' }, h('b', {}, 'Add teams first'), 'You need at least two teams before you can add matches.')];
+    const playoffStages = [
+      { id: 'quarterfinals', name: 'Quarter Finals', maxMatches: playoffMatchLimits.quarterfinals },
+      { id: 'semifinals', name: 'Semi Finals', maxMatches: playoffMatchLimits.semifinals },
+      { id: 'finals', name: 'Finals', maxMatches: playoffMatchLimits.finals },
+    ];
+    const hasPlayoffStage = stage => D.rounds.some(round => round.playoffStage === stage);
+    const addRound = () => {
+      const regularRounds = D.rounds.filter(round => !round.playoffStage).length;
+      const index = D.rounds.findIndex(round => round.playoffStage);
+      D.rounds.splice(index < 0 ? D.rounds.length : index, 0, {
+        id: uid(), name: 'Round ' + (regularRounds + 1),
+      });
+      touch(); draw();
+    };
+    const addPlayoffStage = stage => {
+      if (hasPlayoffStage(stage.id)) return;
+      const stageIndex = playoffStages.findIndex(item => item.id === stage.id);
+      const index = D.rounds.findIndex(round => round.playoffStage &&
+        playoffStages.findIndex(item => item.id === round.playoffStage) > stageIndex);
+      D.rounds.splice(index < 0 ? D.rounds.length : index, 0, {
+        id: uid(), name: stage.name, playoffStage: stage.id,
+      });
+      touch(); draw();
+    };
     const roundsEd = h('div', { class: 'rounds' }, D.rounds.map((r, i) => h('div', { class: 'rnd' },
-      text(r, 'name', { maxlength: 40, 'aria-label': `Round ${i + 1} name` }),
+      h('div', {}, text(r, 'name', { maxlength: 40, 'aria-label': `${r.playoffStage ? 'Playoff stage' : 'Round'} ${i + 1} name` }),
+        r.playoffStage ? h('small', { class: 'check' }, 'Playoff stage') : null),
       h('button', { class: 'btn del sm', type: 'button', onclick: () => {
         const n = D.matches.filter(m => m.round === r.id).length;
         if (!confirm(`Delete the round "${r.name}"?` + (n ? ` Its ${n} match(es) are kept, without a round.` : ''))) return;
         D.rounds = D.rounds.filter(x => x !== r); D.matches.forEach(m => { if (m.round === r.id) m.round = ''; }); touch(); draw();
       } }, 'Delete'))));
-    const groups = [...D.rounds.map(r => ({ id: r.id, name: r.name })), { id: '', name: D.rounds.length ? 'Matches without a round' : 'Matches' }];
+    const groups = [...D.rounds.map(r => ({ id: r.id, name: r.name, playoffStage: r.playoffStage })), { id: '', name: D.rounds.length ? 'Matches without a round' : 'Matches' }];
     return [
-      head('Rounds', h('button', { class: 'btn line sm', type: 'button', onclick: () => { D.rounds.push({ id: uid(), name: 'Round ' + (D.rounds.length + 1) }); touch(); draw(); } }, 'Add round')),
-      h('p', { class: 'help' }, 'Rounds group the matches, for example Round 1 or Week 3. Optional.'),
+      head('Rounds',
+        h('button', { class: 'btn line sm', type: 'button', onclick: addRound }, 'Add round'),
+        playoffStages.map(stage => h('button', {
+          class: 'btn line sm', type: 'button', disabled: hasPlayoffStage(stage.id),
+          onclick: () => addPlayoffStage(stage),
+        }, hasPlayoffStage(stage.id) ? stage.name + ' added' : 'Add ' + stage.name))),
+      h('p', { class: 'help' }, 'Regular rounds are optional. Add playoff stages for quarter finals, semi finals and finals; playoff results determine the final team order but do not change regular-season statistics or points.'),
+      h('p', { class: 'help' }, 'Playoff limits: 4 Quarter Finals matches, 2 Semi Finals matches, and 1 Finals match.'),
       D.rounds.length ? roundsEd : null,
-      h('p', { class: 'help', style: 'margin-top:24px' }, 'Each match is a best-of-3 series. Enter the score of every game played. Points are given out automatically: 2-0 win 3 points, 2-1 win 2 points, 2-1 loss 1 point. Under each match, pick who scored every goal and who assisted. Press Save changes to publish.'),
+      h('p', { class: 'help', style: 'margin-top:24px' }, 'Each match is a best-of-3 series. Enter the score of every game played. Regular-season points are given out automatically: 2-0 win 3 points, 2-1 win 2 points, 2-1 loss 1 point. Playoff series do not award regular-season points. Under each match, pick who scored every goal and who assisted. Press Save changes to publish.'),
       groups.map(g => {
         const ms = D.matches.filter(m => (g.id ? m.round === g.id : !D.rounds.some(r => r.id === m.round))).sort((x, y) => (x.date || '9').localeCompare(y.date || '9'));
         if (!g.id && !ms.length && D.rounds.length) return null;
-        return [head(g.name, h('button', { class: 'btn sm', type: 'button', onclick: () => addMatch(g.id) }, 'Add match')),
+        const playoffStage = playoffStages.find(stage => stage.id === g.playoffStage);
+        const stageMatchCount = playoffStage ? playoffMatchCount(playoffStage.id) : 0;
+        const atLimit = playoffStage && stageMatchCount >= playoffStage.maxMatches;
+        return [head(g.name, h('button', { class: 'btn sm', type: 'button', disabled: !!atLimit, onclick: () => addMatch(g.id, g.playoffStage) }, atLimit ? 'Maximum reached' : 'Add match')),
+          playoffStage ? h('p', { class: 'help' }, `${stageMatchCount} of ${playoffStage.maxMatches} playoff matches added.`) : null,
           ms.length ? ms.map(matchEd) : h('p', { class: 'help' }, 'No matches in this round yet.')];
       }),
     ];

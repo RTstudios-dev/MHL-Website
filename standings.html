@@ -22,11 +22,11 @@
 <main class="main" id="main">
 <div class="ph">
   <h1>Standings</h1>
-  <p>Updated automatically from every finished series.</p>
+  <p>Teams are ordered by playoff finish once results exist; regular-season order breaks ties and places teams without a playoff result. Records, points, and form remain regular-season only.</p>
 </div>
 <div id="table"><div class="sk"></div></div>
 <p class="note">A series won 2-0 gives the winner 3 points. A series won 2-1 gives the winner 2 points and the loser 1 point. Equal points are split by games won, then head-to-head games, then series won, then goal difference, then goals scored.</p>
-<p class="note">SP series played, SW series won, SL series lost, GP games played, GW games won, GL games lost, GF goals for, GA goals against, GD goal difference, Last 5 the five most recent series (W won, L lost).</p>
+<p class="note">Playoff finishes are Champion, Finalist, Semi-finalist, Quarter-finalist, or the team's current stage. Playoff series are excluded from regular-season statistics and form. SP series played, SW series won, SL series lost, GP games played, GW games won, GL games lost, GF goals for, GA goals against, GD goal difference, Last 5 the five most recent regular-season series (W won, L lost).</p>
 </main>
 </div>
 </div>
@@ -43,7 +43,7 @@
   if (!rows.length) { $('table').innerHTML = MHL.empty('No teams yet', 'The table fills in as teams are added.'); return; }
 
   // last 5 finished series, newest first
-  const done = D.matches.filter(MHL.played).sort(MHL.byDate).reverse();
+  const done = D.matches.filter(m => !MHL.isPlayoffMatch(D, m) && MHL.played(m)).sort(MHL.byDate).reverse();
   const form = id => done.filter(m => m.a === id || m.b === id).slice(0, 5).map(m => {
     const st = MHL.state(m), won = (m.a === id) === (st.wa > st.wb);
     return `<span class="fm ${won ? 'w' : 'l'}" title="${won ? 'Won' : 'Lost'} ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}">${won ? 'W' : 'L'}</span>`;
@@ -51,14 +51,14 @@
   const gd = r => { const d = r.gf - r.ga; return d > 0 ? '+' + d : String(d); };
 
   $('table').innerHTML = `<div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th class="pos" scope="col">#</th><th class="l" scope="col">Team</th>
+    <thead><tr><th class="pos" scope="col">#</th><th class="l" scope="col">Team</th><th scope="col">Playoff</th>
       <th scope="col" title="Series played">SP</th><th scope="col" title="Series won">SW</th><th scope="col" title="Series lost">SL</th>
       <th scope="col" title="Games played">GP</th><th scope="col" title="Games won">GW</th><th scope="col" title="Games lost">GL</th>
       <th scope="col" title="Goals for">GF</th><th scope="col" title="Goals against">GA</th><th scope="col" title="Goal difference">GD</th>
       <th class="l" scope="col">Last 5</th><th scope="col">PTS</th></tr></thead>
-    <tbody>${rows.map(r => `<tr><td class="pos">${r.place}</td><td class="l"><span class="team">${MHL.badge(r.t)}${MHL.teamLink(r.t)}</span></td>
-      <td>${r.sp}</td><td>${r.sw}</td><td>${r.sl}</td><td>${r.mp}</td><td>${r.mw}</td><td>${r.ml}</td>
-      <td>${r.gf}</td><td>${r.ga}</td><td>${gd(r)}</td><td class="l"><span class="form">${form(r.t.id)}</span></td><td class="pts">${r.pts}</td></tr>`).join('')}</tbody>
+    <tbody>${rows.map(r => `<tr><td class="pos" data-label="#">${r.place}</td><td class="l" data-label="Team"><span class="team">${MHL.badge(r.t)}${MHL.teamLink(r.t)}</span></td><td data-label="Playoff">${MHL.esc(MHL.playoffFinish(D, r.t.id) || '—')}</td>
+      <td data-label="SP">${r.sp}</td><td data-label="SW">${r.sw}</td><td data-label="SL">${r.sl}</td><td data-label="GP">${r.mp}</td><td data-label="GW">${r.mw}</td><td data-label="GL">${r.ml}</td>
+      <td data-label="GF">${r.gf}</td><td data-label="GA">${r.ga}</td><td data-label="GD">${gd(r)}</td><td class="l" data-label="Last 5"><span class="form">${form(r.t.id)}</span></td><td class="pts" data-label="PTS">${r.pts}</td></tr>`).join('')}</tbody>
   </table></div>`;
 })();
 </script>

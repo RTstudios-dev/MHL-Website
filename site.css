@@ -205,8 +205,8 @@ dialog.prompt-dialog::backdrop{background:#000b}
 .newsbox p{color:var(--muted)}
 
 /* standings table */
-.tbl-wrap{overflow-x:auto;border-top:1px solid var(--rule)}
-.tbl{width:100%;border-collapse:collapse;min-width:640px}
+.tbl-wrap{overflow:visible;border-top:1px solid var(--rule)}
+.tbl{width:max-content;min-width:100%;border-collapse:collapse}
 .tbl th{font-size:11px;color:var(--muted);text-align:right;padding:16px 12px 12px;border-bottom:1px solid var(--rule);white-space:nowrap}
 .tbl td{padding:13px 12px;text-align:right;border-bottom:1px solid var(--line)}
 .tbl tbody tr{transition:background .15s}
@@ -336,6 +336,20 @@ dialog.prompt-dialog::backdrop{background:#000b}
   .player-stats-search{min-width:180px}
   .player-stats-list-toolbar{align-items:flex-end}
   .player-stats-filter-row .seg,.player-filter{width:100%;gap:4px 18px}
+}
+@media (max-width:1280px){
+  .tbl-wrap{overflow:visible}
+  .tbl:not(.player-stats-table),.tbl:not(.player-stats-table) tbody{display:block;width:100%;min-width:0}
+  .tbl:not(.player-stats-table){table-layout:fixed}
+  .tbl:not(.player-stats-table) thead{display:none}
+  .tbl:not(.player-stats-table) tbody tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:6px;border-bottom:1px solid var(--line)}
+  .tbl:not(.player-stats-table) tbody td{display:flex;flex-direction:column;align-items:flex-start;min-width:0;width:auto;padding:7px 4px;text-align:left;border:0;overflow-wrap:anywhere}
+  .tbl:not(.player-stats-table) tbody td::before{content:attr(data-label);margin-bottom:4px;color:var(--muted);font-family:var(--body);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+  .tbl:not(.player-stats-table) tbody td:nth-child(2){grid-column:span 3}
+  .tbl:not(.player-stats-table) .team{min-width:0;gap:8px;font-size:14px}
+  .tbl:not(.player-stats-table) .pts{width:auto;font-size:20px;text-align:left}
+  .tbl.mini:not(.player-stats-table) tbody tr{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .tbl.mini:not(.player-stats-table) tbody td:nth-child(2){grid-column:span 2}
 }
 @media (max-width:560px){
   .mtop>span{display:none}

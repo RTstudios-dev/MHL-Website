@@ -23,7 +23,7 @@
 <div class="mast">
   <div>
     <h1>Miniature Hockey League</h1>
-    <p id="season">Best-of-3 series. Points go to both teams when a series reaches game 3.</p>
+    <p id="season">Best-of-3 league series. Regular-season points go to both teams when a series reaches game 3; playoff winners advance.</p>
   </div>
   <div class="facts" aria-label="League totals">
     <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
@@ -67,7 +67,7 @@
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('next'), 'the league data'); }
   const { esc } = MHL, tb = D.table;
-  if (D.site.season) $('season').textContent = D.site.season + '. Best-of-3 series. Points go to both teams when a series reaches game 3.';
+  if (D.site.season) $('season').textContent = D.site.season + '. Best-of-3 league series. Regular-season points go to both teams when a series reaches game 3; playoff winners advance.';
   $('fTeams').textContent = D.teams.length;
   $('fSeries').textContent = tb.seriesPlayed;
   $('fGoals').textContent = tb.goals;
@@ -96,9 +96,11 @@
     $('news').innerHTML = `<article class="newsbox"><time datetime="${esc(post.date)}">${esc(MHL.fmtDate(post.date))}</time><h3>${esc(post.title)}</h3><div class="prose">${MHL.prose(first)}</div></article>`;
   }
 
+  const playoffFinishes = Object.fromEntries(tb.sorted.map(r => [r.t.id, MHL.playoffFinish(D, r.t.id)]));
+  const homeRows = tb.sorted.filter((r, i) => i < 6 || playoffFinishes[r.t.id]);
   $('table').innerHTML = tb.sorted.length ? `<div class="tbl-wrap"><table class="tbl mini">
-    <thead><tr><th class="pos" scope="col">#</th><th class="l" scope="col">Team</th><th scope="col" title="Series played">SP</th><th scope="col">PTS</th></tr></thead>
-    <tbody>${tb.sorted.slice(0, 6).map(r => `<tr><td class="pos">${r.place}</td><td class="l"><span class="team">${MHL.badge(r.t)}${MHL.teamLink(r.t)}</span></td><td>${r.sp}</td><td class="pts">${r.pts}</td></tr>`).join('')}</tbody>
+    <thead><tr><th class="pos" scope="col">#</th><th class="l" scope="col">Team</th><th scope="col" title="Regular-season series played">SP</th><th scope="col">PTS</th><th scope="col">Playoff</th></tr></thead>
+    <tbody>${homeRows.map(r => `<tr><td class="pos" data-label="#">${r.place}</td><td class="l" data-label="Team"><span class="team">${MHL.badge(r.t)}${MHL.teamLink(r.t)}</span></td><td data-label="SP">${r.sp}</td><td class="pts" data-label="PTS">${r.pts}</td><td data-label="Playoff">${esc(playoffFinishes[r.t.id] || '—')}</td></tr>`).join('')}</tbody>
   </table></div>` : MHL.empty('No teams yet', 'The table fills in as teams are added.');
 
   const top = [...D.players].sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name)).filter(p => p.g + p.a > 0).slice(0, 5);

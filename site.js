@@ -169,9 +169,15 @@
       return `<div class="sb-row${cls}">${M.badge(t)}<span class="sb-name">${M.teamLink(t)}</span>${[0, 1, 2].map(i => cell(games[i], side)).join('')}<span class="sb-s">${st.started ? wins : '-'}</span></div>`;
     };
     const winner = st.decided ? (st.wa > st.wb ? A : B) : null;
+    const playoff = round && round.playoffStage;
+    const loser = st.decided ? (st.wa > st.wb ? B : A) : null;
     const foot = pts
-      ? `<span>${esc(M.code(winner))} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}</span><span>Points <b>${esc(M.code(A))} ${pts[0]}</b>, <b>${esc(M.code(B))} ${pts[1]}</b></span>`
-      : `<span>${esc(M.fmtDate(m.date))}</span><span>Best of 3</span>`;
+      ? playoff
+        ? `<span>${esc(M.code(winner))} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}</span><span>${round.playoffStage === 'finals'
+          ? `Champion: <b>${esc(M.code(winner))}</b> · Finalist: <b>${esc(M.code(loser))}</b>`
+          : `Advances: <b>${esc(M.code(winner))}</b> · Eliminated: <b>${esc(M.code(loser))}</b>`}</span>`
+        : `<span>${esc(M.code(winner))} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}</span><span>Points <b>${esc(M.code(A))} ${pts[0]}</b>, <b>${esc(M.code(B))} ${pts[1]}</b></span>`
+      : `<span>${esc(M.fmtDate(m.date))}</span><span>${playoff ? (round.playoffStage === 'finals' ? 'Championship series' : 'Playoff · winner advances') : 'Best of 3'}</span>`;
     // who scored, one line per team, from the goal log
     const tally = side => {
       const T = new Map(), add = (p, k) => { if (!D.P[p]) return; const r = T.get(p) || { g: 0, a: 0 }; r[k]++; T.set(p, r); };

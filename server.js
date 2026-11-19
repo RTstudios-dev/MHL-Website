@@ -427,6 +427,17 @@ const normalizeStatsPointRequirements = value => {
     saves: requirement(raw.saves, DEFAULT_STATS_POINT_REQUIREMENTS.saves),
   };
 };
+const PLAYOFF_STAGES = ['quarterfinals', 'semifinals', 'finals'];
+const PLAYOFF_MATCH_LIMITS = { quarterfinals: 4, semifinals: 2, finals: 1 };
+const PLAYOFF_STAGE_LABELS = { quarterfinals: 'Quarter Finals', semifinals: 'Semi Finals', finals: 'Finals' };
+const normalizePlayoffStage = round => {
+  if (round && PLAYOFF_STAGES.includes(round.playoffStage)) return round.playoffStage;
+  const name = String(round && round.name || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (['quarterfinal', 'quarterfinals'].includes(name)) return 'quarterfinals';
+  if (['semifinal', 'semifinals'].includes(name)) return 'semifinals';
+  if (['final', 'finals'].includes(name)) return 'finals';
+  return '';
+};
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
   const s = d.site && typeof d.site === 'object' ? d.site : {};
@@ -456,10 +467,14 @@ function sanitize(d) {
     seenSlugs.add(sl); t.slug = sl;
   }
   const ids = new Set(teams.map(t => t.id));
-  const rounds = (Array.isArray(d.rounds) ? d.rounds : []).slice(0, 100).map(r => ({
-    id: str(r.id, 40) || crypto.randomUUID(),
-    name: str(r.name, 40) || 'Round',
-  }));
+  const rounds = (Array.isArray(d.rounds) ? d.rounds : []).slice(0, 100).map(r => {
+    const name = str(r.name, 40) || 'Round';
+    return {
+      id: str(r.id, 40) || crypto.randomUUID(),
+      name,
+      playoffStage: normalizePlayoffStage({ ...r, name }),
+    };
+  });
   const roundIds = new Set(rounds.map(r => r.id));
   const players = (Array.isArray(d.players) ? d.players : []).slice(0, 5000).filter(p => !p.team || ids.has(p.team)).map(p => ({
     id: str(p.id, 40) || crypto.randomUUID(),
@@ -1379,6 +1394,9 @@ const server = http.createServer(async (req, res) => {
       const data = readData();
       data.site = data.site && typeof data.site === 'object' ? { ...data.site } : { ...EMPTY.site };
       data.site.statsPointRequirements = normalizeStatsPointRequirements(data.site.statsPointRequirements);
+      data.rounds = Array.isArray(data.rounds)
+        ? data.rounds.map(round => ({ ...round, playoffStage: normalizePlayoffStage(round) }))
+        : [];
       data.draft = normalizeDraft(data.draft, data.teams, data.signups);
       const signupsById = new Map(data.signups.map(signup => [signup.id, signup]));
       data.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
@@ -1424,6 +1442,23 @@ const server = http.createServer(async (req, res) => {
           (!trackedStatsEdits || typeof trackedStatsEdits !== 'object' || Array.isArray(trackedStatsEdits) ||
            Object.keys(trackedStatsEdits).length > 5000)) {
         return send(res, 400, { error: 'Tracked stat edits are invalid.' });
+      }
+      const playoffCounts = Object.fromEntries(PLAYOFF_STAGES.map(stage => [stage, 0]));
+      const incomingRounds = Array.isArray(incoming && incoming.rounds) ? incoming.rounds : [];
+      const incomingMatches = Array.isArray(incoming && incoming.matches) ? incoming.matches : [];
+      const incomingTeams = new Set((Array.isArray(incoming && incoming.teams) ? incoming.teams : [])
+        .filter(team => team && typeof team === 'object')
+        .map(team => team.id));
+      const stagesByRound = new Map(incomingRounds.map(round => [round && round.id, normalizePlayoffStage(round)]));
+      for (const match of incomingMatches) {
+        if (!match || !incomingTeams.has(match.a) || !incomingTeams.has(match.b) || match.a === match.b) continue;
+        const stage = stagesByRound.get(match.round);
+        if (!stage) continue;
+        if (playoffCounts[stage] >= PLAYOFF_MATCH_LIMITS[stage]) {
+          const limit = PLAYOFF_MATCH_LIMITS[stage];
+          return send(res, 400, { error: `Maximum of ${limit} ${limit === 1 ? 'match' : 'matches'} allowed in ${PLAYOFF_STAGE_LABELS[stage]}.` });
+        }
+        playoffCounts[stage]++;
       }
       const clean = sanitize(incoming);
       const current = readData();
