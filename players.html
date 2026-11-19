@@ -237,7 +237,7 @@
     }
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
-        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">Assists</th><th scope="col">${goalColumnLabel()}</th><th scope="col">P</th></tr></thead>
+        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">A</th><th scope="col">${goalColumnLabel()}</th><th scope="col">P</th></tr></thead>
       <tbody>${rows.map(player => `<tr><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
         ? `<img src="${esc(player.photo)}" alt="">`
         : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -247,7 +247,7 @@
         <td class="l" data-label="Team"><span class="team">${player.t ? `${MHL.badge(player.t)}${MHL.teamLink(player.t)}` : '—'}</span></td>
         <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
         <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
-        <td class="player-stat-cell player-stat-value" data-label="Assists">${source === 'season2' ? '—' : player.a}</td>
+        <td class="player-stat-cell player-stat-value" data-label="A">${source === 'season2' ? '—' : player.a}</td>
         <td class="player-stat-cell player-stat-value" data-label="${goalColumnLabel()}">${source === 'season2' ? '—' : player.goalie ? player.s : player.g}</td>
         <td class="player-stat-cell player-stat-value" data-label="P">${source === 'season2' ? '—' : player.p}</td></tr>`).join('')}</tbody>
     </table></div>`;
