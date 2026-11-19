@@ -280,10 +280,8 @@
     const button = event.target.closest('button[data-filter]');
     if (!button) return;
     filter = button.dataset.filter;
-    if (filter === 'goalie') {
-      key = 'value';
-      $('statSelect').value = key;
-    }
+    key = 'p';
+    $('statSelect').value = key;
     $('playerFilters').querySelectorAll('button').forEach(item =>
       item.setAttribute('aria-pressed', String(item === button)));
     $('hAll').textContent = button.textContent;
