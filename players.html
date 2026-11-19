@@ -20,8 +20,9 @@
 <div>
 <header class="mtop" id="mtop"></header>
 <main class="main" id="main">
-<div class="ph">
+<div class="ph player-stats-heading-row">
   <h1>Player Stats</h1>
+  <aside class="player-stats-profile-card" id="playerStatsProfileCard" aria-label="Your player stats" hidden></aside>
 </div>
 <div class="player-stats-top-row" id="playerStatsTopRow">
   <div class="stats-source-switch" role="group" aria-label="Stats source" id="statsSource">
@@ -50,7 +51,7 @@
         <button type="button" data-direction="high" aria-pressed="true">Highest</button>
         <button type="button" data-direction="low" aria-pressed="false">Lowest</button>
       </div>
-      <label for="statSelect">Filter
+      <label for="statSelect">Sort by
         <select id="statSelect">
           <option value="p">Points</option>
           <option value="gs">Goals/Saves</option>
@@ -60,10 +61,7 @@
       </label>
     </div>
   </div>
-  <div class="player-stats-results">
-    <div id="all"></div>
-    <aside class="player-stats-profile-card" id="playerStatsProfileCard" aria-label="Your player stats" hidden></aside>
-  </div>
+  <div id="all"></div>
 </section>
 </main>
 </div>
@@ -98,6 +96,9 @@
   }
   const euroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   const compactEuroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 1 });
+  const playerAvatar = (player, className = '') => player.photo
+    ? `<img class="${className}" src="${esc(player.photo)}" alt="">`
+    : `<span class="${className} leader-avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`;
   const formatValue = raw => {
     const value = Number(raw) || 0;
     if (!value) return '—';
@@ -218,20 +219,12 @@
     }
     const [one, ...rest] = list;
     $('leaders').innerHTML = `<div class="leaders">
-    <div class="top1"${one.t ? ` style="--c:${esc(one.t.color)}"` : ''}><div><span class="k">${NAMES[key]} leader</span><h2>${esc(one.name)}</h2>
-        <p>${one.t ? MHL.teamLink(one.t) : 'Unassigned'}</p></div><span class="big num">${key === 'value' ? formatValue(one.value) : metricValue(one)}</span></div>
-    <div class="rest">${rest.slice(0, 5).map((p, i) => `<div class="lm"><span class="r">${i + 2}</span>${MHL.badge(p.t)}<span class="nm">${esc(p.name)}<small>${esc(p.t ? p.t.name : 'Unassigned')}</small></span><span class="v">${key === 'value' ? formatValue(p.value) : metricValue(p)}</span></div>`).join('')
-        || '<div class="lm"><span></span><span></span><span class="nm"><small>No one else has any yet.</small></span><span></span></div>'}</div>
+    <div class="top1"><div class="top1-person">${playerAvatar(one, 'leader-photo featured-photo')}<div><span class="k">${NAMES[key]} leader</span><h2>${esc(one.name)}</h2></div></div><span class="big num">${key === 'value' ? formatValue(one.value) : metricValue(one)}</span></div>
+    <div class="rest">${rest.slice(0, 4).map((p, i) => `<div class="lm"><span class="r">${i + 2}</span>${playerAvatar(p, 'leader-photo')}<span class="nm">${esc(p.name)}</span><span class="v">${key === 'value' ? formatValue(p.value) : metricValue(p)}</span></div>`).join('')
+        || '<div class="lm"><span></span><span></span><span class="nm">No one else has any yet.</span><span></span></div>'}</div>
     </div>`;
   }
-  const lineLabel = () => filter === 'all' ? 'G/S' : filter === 'goalie' ? 'S' : 'G';
-  const playerLine = player => {
-    const empty = source === 'season2';
-    const goalLabel = player.goalie ? 'S' : 'G';
-    const goalValue = empty ? '—' : player.goalie ? player.s : player.g;
-    const assistValue = empty ? '—' : player.a;
-    return `<span>${goalLabel} ${goalValue}</span><span>A ${assistValue}</span>`;
-  };
+  const goalColumnLabel = () => filter === 'all' ? 'G/S' : filter === 'goalie' ? 'S' : 'G';
   function table() {
     $('allBlock').hidden = false;
     const rows = rank();
@@ -243,7 +236,7 @@
     }
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
-        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">${lineLabel()}</th></tr></thead>
+        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">Assists</th><th scope="col">${goalColumnLabel()}</th></tr></thead>
       <tbody>${rows.map(player => `<tr><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
         ? `<img src="${esc(player.photo)}" alt="">`
         : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -253,7 +246,8 @@
         <td class="l" data-label="Team"><span class="team">${player.t ? `${MHL.badge(player.t)}${MHL.teamLink(player.t)}` : '—'}</span></td>
         <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
         <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
-        <td class="player-stat-line player-stat-cell" data-label="${lineLabel()}">${playerLine(player)}</td></tr>`).join('')}</tbody>
+        <td class="player-stat-cell player-stat-value" data-label="Assists">${source === 'season2' ? '—' : player.a}</td>
+        <td class="player-stat-cell player-stat-value" data-label="${goalColumnLabel()}">${source === 'season2' ? '—' : player.goalie ? player.s : player.g}</td></tr>`).join('')}</tbody>
     </table></div>`;
   }
   $('statSelect').addEventListener('change', event => {
