@@ -181,15 +181,18 @@
   const filtered = () => {
     const query = search.trim().toLocaleLowerCase();
     return P.filter(player => {
-      const matchesPosition = filter === 'all' || (filter === 'goalie' ? player.goalie : !player.goalie);
+      const flexible = String(player.position || '').toLocaleLowerCase() === 'flexible';
+      const matchesPosition = filter === 'all' || flexible || (filter === 'goalie' ? player.goalie : !player.goalie);
       const matchesSearch = !query || [player.name, player.discord, player.position, player.t && player.t.name]
         .some(value => String(value || '').toLocaleLowerCase().includes(query));
       return matchesPosition && matchesSearch;
     });
   };
   const compareName = (x, y) => String(x.name || '').localeCompare(String(y.name || ''));
+  const isGoalieInCurrentFilter = player => player.goalie
+    || (filter === 'goalie' && String(player.position || '').toLocaleLowerCase() === 'flexible');
   const metricValue = player => key === 'p' ? player.p
-    : key === 'gs' ? (player.goalie ? player.s : player.g)
+    : key === 'gs' ? (isGoalieInCurrentFilter(player) ? player.s : player.g)
       : key === 'a' ? player.a : player.value;
   const rank = () => {
     const list = [...filtered()];
@@ -249,7 +252,7 @@
         <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
         <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
         <td class="player-stat-cell player-stat-value" data-label="A">${source === 'season2' ? '—' : player.a}</td>
-        <td class="player-stat-cell player-stat-value" data-label="${goalColumnLabel()}">${source === 'season2' ? '—' : player.goalie ? player.s : player.g}</td>
+        <td class="player-stat-cell player-stat-value" data-label="${goalColumnLabel()}">${source === 'season2' ? '—' : isGoalieInCurrentFilter(player) ? player.s : player.g}</td>
         <td class="player-stat-cell player-stat-value" data-label="P">${source === 'season2' ? '—' : player.p}</td></tr>`).join('')}</tbody>
     </table></div>`;
   }
