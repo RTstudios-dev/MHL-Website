@@ -1,4 +1,4 @@
-// MHL site. no npm packages needed, just: node server.js
+// MHL site. Install dependencies with npm install, then run node server.js.
 //
 // env vars (none needed locally):
 //   PORT                 default 3000
@@ -7,10 +7,13 @@
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
 //   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
 //   MHL_MOD_API_KEY      key for protected roster access and game-stat uploads; the public roster needs no key
+//   MHL_STATS_SFTP_CONFIG optional SFTP sources for pulling pending game-stat JSON
+//   MHL_STATS_SFTP_POLL_SECONDS polling interval for SFTP sources; default 60
 //   The public mod roster endpoint exposes linked Steam IDs, player values, tracked stats, and the Ice Cap.
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
+const SftpClient = require('ssh2-sftp-client');
 
 const PORT = process.env.PORT || 3000;
 const DIR = __dirname;
@@ -677,6 +680,207 @@ const applyStatsReports = (data, reports) => {
   return { accepted, ignored, credited, unmatched };
 };
 
+const loadStatsSftpConfig = () => {
+  const raw = (process.env.MHL_STATS_SFTP_CONFIG || '').trim();
+  if (!raw) return null;
+
+  let config;
+  try {
+    config = JSON.parse(raw);
+  } catch {
+    throw new Error('MHL_STATS_SFTP_CONFIG must contain valid JSON.');
+  }
+
+  if (!config || typeof config !== 'object' || Array.isArray(config) ||
+      typeof config.host !== 'string' || !config.host.trim() ||
+      typeof config.username !== 'string' || !config.username.trim() ||
+      typeof config.hostKeyFingerprint !== 'string' ||
+      !Array.isArray(config.sources) || config.sources.length < 1 || config.sources.length > 10) {
+    throw new Error('MHL_STATS_SFTP_CONFIG is missing required connection or source settings.');
+  }
+
+  const port = config.port === undefined ? 22 : Number(config.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    throw new Error('MHL_STATS_SFTP_CONFIG has an invalid port.');
+
+  const fingerprint = config.hostKeyFingerprint.trim().replace(/^SHA256:/, '').replace(/=+$/, '');
+  if (!/^[A-Za-z0-9+/]{43}$/.test(fingerprint))
+    throw new Error('MHL_STATS_SFTP_CONFIG requires a SHA256 host key fingerprint.');
+
+  const authNames = ['privateKeyBase64Env', 'passwordEnv']
+    .filter(name => typeof config[name] === 'string' && config[name].trim());
+  if (authNames.length !== 1)
+    throw new Error('Configure exactly one SFTP authentication environment variable.');
+  const authEnvName = config[authNames[0]].trim();
+  if (!/^[A-Z_][A-Z0-9_]*$/.test(authEnvName) || !process.env[authEnvName])
+    throw new Error('The configured SFTP authentication environment variable is missing.');
+
+  let passphraseEnvName = '';
+  if (config.passphraseEnv !== undefined) {
+    if (authNames[0] !== 'privateKeyBase64Env' ||
+        typeof config.passphraseEnv !== 'string' ||
+        !/^[A-Z_][A-Z0-9_]*$/.test(config.passphraseEnv.trim()) ||
+        !process.env[config.passphraseEnv.trim()]) {
+      throw new Error('passphraseEnv requires an encrypted private key and a configured secret.');
+    }
+    passphraseEnvName = config.passphraseEnv.trim();
+  }
+
+  const sources = config.sources.map((source, index) => {
+    if (!source || typeof source !== 'object' || Array.isArray(source) ||
+        typeof source.name !== 'string' || !/^[A-Za-z0-9._-]{1,60}$/.test(source.name) ||
+        typeof source.remotePath !== 'string' ||
+        !source.remotePath.startsWith('/') ||
+        !source.remotePath.toLowerCase().endsWith('.json') ||
+        source.remotePath.length > 2048) {
+      throw new Error('MHL_STATS_SFTP_CONFIG has an invalid source at index ' + index + '.');
+    }
+    return { name: source.name, remotePath: source.remotePath };
+  });
+
+  if (new Set(sources.map(source => source.name)).size !== sources.length)
+    throw new Error('MHL_STATS_SFTP_CONFIG source names must be unique.');
+
+  const pollSeconds = process.env.MHL_STATS_SFTP_POLL_SECONDS === undefined
+    ? 60
+    : Number(process.env.MHL_STATS_SFTP_POLL_SECONDS);
+  if (!Number.isInteger(pollSeconds) || pollSeconds < 30 || pollSeconds > 3600)
+    throw new Error('MHL_STATS_SFTP_POLL_SECONDS must be between 30 and 3600.');
+
+  return {
+    host: config.host.trim(),
+    port,
+    username: config.username.trim(),
+    fingerprint,
+    authName: authNames[0],
+    authEnvName,
+    passphraseEnvName,
+    sources,
+    pollSeconds,
+  };
+};
+
+const statsSftpConfig = loadStatsSftpConfig();
+const statsSftpHashes = new Map();
+const statsSftpErrors = new Map();
+const statsSftpMissing = new Set();
+let statsSftpPollRunning = false;
+
+const pollStatsSftpSource = async (config, source) => {
+  const sftp = new SftpClient('MHL stats ' + source.name);
+  let connected = false;
+  try {
+    const connectOptions = {
+      host: config.host,
+      port: config.port,
+      username: config.username,
+      readyTimeout: 20000,
+      hostVerifier: key => {
+        const actual = crypto.createHash('sha256')
+          .update(Buffer.isBuffer(key) ? key : Buffer.from(key))
+          .digest('base64')
+          .replace(/=+$/, '');
+        const expectedBuffer = Buffer.from(config.fingerprint);
+        const actualBuffer = Buffer.from(actual);
+        return actualBuffer.length === expectedBuffer.length
+          && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+      },
+    };
+
+    if (config.authName === 'privateKeyBase64Env') {
+      const encodedKey = process.env[config.authEnvName].replace(/\s+/g, '');
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encodedKey))
+        throw new Error('The configured SFTP private key is not valid base64.');
+      const key = Buffer.from(encodedKey, 'base64');
+      if (!key.length)
+        throw new Error('The configured SFTP private key is empty.');
+      connectOptions.privateKey = key;
+      if (config.passphraseEnvName)
+        connectOptions.passphrase = process.env[config.passphraseEnvName];
+    } else {
+      connectOptions.password = process.env[config.authEnvName];
+    }
+
+    await sftp.connect(connectOptions);
+    connected = true;
+    const exists = await sftp.exists(source.remotePath);
+    if (!exists) {
+      if (!statsSftpMissing.has(source.name)) {
+        console.log('[MHL stats SFTP] Waiting for pending JSON from ' + source.name + '.');
+        statsSftpMissing.add(source.name);
+      }
+      statsSftpErrors.delete(source.name);
+      return;
+    }
+    statsSftpMissing.delete(source.name);
+
+    const fileInfo = await sftp.stat(source.remotePath);
+    if (!Number.isFinite(fileInfo.size) || fileInfo.size < 1 || fileInfo.size > 20_000_000)
+      throw new Error('The pending JSON file has an invalid size.');
+
+    const contents = await sftp.get(source.remotePath);
+    const jsonText = Buffer.isBuffer(contents) ? contents.toString('utf8') : String(contents);
+    const hash = crypto.createHash('sha256').update(jsonText).digest('hex');
+    if (statsSftpHashes.get(source.name) === hash) {
+      statsSftpErrors.delete(source.name);
+      return;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(jsonText);
+    } catch {
+      throw new Error('The pending JSON file is not valid JSON.');
+    }
+    const normalized = normalizeStatsReports(payload && payload.reports);
+    if (normalized.error)
+      throw new Error(normalized.error);
+
+    const data = readData();
+    const result = applyStatsReports(data, normalized.reports);
+    if (result.error)
+      throw new Error(result.error);
+    if (result.accepted > 0)
+      writeData(data);
+
+    statsSftpHashes.set(source.name, hash);
+    statsSftpErrors.delete(source.name);
+    console.log('[MHL stats SFTP] ' + source.name + ': '
+      + result.credited + ' credited, ' + result.unmatched + ' unmatched, '
+      + result.ignored + ' duplicate event(s).');
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    if (statsSftpErrors.get(source.name) !== message) {
+      console.error('[MHL stats SFTP] Could not import from ' + source.name + ': ' + message);
+      statsSftpErrors.set(source.name, message);
+    }
+  } finally {
+    if (connected) {
+      try {
+        await sftp.end();
+      } catch (error) {
+        const message = error && error.message ? error.message : String(error);
+        if (statsSftpErrors.get(source.name) !== message) {
+          console.error('[MHL stats SFTP] Could not close the connection for '
+            + source.name + ': ' + message);
+          statsSftpErrors.set(source.name, message);
+        }
+      }
+    }
+  }
+};
+
+const pollStatsSftpSources = async () => {
+  if (!statsSftpConfig || statsSftpPollRunning) return;
+  statsSftpPollRunning = true;
+  try {
+    for (const source of statsSftpConfig.sources)
+      await pollStatsSftpSource(statsSftpConfig, source);
+  } finally {
+    statsSftpPollRunning = false;
+  }
+};
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   let p = url.pathname;
@@ -1175,6 +1379,18 @@ const server = http.createServer(async (req, res) => {
   }
 });
 server.listen(PORT, () => console.log(`MHL site running on http://localhost:${PORT}  (admin: /admin)  data: ${DATA_DIR}`));
+
+if (statsSftpConfig) {
+  console.log('[MHL stats SFTP] Polling ' + statsSftpConfig.sources.length
+    + ' source(s) every ' + statsSftpConfig.pollSeconds + ' seconds.');
+  const runPoll = () => pollStatsSftpSources().catch(error => {
+    console.error('[MHL stats SFTP] Poll failed:', error && error.message ? error.message : error);
+  });
+  setTimeout(runPoll, 5000).unref();
+  setInterval(runPoll, statsSftpConfig.pollSeconds * 1000).unref();
+} else {
+  console.log('[MHL stats SFTP] Disabled; MHL_STATS_SFTP_CONFIG is not set.');
+}
 
 // shut down cleanly on redeploy
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); });

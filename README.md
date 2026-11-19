@@ -1,11 +1,12 @@
 # MHL website
 
-Site for the Miniature Hockey League. Plain Node, nothing to npm install.
+Site for the Miniature Hockey League. Plain Node, with an optional SFTP client dependency.
 
 ## Running it
 
 You need Node 18+. In this folder:
 
+    npm install
     node server.js
 
 Then go to http://localhost:3000, admin is at http://localhost:3000/admin.
@@ -45,7 +46,8 @@ Remember to press **Save changes**, nothing goes live until you do.
 - Rules: shown in the same order as in the admin.
 - Season 2 Player Sign Ups: signups include position and Steam profile. Players can use a numeric `/profiles/<SteamID>` URL or a custom `/id/` URL; the form requests the 17-digit Steam ID separately when the profile URL does not contain it. Admins can enter a manual Steam ID for existing signups whose profile URL does not contain one. Steam links are admin-only; after signing up, players can choose to visit the Season 2 Player Sign Ups page. Admins can edit signup answers, assign a team, set separate Skater and Goalie Values in euros, and set the Ice Cap and Team Cap amounts. Every signup automatically appears as an editable player slot, including unassigned players; the Players tab lets admins edit its team, position, in-game name, Discord username, jersey number, and values. The caps appear between the signed-in player's entry and the public signup list. Team budgets and assigned Season 2 player values are shown in Teams. Duplicate Discord usernames or Steam profiles are rejected; players can use Player Login with the Steam account on their existing signup, or ask staff for help.
 - The Player Stats page lists every Season 2 signup, including unassigned players. Admins can edit linked players' goals, assists, and saves in the Players tab; later game-mod events continue adding to those totals. The game mod records linked-player goals and assists, plus goalie saves when both the MHL mod (Workshop ID `3788905426`) and StatsTooltip (Workshop ID `3608968085`) are active on the authoritative server, the game has started, and at least six players are in the game. One point is awarded per two saves. The page has player/position filters, value sorting, search, and Pug Stats/Season 2 Stats views; Season 2 stats display as dashes until tracking is added.
-- The game mod uses `GET /api/mod/roster` for linked Steam IDs and player values, and `POST /api/mod/stats` for authenticated stat events. Eligible game events are uploaded in batches during play and flushed when the game ends. Unsent events are persisted as `MHLGameStatsPending.json` under the game's `Application.persistentDataPath` and retried. Admins can select this file in Admin > Players; the page reads and previews it before import. Imports use the same event-ID deduplication as live uploads and credit only linked signups. Both mod endpoints require `Authorization: Bearer <MHL_MOD_API_KEY>`. The roster endpoint does not include Steam profile URLs or other signup details; stats responses report how many events were credited or unmatched.
+- The game mod uses `GET /api/mod/roster` for linked Steam IDs and player values, and `POST /api/mod/stats` for authenticated stat events. Eligible game events are uploaded in batches during play and flushed when the game ends. Unsent events are persisted as `MHLGameStatsPending.json` in the `MHL Stats` folder beside the game's data folder (for example, `C:\Program Files (x86)\Steam\steamapps\common\Puck\MHL Stats`) and retried. Admins can select this file in Admin > Players; the page reads and previews it before import. Imports use the same event-ID deduplication as live uploads and credit only linked signups. Both mod endpoints require `Authorization: Bearer <MHL_MOD_API_KEY>`. The roster endpoint does not include Steam profile URLs or other signup details; stats responses report how many events were credited or unmatched.
+- The website can optionally poll pending stats JSON files over SFTP. Configure `MHL_STATS_SFTP_CONFIG` with the SFTP host, port, username, pinned SHA-256 host-key fingerprint, one authentication environment-variable name, and a `sources` array containing each selected server's name and full JSON path. Use either `privateKeyBase64Env` (recommended) or `passwordEnv`; store the referenced secret in the hosting provider's environment settings, not in this file. `MHL_STATS_SFTP_POLL_SECONDS` is optional (default 60; allowed range 30-3600). The poller is read-only: it does not delete or alter remote files, and repeated imports are deduplicated by event ID. The mod may remove a pending file after a successful direct API upload, so SFTP polling only sees files that remain pending.
 - Player Profile: the top-right Steam button becomes the player's profile picture when signed in. The profile page shows Discord and roster goals, assists, and points above the editable Season 2 signup. This does not change Admin login.
 - Settings: season name and Discord link (leave it empty to hide the Discord button).
 
@@ -99,6 +101,24 @@ The host needs Node 18+ and a **persistent disk**. Without one, every redeploy w
 Check `https://your-site/healthz` says `ok` and that you can log in at `/admin`.
 
 Generate a mod API key with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Set the same value as `MHL_MOD_API_KEY` in the website host environment and in the host game's MHL tab. Keep it private; the mod sends only linked player IDs needed for the roster and eligible game stats.
+
+To pull pending files from SFTP instead, add `MHL_STATS_SFTP_CONFIG` in Railway as a JSON value, for example:
+
+    {
+      "host": "sftp.example.com",
+      "port": 22,
+      "username": "mhl-stats-reader",
+      "hostKeyFingerprint": "SHA256:HOST_KEY_FINGERPRINT",
+      "privateKeyBase64Env": "MHL_STATS_SFTP_KEY_BASE64",
+      "passphraseEnv": "MHL_STATS_SFTP_KEY_PASSPHRASE",
+      "sources": [
+        { "name": "server1", "remotePath": "/srv/puck/server1/MHL Stats/MHLGameStatsPending.json" },
+        { "name": "server2", "remotePath": "/srv/puck/server2/MHL Stats/MHLGameStatsPending.json" },
+        { "name": "server3", "remotePath": "/srv/puck/server3/MHL Stats/MHLGameStatsPending.json" }
+      ]
+    }
+
+Create a read-only SFTP account/key and add the base64-encoded private key as the `MHL_STATS_SFTP_KEY_BASE64` Railway variable. For an encrypted private key, also set `passphraseEnv` to the name of a separate Railway secret containing its passphrase. If the SFTP account uses password authentication instead, set `passwordEnv` to the name of a Railway secret containing that password. Pin the SFTP server's SHA-256 host-key fingerprint from WinSCP; the poller rejects unverified hosts. The site logs polling, missing files, and per-source errors. It starts polling 5 seconds after startup, then repeats at the configured interval.
 
 On the first start it copies `data.json` and `uploads/` onto the disk, after that the disk is what counts.
 So content changes go through `/admin` on the live site, and code/design changes get pushed to GitHub (redeploying doesn't touch the content).
