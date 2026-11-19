@@ -382,7 +382,8 @@ const MHLA = (() => {
               D.draft.order = D.draft.order.map(id => id === t.id ? '' : id).slice(0, D.teams.length);
               D.draft.picks = D.draft.picks.filter(pick => pick.teamId !== t.id);
               D.matches = D.matches.filter(m => m.a !== t.id && m.b !== t.id);
-              D.players = D.players.filter(p => p.team !== t.id);
+              D.players = D.players.filter(p => p.signupId || p.team !== t.id);
+              D.players.forEach(player => { if (player.team === t.id) player.team = ''; });
               D.signups.forEach(signup => { if (signup.team === t.id) signup.team = ''; });
               touch(); draw();
             },
@@ -530,11 +531,25 @@ const MHLA = (() => {
 
   // players
   function players() {
-    if (!D.teams.length) return [head('Players'), h('div', { class: 'empty' }, h('b', {}, 'Add teams first'), 'Players belong to a team.')];
     const list = D.players.filter(p => !playerFilter || p.team === playerFilter);
     const tot = MHL.playerTotals(D);
     const signupForPlayer = player => player.signupId && D.signups.find(signup => signup.id === player.signupId);
     const editablePlayerData = player => signupForPlayer(player) || player;
+    const updatePlayerTeam = (player, team) => {
+      editablePlayerData(player).team = team;
+      player.team = team;
+      touch();
+    };
+    const updatePlayerRole = (player, role) => {
+      const signup = signupForPlayer(player);
+      player.role = role;
+      if (signup) {
+        if (role === 'goalie') signup.position = 'Goalie';
+        else if (!signup.position || signup.position === 'Goalie') signup.position = 'Flexible';
+        player.signupPosition = signup.position;
+      }
+      touch();
+    };
     const playerStatLine = player => {
       const signup = signupForPlayer(player);
       if (!signup) {
@@ -559,10 +574,10 @@ const MHLA = (() => {
     });
     return [
       head('Players', h('button', { class: 'btn sm', type: 'button', onclick: () => {
-        D.players.push({ id: uid(), name: '', team: playerFilter || D.teams[0].id, role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
+        D.players.push({ id: uid(), name: '', team: playerFilter || (D.teams[0] && D.teams[0].id) || '', role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
         const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
       } }, 'Add player')),
-      h('p', { class: 'help' }, 'Assigned Season 2 signups appear here automatically. Change their team, position and values in the Season 2 Player Sign Ups tab. Live goals, assists and goalie saves are tracked by the game mod; saves count toward points at one point per two saves.'),
+      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number and values here. Live goals, assists and goalie saves are tracked by the game mod; saves count toward points at one point per two saves.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
@@ -570,10 +585,10 @@ const MHLA = (() => {
         h('tbody', {}, list.map(p => h('tr', {},
           h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
           h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
-          h('td', {}, h('select', { 'aria-label': 'Team', disabled: !!p.signupId, onchange: e => { p.team = e.target.value; touch(); } },
+          h('td', {}, h('select', { 'aria-label': 'Team', onchange: e => updatePlayerTeam(p, e.target.value) },
             [h('option', { value: '', selected: !p.team }, 'Unassigned'), D.teams.map(t => h('option', { value: t.id, selected: t.id === p.team }, t.name))])),
           h('td', {}, h('input', { type: 'text', inputmode: 'numeric', maxlength: 3, class: 'n', 'aria-label': 'Jersey number', value: p.number, oninput: e => { p.number = e.target.value.replace(/\D/g, ''); touch(); } })),
-          h('td', {}, h('select', { 'aria-label': 'Position', disabled: !!p.signupId, onchange: e => { p.role = e.target.value; touch(); } },
+          h('td', {}, h('select', { 'aria-label': 'Position', onchange: e => updatePlayerRole(p, e.target.value) },
             h('option', { value: 'skater', selected: p.role !== 'goalie' }, 'Skater'), h('option', { value: 'goalie', selected: p.role === 'goalie' }, 'Goalie')),
             p.signupId ? h('small', {}, `Signup: ${p.signupPosition || 'Unassigned'}`) : null),
           h('td', {}, playerValue(p, 'skaterValue', 'Skater value')),

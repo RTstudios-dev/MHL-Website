@@ -237,7 +237,6 @@ function syncSignupPlayers(data) {
   for (const signup of data.signups) {
     let player = playersBySignupId.get(signup.id);
     if (!player) {
-      if (!signup.team) continue;
       player = { id: crypto.randomUUID(), signupId: signup.id, number: '' };
       data.players.push(player);
       playersBySignupId.set(signup.id, player);
