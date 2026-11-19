@@ -146,7 +146,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '';
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {};
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   // h('div', {class: 'x', onclick: fn}, ...children)
@@ -226,6 +226,7 @@ const MHLA = (() => {
     const r = await fetch('/api/data', { cache: 'no-store' });
     D = await r.json();
     D.signups = Array.isArray(D.signups) ? D.signups : [];
+    trackedStatsEdits = {};
     dirty = false;
     draw();
   }
@@ -234,10 +235,11 @@ const MHLA = (() => {
     const b = document.getElementById('saveBtn'), s = document.getElementById('status');
     b.disabled = true; s.textContent = 'Saving...'; s.className = 'status';
     const body = { ...D }; delete body.hasLogo; delete body.logoUrl;
+    if (Object.keys(trackedStatsEdits).length) body.trackedStatsEdits = trackedStatsEdits;
     const r = await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (r.status === 401) { dirty = false; return login('Your session ended. Log in again, then redo the last changes.'); }
     if (!r.ok) { s.textContent = 'Saving failed. Try again.'; s.className = 'status dirty'; b.disabled = false; return; }
-    D = await r.json(); dirty = false;
+    D = await r.json(); trackedStatsEdits = {}; dirty = false;
     draw();
     const s2 = document.getElementById('status'); s2.textContent = 'Saved. The site is updated.';
   }
@@ -550,16 +552,26 @@ const MHLA = (() => {
       }
       touch();
     };
-    const playerStatLine = player => {
+    const trackedStatInput = (signup, key, label) => {
+      const stats = signup.trackedStats || (signup.trackedStats = { goals: 0, assists: 0, saves: 0 });
+      return h('input', {
+        type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
+        'aria-label': `${label} for ${signup.name}`,
+        value: stats[key] || 0,
+        oninput: e => {
+          const value = Number(e.target.value);
+          if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
+          stats[key] = value;
+          trackedStatsEdits[signup.id] = { ...trackedStatsEdits[signup.id], [key]: value };
+          touch();
+        },
+      });
+    };
+    const playerStatCell = (player, key, label) => {
       const signup = signupForPlayer(player);
-      if (!signup) {
-        const stats = tot[player.id] || { g: 0, a: 0 };
-        return `G ${stats.g} · A ${stats.a}`;
-      }
-      const stats = signup.trackedStats || { goals: 0, assists: 0, saves: 0 };
-      return signup.position === 'Goalie'
-        ? `S ${Number(stats.saves) || 0}`
-        : `G ${Number(stats.goals) || 0} · A ${Number(stats.assists) || 0}`;
+      if (signup) return h('td', {}, trackedStatInput(signup, key, label));
+      const stats = tot[player.id] || { g: 0, a: 0 };
+      return h('td', { class: 'tot' }, key === 'goals' ? stats.g : key === 'assists' ? stats.a : '—');
     };
     const playerValue = (player, key, label) => h('input', {
       type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
@@ -577,11 +589,11 @@ const MHLA = (() => {
         D.players.push({ id: uid(), name: '', team: playerFilter || (D.teams[0] && D.teams[0].id) || '', role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
         const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
       } }, 'Add player')),
-      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number and values here. Live goals, assists and goalie saves are tracked by the game mod; saves count toward points at one point per two saves.'),
+      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists and saves here. Game mod events continue adding to the tracked stats; saves count toward points at one point per two saves.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'G/S', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', 'Saves', ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {},
           h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
           h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
@@ -593,7 +605,9 @@ const MHLA = (() => {
             p.signupId ? h('small', {}, `Signup: ${p.signupPosition || 'Unassigned'}`) : null),
           h('td', {}, playerValue(p, 'skaterValue', 'Skater value')),
           h('td', {}, playerValue(p, 'goalieValue', 'Goalie value')),
-          h('td', { class: 'tot' }, playerStatLine(p)),
+            playerStatCell(p, 'goals', 'Goals'),
+            playerStatCell(p, 'assists', 'Assists'),
+            playerStatCell(p, 'saves', 'Saves'),
           h('td', {}, h('button', { class: 'btn del sm', type: 'button', disabled: !!p.signupId, title: p.signupId ? 'Manage this player through the Season 2 Player Sign Ups tab.' : '', onclick: () => {
             const t = tot[p.id] || { g: 0, a: 0 };
             if (!confirm(`Delete ${p.name || 'this player'}?` + (t.g || t.a ? ` Their ${t.g} goals and ${t.a} assists are removed from the matches too.` : ''))) return;

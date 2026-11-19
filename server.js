@@ -943,10 +943,28 @@ const server = http.createServer(async (req, res) => {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
       const incoming = JSON.parse(await readBody(req, 10_000_000));
       const clearAllAssignments = !!(incoming && incoming.draft && incoming.draft.clearAllAssignments);
+      const trackedStatsEdits = incoming && incoming.trackedStatsEdits;
+      if (trackedStatsEdits !== undefined &&
+          (!trackedStatsEdits || typeof trackedStatsEdits !== 'object' || Array.isArray(trackedStatsEdits) ||
+           Object.keys(trackedStatsEdits).length > 5000)) {
+        return send(res, 400, { error: 'Tracked stat edits are invalid.' });
+      }
       const clean = sanitize(incoming);
       const current = readData();
-      clean.playerStats = current.playerStats && typeof current.playerStats === 'object' ? current.playerStats : {};
+      clean.playerStats = current.playerStats && typeof current.playerStats === 'object' ? { ...current.playerStats } : {};
       clean.modStatEventIds = Array.isArray(current.modStatEventIds) ? current.modStatEventIds : [];
+      const trackedStatKeys = new Set(['goals', 'assists', 'saves']);
+      const currentSignupIds = new Set(current.signups.map(signup => signup.id));
+      for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
+        if (!currentSignupIds.has(signupId) || !stats || typeof stats !== 'object' || Array.isArray(stats) ||
+            Object.keys(stats).some(key => !trackedStatKeys.has(key)) ||
+            Object.values(stats).some(value => !Number.isSafeInteger(value) || value < 0)) {
+          return send(res, 400, { error: 'Tracked stat edits are invalid.' });
+        }
+      }
+      for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
+        clean.playerStats[signupId] = { ...trackedStatsFor(current, signupId), ...stats };
+      }
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
       clean.signups.forEach(signup => byId.set(signup.id, signup));
       clean.signups = [...byId.values()].slice(0, 5000);
