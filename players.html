@@ -191,9 +191,12 @@
   const compareName = (x, y) => String(x.name || '').localeCompare(String(y.name || ''));
   const isGoalieInCurrentFilter = player => player.goalie
     || (filter === 'goalie' && String(player.position || '').toLocaleLowerCase() === 'flexible');
-  const valueForCurrentFilter = player => filter === 'goalie'
-    ? Number(player.goalieValue) || 0
-    : filter === 'skater' ? Number(player.skaterValue) || 0 : player.value;
+  const valueForCurrentFilter = player => {
+    const skaterValue = Number(player.skaterValue) || 0;
+    const goalieValue = Number(player.goalieValue) || 0;
+    return filter === 'goalie' ? goalieValue
+      : filter === 'skater' ? skaterValue : Math.max(skaterValue, goalieValue);
+  };
   const metricValue = player => key === 'p' ? player.p
     : key === 'gs' ? (isGoalieInCurrentFilter(player) ? player.s : player.g)
       : key === 'a' ? player.a : valueForCurrentFilter(player);
