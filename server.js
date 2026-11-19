@@ -13,7 +13,6 @@
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
-const SftpClient = require('ssh2-sftp-client');
 
 const PORT = process.env.PORT || 3000;
 const DIR = __dirname;
@@ -760,16 +759,24 @@ const loadStatsSftpConfig = () => {
   };
 };
 
-const statsSftpConfig = loadStatsSftpConfig();
+let statsSftpConfig = null;
+try {
+  statsSftpConfig = loadStatsSftpConfig();
+} catch (error) {
+  const message = error && error.message ? error.message : String(error);
+  console.error('[MHL stats SFTP] Configuration invalid; polling disabled: ' + message);
+}
 const statsSftpHashes = new Map();
 const statsSftpErrors = new Map();
 const statsSftpMissing = new Set();
 let statsSftpPollRunning = false;
 
 const pollStatsSftpSource = async (config, source) => {
-  const sftp = new SftpClient('MHL stats ' + source.name);
+  let sftp = null;
   let connected = false;
   try {
+    const SftpClient = require('ssh2-sftp-client');
+    sftp = new SftpClient('MHL stats ' + source.name);
     const connectOptions = {
       host: config.host,
       port: config.port,
@@ -855,7 +862,7 @@ const pollStatsSftpSource = async (config, source) => {
       statsSftpErrors.set(source.name, message);
     }
   } finally {
-    if (connected) {
+    if (connected && sftp) {
       try {
         await sftp.end();
       } catch (error) {

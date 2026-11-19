@@ -120,6 +120,8 @@ To pull pending files from SFTP instead, add `MHL_STATS_SFTP_CONFIG` in Railway 
 
 Create a read-only SFTP account/key and add the base64-encoded private key as the `MHL_STATS_SFTP_KEY_BASE64` Railway variable. For an encrypted private key, also set `passphraseEnv` to the name of a separate Railway secret containing its passphrase. If the SFTP account uses password authentication instead, set `passwordEnv` to the name of a Railway secret containing that password. Pin the SFTP server's SHA-256 host-key fingerprint from WinSCP; the poller rejects unverified hosts. The site logs polling, missing files, and per-source errors. It starts polling 5 seconds after startup, then repeats at the configured interval.
 
+SFTP polling is optional. If `MHL_STATS_SFTP_CONFIG` or a referenced secret is missing or invalid, the website logs the problem and continues running with SFTP polling disabled.
+
 On the first start it copies `data.json` and `uploads/` onto the disk, after that the disk is what counts.
 So content changes go through `/admin` on the live site, and code/design changes get pushed to GitHub (redeploying doesn't touch the content).
 
