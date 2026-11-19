@@ -869,6 +869,8 @@ const server = http.createServer(async (req, res) => {
         : [];
       const seen = new Set(trackedIds);
       const acceptedIds = [];
+      let creditedEvents = 0;
+      let unmatchedEvents = 0;
       const countsFor = signupId => {
         if (!Object.prototype.hasOwnProperty.call(playerStats, signupId) ||
             !playerStats[signupId] || typeof playerStats[signupId] !== 'object')
@@ -881,19 +883,32 @@ const server = http.createServer(async (req, res) => {
         acceptedIds.push(event.eventId);
 
         if (event.type === 'goal') {
+          let credited = false;
           const scorer = signupBySteamId.get(event.scorerSteamId);
-          if (scorer) countsFor(scorer.id).goals = increaseTrackedStat(countsFor(scorer.id).goals);
+          if (scorer) {
+            const stats = countsFor(scorer.id);
+            stats.goals = increaseTrackedStat(stats.goals);
+            credited = true;
+          }
           const creditedAssists = new Set([event.assist1SteamId, event.assist2SteamId]
             .filter(steamId => steamId && steamId !== event.scorerSteamId));
           for (const steamId of creditedAssists) {
             const signup = signupBySteamId.get(steamId);
-            if (signup) countsFor(signup.id).assists = increaseTrackedStat(countsFor(signup.id).assists);
+            if (signup) {
+              const stats = countsFor(signup.id);
+              stats.assists = increaseTrackedStat(stats.assists);
+              credited = true;
+            }
           }
+          if (credited) creditedEvents++;
+          else unmatchedEvents++;
         } else {
           const signup = signupBySteamId.get(event.steamId);
           if (signup && signup.position === 'Goalie') {
-            countsFor(signup.id).saves = increaseTrackedStat(countsFor(signup.id).saves, event.count);
-          }
+            const stats = countsFor(signup.id);
+            stats.saves = increaseTrackedStat(stats.saves, event.count);
+            creditedEvents++;
+          } else unmatchedEvents++;
         }
       }
 
@@ -902,7 +917,12 @@ const server = http.createServer(async (req, res) => {
         data.modStatEventIds = [...seen];
         writeData(data);
       }
-      return send(res, 200, { accepted: acceptedIds.length, ignored: events.length - acceptedIds.length });
+      return send(res, 200, {
+        accepted: acceptedIds.length,
+        ignored: events.length - acceptedIds.length,
+        credited: creditedEvents,
+        unmatched: unmatchedEvents,
+      });
     }
     if (p === '/api/data' && req.method === 'GET') {
       // logoUrl: pages swap the wordmark for the logo when there is one
