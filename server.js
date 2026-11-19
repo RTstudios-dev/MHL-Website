@@ -493,13 +493,13 @@ function sanitize(d) {
   const pids = new Set(players.map(p => p.id));
   const pid = v => pids.has(v) ? v : '';
   const matches = (Array.isArray(d.matches) ? d.matches : []).slice(0, 2000).filter(m => ids.has(m.a) && ids.has(m.b) && m.a !== m.b).map(m => {
-    // best of 3, one score per game
-    const games = (Array.isArray(m.games) ? m.games : []).slice(0, 3).map(g => ({ as: score(g && g.as), bs: score(g && g.bs) }));
+    // Playoff stages can use up to seven games; the standings logic applies the round's limit.
+    const games = (Array.isArray(m.games) ? m.games : []).slice(0, 7).map(g => ({ as: score(g && g.as), bs: score(g && g.bs) }));
     // goal log: g = game index, t = 'a'/'b', n = which goal of that team in that game
     // a goal can't be past the score, and empty slots aren't stored
     const seen = new Set();
     const goals = (Array.isArray(m.goals) ? m.goals : []).slice(0, 300).map(x => ({
-      g: num(x && x.g, 2), t: x && x.t === 'b' ? 'b' : 'a', n: num(x && x.n, 98),
+      g: num(x && x.g, 6), t: x && x.t === 'b' ? 'b' : 'a', n: num(x && x.n, 98),
       s: pid(x && x.s), a1: pid(x && x.a1), a2: pid(x && x.a2),
     })).filter(x => {
       const game = games[x.g], max = game ? (x.t === 'a' ? game.as : game.bs) || 0 : 0;

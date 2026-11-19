@@ -483,31 +483,33 @@ const MHLA = (() => {
 
   // matches
   function preview(m) {
-    const st = MHL.state(m), pts = MHL.points(st), g = MHL.gamesOf(m);
-    const A = teamName(m.a), B = teamName(m.b);
     const round = D.rounds.find(item => item.id === m.round);
+    const bestOf = MHL.bestOf(D, m);
+    const st = MHL.state(m, bestOf), pts = MHL.points(st), g = MHL.gamesOf(m, bestOf);
+    const A = teamName(m.a), B = teamName(m.b);
     const ties = g.filter(x => x && x.as != null && x.bs != null && x.as === x.bs).length;
-    const extra = g.length === 3 && g[2] && (g[2].as != null || g[2].bs != null) && !st.counted.includes(g[2]);
+    const extra = st.decidedAt >= 0 && g.slice(st.decidedAt + 1).some(game => game && (game.as != null || game.bs != null));
+    const extraText = ' Games after the series ended are ignored.';
     if (pts) {
       const aWon = st.wa > st.wb, w = aWon ? A : B, l = aWon ? B : A;
       if (round && round.playoffStage) {
         const outcome = round.playoffStage === 'finals'
           ? `Champion: ${w}. Finalist: ${l}.`
           : `Advances: ${w}. Eliminated: ${l}.`;
-        return { cls: extra ? 'warn' : 'done', html: `<b>${esc(w)} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}.</b> ${esc(outcome)}` + (extra ? ' Game 3 is ignored because the series ended 2-0.' : '') };
+        return { cls: extra ? 'warn' : 'done', html: `<b>${esc(w)} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}.</b> ${esc(outcome)}` + (extra ? extraText : '') };
       }
-      return { cls: extra ? 'warn' : 'done', html: `<b>${esc(w)} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}.</b> Points: ${esc(A)} ${pts[0]}, ${esc(B)} ${pts[1]}.` + (extra ? ' Game 3 is ignored because the series ended 2-0.' : '') };
+      return { cls: extra ? 'warn' : 'done', html: `<b>${esc(w)} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}.</b> Points: ${esc(A)} ${pts[0]}, ${esc(B)} ${pts[1]}.` + (extra ? extraText : '') };
     }
     if (ties) return { cls: 'warn', html: 'A game has equal scores. Ties do not count: enter the final score after overtime.' };
     if (st.started) return {
       cls: '',
-      html: `Series ${st.wa}-${st.wb}. ${st.wa === 1 && st.wb === 1 ? 'Enter game 3 to finish it.' : 'Enter the next game to finish it.'} ${round && round.playoffStage ? 'Playoff series do not award regular-season points.' : 'No points until the series is decided.'}`,
+      html: `Series ${st.wa}-${st.wb}. ${bestOf === 3 && st.wa === 1 && st.wb === 1 ? 'Enter game 3 to finish it.' : `Enter the next game of this best-of-${bestOf} series; first to ${st.winsNeeded} wins.`} ${round && round.playoffStage ? 'Playoff series do not award regular-season points.' : 'No points until the series is decided.'}`,
     };
     return {
       cls: '',
       html: round && round.playoffStage
-        ? 'Not played yet. The winner advances; playoff series do not award regular-season points.'
-        : 'Not played yet. Enter game scores and the points are given out automatically.',
+        ? `Not played yet. This is a best-of-${bestOf} series; the winner advances and playoff series do not award regular-season points.`
+        : `Not played yet. Enter scores for this best-of-${bestOf} series; the points are given out automatically.`,
     };
   }
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -516,7 +518,8 @@ const MHLA = (() => {
       D.teams.map(t => h('option', { value: t.id, selected: t.id === m[key] }, t.name)));
   }
   function matchEd(m) {
-    while (m.games.length < 3) m.games.push({ as: null, bs: null });
+    const bestOf = MHL.bestOf(D, m);
+    while (m.games.length < bestOf) m.games.push({ as: null, bs: null });
     const pv = h('div', { class: 'preview' });
     const upd = () => { const p = preview(m); pv.className = 'preview ' + p.cls; pv.innerHTML = p.html; };
     const scoreIn = (g, k, label) => h('input', { type: 'number', min: 0, max: 99, inputmode: 'numeric', 'aria-label': label, value: g[k] ?? '',
@@ -529,7 +532,7 @@ const MHLA = (() => {
         field('Round', roundSel)),
       h('div', { style: 'display:grid;gap:10px' },
         h('div', { class: 'teamsel' }, field('Team A', teamSelect(m, 'a')), h('span', { class: 'vs' }, 'vs'), field('Team B', teamSelect(m, 'b'))),
-        h('div', { class: 'games' }, m.games.map((g, i) => h('div', { class: 'game' }, `Game ${i + 1}  (A - B)`,
+        h('div', { class: 'games' }, m.games.slice(0, bestOf).map((g, i) => h('div', { class: 'game' }, `Game ${i + 1}  (A - B)`,
           h('div', {}, scoreIn(g, 'as', `Game ${i + 1} goals for team A`), '-', scoreIn(g, 'bs', `Game ${i + 1} goals for team B`)))))),
       h('div', { class: 'acts' }, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
         if (!confirm(`Delete ${teamName(m.a)} vs ${teamName(m.b)}?`)) return;
@@ -543,7 +546,8 @@ const MHLA = (() => {
   const openGoals = new Map();
   function goalsEd(m) {
     m.goals = m.goals || [];
-    const st = MHL.state(m), games = MHL.gamesOf(m);
+    const bestOf = MHL.bestOf(D, m);
+    const st = MHL.state(m, bestOf), games = MHL.gamesOf(m, bestOf);
     const counted = games.map(g => st.counted.includes(g));
     const find = (g, t, n) => m.goals.find(x => x.g === g && x.t === t && x.n === n);
     const get = (g, t, n) => find(g, t, n) || (m.goals.push({ g, t, n, s: '', a1: '', a2: '' }), m.goals[m.goals.length - 1]);
@@ -644,7 +648,7 @@ const MHLA = (() => {
       h('p', { class: 'help' }, 'Regular rounds are optional. Add playoff stages for quarter finals, semi finals and finals; playoff results determine the final team order but do not change regular-season statistics or points.'),
       h('p', { class: 'help' }, 'Playoff limits: 4 Quarter Finals matches, 2 Semi Finals matches, and 1 Finals match.'),
       D.rounds.length ? roundsEd : null,
-      h('p', { class: 'help', style: 'margin-top:24px' }, 'Each match is a best-of-3 series. Enter the score of every game played. Regular-season points are given out automatically: 2-0 win 3 points, 2-1 win 2 points, 2-1 loss 1 point. Playoff series do not award regular-season points. Under each match, pick who scored every goal and who assisted. Press Save changes to publish.'),
+      h('p', { class: 'help', style: 'margin-top:24px' }, 'Regular-season and Quarter Finals are best-of-3, Semi Finals are best-of-5, and Finals are best-of-7. Enter the score of every game played. Regular-season points are given out automatically; playoff series do not award regular-season points. Under each match, pick who scored every goal and who assisted. Press Save changes to publish.'),
       groups.map(g => {
         const ms = D.matches.filter(m => (g.id ? m.round === g.id : !D.rounds.some(r => r.id === m.round))).sort((x, y) => (x.date || '9').localeCompare(y.date || '9'));
         if (!g.id && !ms.length && D.rounds.length) return null;

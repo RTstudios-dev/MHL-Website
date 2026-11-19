@@ -148,11 +148,13 @@ dialog.prompt-dialog::backdrop{background:#000b}
 
 /* scoreboards */
 .sbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:28px}
-.sb{background:var(--card);border-top:1px solid var(--rule)}
+.sb{--game-count:3;--game-width:26px;background:var(--card);border-top:1px solid var(--rule)}
+.sb.bo5{--game-count:5;--game-width:21px}
+.sb.bo7{--game-count:7;--game-width:18px}
 .sb-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px 8px;color:var(--gold)}
 .sb-head .st{white-space:nowrap;color:var(--muted)}
 .sb-head .st.live{color:var(--gold)}
-.sb-cols,.sb-row{display:grid;grid-template-columns:30px minmax(0,1fr) repeat(3,26px) 42px;gap:6px;align-items:center;padding:0 14px}
+.sb-cols,.sb-row{display:grid;grid-template-columns:30px minmax(0,1fr) repeat(var(--game-count),var(--game-width)) 42px;gap:6px;align-items:center;padding:0 14px}
 .sb-cols{padding-bottom:4px;font-size:10px;letter-spacing:.14em;color:var(--muted);text-align:center}
 .sb-row{min-height:50px}
 .sb-row + .sb-row{border-top:1px solid var(--line)}
@@ -365,7 +367,7 @@ dialog.prompt-dialog::backdrop{background:#000b}
   .post .d span{display:inline}
   .rules li{grid-template-columns:52px minmax(0,1fr);gap:12px}
   .rules li::before{font-size:34px}
-  .sb-cols,.sb-row{grid-template-columns:28px minmax(0,1fr) repeat(3,24px) 40px;gap:6px;padding:0 10px}
+  .sb-cols,.sb-row{grid-template-columns:28px minmax(0,1fr) repeat(var(--game-count),var(--game-width)) 40px;gap:6px;padding:0 10px}
 }
 @media (max-width:700px){
   .player-stats-list-toolbar{align-items:stretch}

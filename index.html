@@ -23,7 +23,7 @@
 <div class="mast">
   <div>
     <h1>Miniature Hockey League</h1>
-    <p id="season">Best-of-3 league series. Regular-season points go to both teams when a series reaches game 3; playoff winners advance.</p>
+    <p id="season">Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.</p>
   </div>
   <div class="facts" aria-label="League totals">
     <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
@@ -67,17 +67,17 @@
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('next'), 'the league data'); }
   const { esc } = MHL, tb = D.table;
-  if (D.site.season) $('season').textContent = D.site.season + '. Best-of-3 league series. Regular-season points go to both teams when a series reaches game 3; playoff winners advance.';
+  if (D.site.season) $('season').textContent = D.site.season + '. Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.';
   $('fTeams').textContent = D.teams.length;
   $('fSeries').textContent = tb.seriesPlayed;
   $('fGoals').textContent = tb.goals;
 
   // latest results, newest first
-  const done = D.matches.filter(MHL.played).sort(MHL.byDate).reverse().slice(0, 12);
+  const done = D.matches.filter(m => MHL.played(m, D)).sort(MHL.byDate).reverse().slice(0, 12);
   if (done.length) {
     $('ticker').hidden = false;
     $('ticker').innerHTML = done.map(m => {
-      const st = MHL.state(m), A = D.T[m.a], B = D.T[m.b], aw = st.wa > st.wb;
+      const st = MHL.state(m, MHL.bestOf(D, m)), A = D.T[m.a], B = D.T[m.b], aw = st.wa > st.wb;
       const r = D.R[m.round];
       return `<a class="tk" href="/matches"><span class="lab">${esc(r ? r.name : MHL.fmtDate(m.date))}</span>
         <span class="t${aw ? ' w' : ''}">${esc(MHL.code(A))}</span><span class="n${aw ? ' w' : ''}">${st.wa}</span>
@@ -85,7 +85,7 @@
     }).join('');
   }
 
-  const next = D.matches.filter(m => !MHL.played(m)).sort(MHL.byDate).slice(0, 4);
+  const next = D.matches.filter(m => !MHL.played(m, D)).sort(MHL.byDate).slice(0, 4);
   $('next').innerHTML = next.length ? `<div class="sbs">${next.map(m => MHL.scoreboard(m, D)).join('')}</div>`
     : MHL.empty('No matches scheduled', done.length ? 'Every series so far is finished. New fixtures appear here.' : 'Fixtures appear here once they are added.');
 

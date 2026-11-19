@@ -49,8 +49,8 @@
   const ord = k => k + (['th', 'st', 'nd', 'rd'][(k % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][k % 100] || 'th');
   const gd = r.gf - r.ga;
   const mine = D.matches.filter(m => m.a === t.id || m.b === t.id);
-  const results = mine.filter(MHL.played).sort(MHL.byDate).reverse();
-  const upcoming = mine.filter(m => !MHL.played(m)).sort(MHL.byDate);
+  const results = mine.filter(m => MHL.played(m, D)).sort(MHL.byDate).reverse();
+  const upcoming = mine.filter(m => !MHL.played(m, D)).sort(MHL.byDate);
   const players = D.players.filter(p => p.team === t.id).sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name));
 
   $('page').innerHTML = `

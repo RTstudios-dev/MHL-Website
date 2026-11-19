@@ -150,14 +150,15 @@
     if (!d) return { label: 'To be scheduled', cls: '' };
     return d > new Date() ? { label: 'Upcoming', cls: '' } : { label: 'Result pending', cls: '' };
   };
-  M.played = m => M.state(m).decided;
+  M.played = (m, D) => M.state(m, M.bestOf(D, m)).decided;
 
   // box score for one series
   M.scoreboard = (m, D) => {
-    const A = D.T[m.a], B = D.T[m.b], st = M.state(m), s = M.status(m, st), pts = M.points(st);
+    const A = D.T[m.a], B = D.T[m.b], bestOf = M.bestOf(D, m);
+    const st = M.state(m, bestOf), s = M.status(m, st), pts = M.points(st);
     const round = D.R[m.round];
     const counted = new Set(st.counted);
-    const games = M.gamesOf(m);
+    const games = M.gamesOf(m, bestOf);
     const cell = (g, side) => {
       if (!g || !counted.has(g)) return '<span class="sb-g">-</span>';
       const mine = side === 'a' ? g.as : g.bs, theirs = side === 'a' ? g.bs : g.as;
@@ -166,7 +167,7 @@
     const row = (t, side) => {
       const wins = side === 'a' ? st.wa : st.wb, other = side === 'a' ? st.wb : st.wa;
       const cls = st.decided ? (wins > other ? ' win' : ' lose') : '';
-      return `<div class="sb-row${cls}">${M.badge(t)}<span class="sb-name">${M.teamLink(t)}</span>${[0, 1, 2].map(i => cell(games[i], side)).join('')}<span class="sb-s">${st.started ? wins : '-'}</span></div>`;
+      return `<div class="sb-row${cls}">${M.badge(t)}<span class="sb-name">${M.teamLink(t)}</span>${Array.from({ length: bestOf }, (_, i) => cell(games[i], side)).join('')}<span class="sb-s">${st.started ? wins : '-'}</span></div>`;
     };
     const winner = st.decided ? (st.wa > st.wb ? A : B) : null;
     const playoff = round && round.playoffStage;
@@ -177,20 +178,20 @@
           ? `Champion: <b>${esc(M.code(winner))}</b> · Finalist: <b>${esc(M.code(loser))}</b>`
           : `Advances: <b>${esc(M.code(winner))}</b> · Eliminated: <b>${esc(M.code(loser))}</b>`}</span>`
         : `<span>${esc(M.code(winner))} win ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}</span><span>Points <b>${esc(M.code(A))} ${pts[0]}</b>, <b>${esc(M.code(B))} ${pts[1]}</b></span>`
-      : `<span>${esc(M.fmtDate(m.date))}</span><span>${playoff ? (round.playoffStage === 'finals' ? 'Championship series' : 'Playoff · winner advances') : 'Best of 3'}</span>`;
+      : `<span>${esc(M.fmtDate(m.date))}</span><span>${playoff ? (round.playoffStage === 'finals' ? `Championship series · Best of ${bestOf}` : `Playoff · Best of ${bestOf} · winner advances`) : `Best of ${bestOf}`}</span>`;
     // who scored, one line per team, from the goal log
     const tally = side => {
       const T = new Map(), add = (p, k) => { if (!D.P[p]) return; const r = T.get(p) || { g: 0, a: 0 }; r[k]++; T.set(p, r); };
-      M.goalsOf(m).filter(x => x.t === side).forEach(x => { add(x.s, 'g'); add(x.a1, 'a'); add(x.a2, 'a'); });
+      M.goalsOf(m, bestOf).filter(x => x.t === side).forEach(x => { add(x.s, 'g'); add(x.a1, 'a'); add(x.a2, 'a'); });
       return [...T].sort((x, y) => y[1].g - x[1].g || y[1].a - x[1].a);
     };
     const line = (t, rows) => !rows.length ? '' : `<p><b>${esc(M.code(t))}</b> ${rows.map(([p, r]) =>
       esc(D.P[p].name) + ' ' + [r.g ? r.g + 'G' : '', r.a ? r.a + 'A' : ''].filter(Boolean).join(' ')).join(', ')}</p>`;
     const la = line(A, tally('a')), lb = line(B, tally('b'));
     const scoring = la || lb ? `<div class="sb-pl">${la}${lb}</div>` : '';
-    return `<article class="sb${st.started ? '' : ' up'}" aria-label="${esc(A ? A.name : '')} against ${esc(B ? B.name : '')}">
+    return `<article class="sb bo${bestOf}${st.started ? '' : ' up'}" aria-label="${esc(A ? A.name : '')} against ${esc(B ? B.name : '')}">
       <div class="sb-head"><span>${esc(round ? round.name : M.fmtDate(m.date))}</span><span class="st ${s.cls}">${esc(s.label)}</span></div>
-      <div class="sb-cols" aria-hidden="true"><span></span><span></span><span>G1</span><span>G2</span><span>G3</span><span>Series</span></div>
+      <div class="sb-cols" aria-hidden="true"><span></span><span></span>${Array.from({ length: bestOf }, (_, i) => `<span>G${i + 1}</span>`).join('')}<span>Series</span></div>
       ${row(A, 'a')}${row(B, 'b')}
       ${scoring}<div class="sb-foot">${foot}</div></article>`;
   };

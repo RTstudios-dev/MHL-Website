@@ -1,25 +1,8 @@
 // series + standings maths, used by the site and the admin page
-// best of 3: 2-0 = 3/0 points, 2-1 = 2/1
+// Regular-season best-of-3 points: 2-0 = 3/0, 2-1 = 2/1
 (function (root) {
-  const gamesOf = m => (Array.isArray(m.games) ? m.games : []).slice(0, 3);
+  const gamesOf = (m, bestOf = 3) => (Array.isArray(m.games) ? m.games : []).slice(0, [3, 5, 7].includes(bestOf) ? bestOf : 3);
   const valid = g => g && g.as != null && g.bs != null && g.as !== g.bs;
-
-  // wa/wb = games won by team a/b
-  const state = m => {
-    let wa = 0, wb = 0; const counted = [];
-    for (const [i, g] of gamesOf(m).entries()) {
-      if (wa >= 2 || wb >= 2) break;               // already over
-      if (i === 2 && !(wa === 1 && wb === 1)) break; // game 3 only if it's 1-1
-      if (!valid(g)) continue;
-      counted.push(g); g.as > g.bs ? wa++ : wb++;
-    }
-    return { wa, wb, counted, decided: wa >= 2 || wb >= 2, started: counted.length > 0 };
-  };
-
-  // [a, b] points, null if it's not finished
-  const points = st => !st.decided ? null
-    : st.wa >= 2 ? (st.wb === 0 ? [3, 0] : [2, 1])
-    : (st.wa === 0 ? [0, 3] : [1, 2]);
 
   const playoffStages = ['quarterfinals', 'semifinals', 'finals'];
   const playoffStageNames = {
@@ -28,6 +11,33 @@
     finals: 'Finals',
   };
   const playoffStageName = stage => playoffStageNames[stage] || '';
+  const bestOf = (D, match) => {
+    const round = (D && D.rounds || []).find(item => item.id === match.round);
+    if (round && round.playoffStage === 'semifinals') return 5;
+    if (round && round.playoffStage === 'finals') return 7;
+    return 3;
+  };
+
+  // wa/wb = games won by team a/b
+  const state = (m, bestOf = 3) => {
+    const gameLimit = [3, 5, 7].includes(bestOf) ? bestOf : 3;
+    const winsNeeded = Math.floor(gameLimit / 2) + 1;
+    let wa = 0, wb = 0, decidedAt = -1; const counted = [];
+    for (const [i, g] of gamesOf(m, gameLimit).entries()) {
+      if (wa >= winsNeeded || wb >= winsNeeded) break; // already over
+      if (gameLimit === 3 && i === 2 && !(wa === 1 && wb === 1)) break;
+      if (!valid(g)) continue;
+      counted.push(g); g.as > g.bs ? wa++ : wb++;
+      if (wa >= winsNeeded || wb >= winsNeeded) decidedAt = i;
+    }
+    return { wa, wb, counted, decided: wa >= winsNeeded || wb >= winsNeeded, started: counted.length > 0, decidedAt, winsNeeded };
+  };
+
+  // [a, b] points, null if it's not finished
+  const points = st => !st.decided ? null
+    : st.wa >= st.winsNeeded ? (st.wb === 0 ? [3, 0] : [2, 1])
+    : (st.wa === 0 ? [0, 3] : [1, 2]);
+
   const playoffFinishOrder = {
     Champion: 0,
     Finalist: 1,
@@ -50,7 +60,7 @@
     D.matches.forEach(m => {
       const A = S[m.a], B = S[m.b]; if (!A || !B) return;
       const playoff = isPlayoffMatch(D, m);
-      const st = state(m);
+      const st = state(m, bestOf(D, m));
       st.counted.forEach(g => {
         gamesPlayed++; goals += g.as + g.bs;
         if (playoff) return;
@@ -62,7 +72,7 @@
       if (st.decided) {
         seriesPlayed++;
         if (playoff) return;
-        const aWon = st.wa >= 2, w = aWon ? A : B, l = aWon ? B : A, [pa, pb] = points(st);
+        const aWon = st.wa > st.wb, w = aWon ? A : B, l = aWon ? B : A, [pa, pb] = points(st);
         w.sw++; l.sl++; w.sp++; l.sp++;
         A.pts += pa; B.pts += pb;
       }
@@ -101,14 +111,14 @@
         return (match.a === teamId || match.b === teamId) && round && round.playoffStage === stage;
       });
       if (!matches.length) continue;
-      if (matches.some(match => !state(match).decided))
+      if (matches.some(match => !state(match, bestOf(D, match)).decided))
         return 'In ' + playoffStageName(stage);
 
       const decided = matches
-        .filter(match => state(match).decided)
+        .filter(match => state(match, bestOf(D, match)).decided)
         .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
       const match = decided[decided.length - 1];
-      const st = state(match);
+      const st = state(match, bestOf(D, match));
       const won = match.a === teamId ? st.wa > st.wb : st.wb > st.wa;
       if (stage === 'finals') return won ? 'Champion' : 'Finalist';
       if (stage === 'semifinals') return won ? 'Finalist' : 'Semi-finalist';
@@ -117,9 +127,9 @@
     return '';
   }
 
-  // goals from games that count (not a game 3 after 2-0, not ties)
-  const goalsOf = m => {
-    const st = state(m), games = gamesOf(m);
+  // Goals only count in non-tied games before the series is decided.
+  const goalsOf = (m, maxGames = 3) => {
+    const st = state(m, maxGames), games = gamesOf(m, maxGames);
     const ok = new Set(games.map((g, i) => st.counted.includes(g) ? i : -1));
     return (m.goals || []).filter(x => ok.has(x.g));
   };
@@ -127,7 +137,7 @@
   // player id -> {g, a}, counted from every match's goal log
   function playerTotals(D) {
     const T = Object.fromEntries(D.players.map(p => [p.id, { g: 0, a: 0 }]));
-    D.matches.forEach(m => goalsOf(m).forEach(x => {
+    D.matches.forEach(m => goalsOf(m, bestOf(D, m)).forEach(x => {
       if (T[x.s]) T[x.s].g++;
       if (T[x.a1]) T[x.a1].a++;
       if (T[x.a2]) T[x.a2].a++;
@@ -137,6 +147,7 @@
 
   root.MHL = Object.assign(root.MHL || {}, {
     gamesOf, valid, state, points, compute, goalsOf, playerTotals,
-    isPlayoffMatch, playoffFinish, playoffStageName,
+    bestOf, isPlayoffMatch, playoffFinish, playoffStageName,
+    played: (match, D) => state(match, bestOf(D, match)).decided,
   });
 })(window);

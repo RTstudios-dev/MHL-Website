@@ -43,9 +43,9 @@
   if (!rows.length) { $('table').innerHTML = MHL.empty('No teams yet', 'The table fills in as teams are added.'); return; }
 
   // last 5 finished series, newest first
-  const done = D.matches.filter(m => !MHL.isPlayoffMatch(D, m) && MHL.played(m)).sort(MHL.byDate).reverse();
+  const done = D.matches.filter(m => !MHL.isPlayoffMatch(D, m) && MHL.played(m, D)).sort(MHL.byDate).reverse();
   const form = id => done.filter(m => m.a === id || m.b === id).slice(0, 5).map(m => {
-    const st = MHL.state(m), won = (m.a === id) === (st.wa > st.wb);
+    const st = MHL.state(m, MHL.bestOf(D, m)), won = (m.a === id) === (st.wa > st.wb);
     return `<span class="fm ${won ? 'w' : 'l'}" title="${won ? 'Won' : 'Lost'} ${Math.max(st.wa, st.wb)}-${Math.min(st.wa, st.wb)}">${won ? 'W' : 'L'}</span>`;
   }).join('') || '<span class="fm-none">-</span>';
   const gd = r => { const d = r.gf - r.ga; return d > 0 ? '+' + d : String(d); };

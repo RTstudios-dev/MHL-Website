@@ -36,14 +36,14 @@ Remember to press **Save changes**, nothing goes live until you do.
 - Teams: name, short code (shows on the scoreboards), colour, logo, team photo, page address, and Season 2 captain.
   Fill the numbered draft-order dropdowns manually; blank slots are skipped. Assign captains to the selected teams, then start/stop the draft with the button at the top of Teams and press **Save changes**. Team captains cannot be drafted. Steam-authenticated captains pick on the public Season 2 Player Sign Ups board in order; captains are redirected there when their turn starts, their remaining budget is pinned at the top of the page, and pick turns update automatically. Each pick deducts the higher of the player's Skater and Goalie Values, regardless of position. Teams that cannot afford the cheapest remaining player are skipped. Remaining budgets also appear on the regular Teams page. Admins can clear all Season 2 team assignments from the Season 2 Player Sign Ups tab; this also stops the draft and removes its saved picks.
   If you change the page address later, old links to that team stop working.
-- Matches: regular rounds are optional. Add Quarter Finals, Semi Finals, and Finals as playoff stages from the Matches tab; enter their scores like other best-of-3 series.
+- Matches: regular rounds are optional. Add Quarter Finals, Semi Finals, and Finals as playoff stages from the Matches tab. Quarter Finals are best-of-3, Semi Finals best-of-5, and Finals best-of-7.
   Playoff stages allow up to 4 Quarter Finals matches, 2 Semi Finals matches, and 1 Finals match.
   The admin preview and public Matches page show who advances, and Finals show the champion and finalist.
   Playoff matches do not affect regular-season records or form. Once playoff matches are recorded, both standings tables order teams by playoff finish; teams tied at a finish keep their regular-season order, and non-playoff teams follow.
   It shows you the result and points before saving regular-season matches.
   Under each match there is a **Goals** list with a row for every goal in the scores.
   Pick who scored and up to two assists, the player totals count themselves.
-  Goals from a game that does not count (a tie, or a game 3 after 2-0) are not counted.
+  Goals from a game that does not count (a tie or a game after the series is decided) are not counted.
 - Players: name, team, number, position. Their goal and assist totals add up from the matches.
 - News: pinned posts stay on top, the newest one also shows on the home page.
 - Rules: shown in the same order as in the admin.
@@ -67,7 +67,7 @@ Steam sign-in uses OpenID and never collects player passwords. It is not require
 - 2-0 win: 3 points for the winner, 0 for the loser
 - 2-1 win: 2 points for the winner, 1 for the loser
 
-Tied games don't count, and a game 3 after a 2-0 is ignored.
+Tied games don't count, and games after a series is decided are ignored.
 If teams have the same points it goes by games won, then head to head, then series won, then goal difference, then goals scored.
 These points and tiebreakers apply to regular-season rounds only; playoff series determine advancement and final finish separately.
 
