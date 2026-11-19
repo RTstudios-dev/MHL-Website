@@ -31,7 +31,8 @@ const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0 }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
+const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -414,6 +415,18 @@ async function steamProfileUrl(steamId) {
   }
 }
 const okUrl = u => /^https:\/\/[^\s"<>]+$/.test(String(u || '')) ? String(u).slice(0, 300) : '';
+const normalizeStatsPointRequirements = value => {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const requirement = (input, fallback) => {
+    const number = Number(input);
+    return Number.isSafeInteger(number) && number >= 1 && number <= 100_000 ? number : fallback;
+  };
+  return {
+    goals: requirement(raw.goals, DEFAULT_STATS_POINT_REQUIREMENTS.goals),
+    assists: requirement(raw.assists, DEFAULT_STATS_POINT_REQUIREMENTS.assists),
+    saves: requirement(raw.saves, DEFAULT_STATS_POINT_REQUIREMENTS.saves),
+  };
+};
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
   const s = d.site && typeof d.site === 'object' ? d.site : {};
@@ -422,6 +435,7 @@ function sanitize(d) {
     discord: okUrl(s.discord),
     iceCap: num(s.iceCap, Number.MAX_SAFE_INTEGER),
     teamCap: num(s.teamCap, Number.MAX_SAFE_INTEGER),
+    statsPointRequirements: normalizeStatsPointRequirements(s.statsPointRequirements),
   };
   const teams = (Array.isArray(d.teams) ? d.teams : []).slice(0, 64).map(t => ({
     id: str(t.id, 40) || crypto.randomUUID(),
@@ -1363,6 +1377,8 @@ const server = http.createServer(async (req, res) => {
       // logoUrl: pages swap the wordmark for the logo when there is one
       const logo = findLogo();
       const data = readData();
+      data.site = data.site && typeof data.site === 'object' ? { ...data.site } : { ...EMPTY.site };
+      data.site.statsPointRequirements = normalizeStatsPointRequirements(data.site.statsPointRequirements);
       data.draft = normalizeDraft(data.draft, data.teams, data.signups);
       const signupsById = new Map(data.signups.map(signup => [signup.id, signup]));
       data.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });

@@ -46,7 +46,7 @@
     <label class="signup-search player-stats-search" for="playerSearch">Search players
       <input id="playerSearch" type="search" autocomplete="off">
     </label>
-    <p class="player-stats-point-key">1 Goal/Assist = 1 point · 2 Saves = 1 point</p>
+    <p class="player-stats-point-key" id="playerStatsPointKey">1 Goal = 1 point · 1 Assist = 1 point · 2 Saves = 1 point</p>
     <div class="player-stats-row-controls">
       <div class="player-stats-direction" role="group" aria-label="Sort direction" id="statDirection">
         <button type="button" data-direction="high" aria-pressed="true">Highest</button>
@@ -77,11 +77,25 @@
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('leaders'), 'the players'); }
   const { esc } = MHL;
+  const rawPointRequirements = D.site && D.site.statsPointRequirements || {};
+  const requirement = (value, fallback) =>
+    Number.isSafeInteger(value) && value > 0 ? value : fallback;
+  const goalsPerPoint = requirement(rawPointRequirements.goals, 1);
+  const assistsPerPoint = requirement(rawPointRequirements.assists, 1);
+  const savesPerPoint = requirement(rawPointRequirements.saves, 2);
+  const pointRuleText = (value, singular, plural) =>
+    `${value} ${value === 1 ? singular : plural} = 1 point`;
+  $('playerStatsPointKey').textContent = [
+    pointRuleText(goalsPerPoint, 'Goal', 'Goals'),
+    pointRuleText(assistsPerPoint, 'Assist', 'Assists'),
+    pointRuleText(savesPerPoint, 'Save', 'Saves'),
+  ].join(' · ');
   const P = (D.signups || []).map(player => {
     const stats = player.trackedStats || {};
     const g = Number(stats.goals) || 0, a = Number(stats.assists) || 0, s = Number(stats.saves) || 0;
     return {
-      ...player, g, a, s, p: g + a + Math.floor(s / 2),
+      ...player, g, a, s,
+      p: Math.floor(g / goalsPerPoint) + Math.floor(a / assistsPerPoint) + Math.floor(s / savesPerPoint),
       value: Number(player.position === 'Goalie' ? player.goalieValue : player.skaterValue) || 0,
       goalie: player.position === 'Goalie',
       t: D.T[player.team] || null,

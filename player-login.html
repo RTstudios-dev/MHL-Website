@@ -192,9 +192,12 @@
       const rosterPlayer = data.players.find(player => String(player.name || '').trim().toLowerCase() === playerName);
       const goals = rosterPlayer ? Number(rosterPlayer.g) || 0 : 0;
       const assists = rosterPlayer ? Number(rosterPlayer.a) || 0 : 0;
+      const requirements = data.site && data.site.statsPointRequirements || {};
+      const goalsPerPoint = Number.isSafeInteger(requirements.goals) && requirements.goals > 0 ? requirements.goals : 1;
+      const assistsPerPoint = Number.isSafeInteger(requirements.assists) && requirements.assists > 0 ? requirements.assists : 1;
       profileGoals.textContent = goals;
       profileAssists.textContent = assists;
-      profilePoints.textContent = goals + assists;
+      profilePoints.textContent = Math.floor(goals / goalsPerPoint) + Math.floor(assists / assistsPerPoint);
       if (!rosterPlayer) statsStatus.textContent = 'Stats will appear once your in-game name is on the player roster.';
     } catch (error) {
       statsStatus.textContent = 'Could not load player stats. Please reload the page to try again.';

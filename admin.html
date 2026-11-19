@@ -60,6 +60,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .draft-order-number{font-family:var(--disp);font-size:20px;color:var(--gold);text-align:center}
 .team-list{display:grid;gap:12px}
 .team-draft-settings{display:grid;grid-template-columns:minmax(200px,1fr) minmax(200px,1fr);gap:12px;align-items:end}
+.point-requirements{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .team-budget{display:grid;gap:4px;font-size:14px;color:var(--muted)}
 .team-budget b{font-family:var(--disp);font-size:23px;font-weight:500;color:var(--gold)}
 .team-drafted-players{border-top:1px solid var(--line);padding-top:10px;display:grid;gap:6px}
@@ -137,6 +138,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
   .team-management{grid-template-columns:1fr}
   .draft-order-panel{position:static}
   .team-draft-settings{grid-template-columns:1fr}
+  .point-requirements{grid-template-columns:1fr}
   .match{grid-template-columns:1fr}
   .bar .right{margin-left:0}
 }
@@ -694,7 +696,7 @@ const MHLA = (() => {
           h('p', {}, 'Select the pending stats file from the game server. The file is read automatically; review the preview, then import.'),
           fileInput, ' ', importButton, status);
       })(),
-      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists and saves here. Game mod events continue adding to the tracked stats; saves count toward points at one point per two saves.'),
+      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists and saves here. Game mod events continue adding to the tracked stats. Point requirements are set independently under Settings.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
@@ -975,11 +977,33 @@ const MHLA = (() => {
   // settings
   function settings() {
     D.site = D.site || { season: '', discord: '' };
+    D.site.statsPointRequirements = D.site.statsPointRequirements || { goals: 1, assists: 1, saves: 2 };
+    const requirements = D.site.statsPointRequirements;
+    const requirementInput = (key, label) => field(label, h('input', {
+      type: 'number', min: 1, max: 100000, step: 1, required: true,
+      value: requirements[key],
+      oninput: e => {
+        const value = Number(e.target.value);
+        if (!Number.isSafeInteger(value) || value < 1 || value > 100000) return;
+        requirements[key] = value;
+        touch();
+      },
+      onchange: e => {
+        const value = Number(e.target.value);
+        if (!Number.isSafeInteger(value) || value < 1 || value > 100000)
+          e.target.value = requirements[key];
+      },
+    }));
     return [
       head('Settings'),
       h('div', { class: 'ed', style: 'max-width:640px' },
         field('Season name', text(D.site, 'season', { maxlength: 40, placeholder: 'Season 1' }), 'Shows on the home page.'),
         field('Discord invite link', text(D.site, 'discord', { maxlength: 300, placeholder: 'https://discord.gg/...' }), 'Must start with https://. Leave empty to hide the Join the Discord button.'),
+        h('div', { class: 'point-requirements' },
+          requirementInput('goals', 'Goals per point'),
+          requirementInput('assists', 'Assists per point'),
+          requirementInput('saves', 'Saves per point')),
+        h('p', { class: 'help', style: 'margin:0' }, 'Each stat earns points independently: one point per configured number of goals, assists, or saves. Defaults are 1 goal, 1 assist, and 2 saves. Values must be whole numbers from 1 to 100,000.'),
         h('p', { class: 'help', style: 'margin:0' }, D.hasLogo ? `The league logo (${D.logoUrl.slice(1)}) is in use.` : 'No league logo yet: the site shows the MHL wordmark. To add one, put logo.png (or logo.webp / logo.jpg) next to server.js and reload the site.')),
     ];
   }
