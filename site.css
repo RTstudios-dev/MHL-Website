@@ -90,6 +90,7 @@ dialog.prompt-dialog::backdrop{background:#000b}
 .player-stats-profile-action:hover{color:var(--on-gold)}
 .player-stats-search{display:grid;flex:1;max-width:320px;gap:4px;color:var(--muted);font-size:14px}
 .player-stats-search input{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);padding:9px 12px;min-height:44px;width:100%}
+.player-stats-point-key{margin:0 12px 9px;color:var(--muted);font-size:13px;line-height:1.4}
 .player-stats-controls{display:grid;gap:18px;margin-bottom:24px}
 .player-stats-filter-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 26px}
 .player-stats-filter-row .seg{margin:0}

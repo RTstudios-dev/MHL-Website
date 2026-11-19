@@ -43,9 +43,10 @@
 <section aria-labelledby="hAll" id="allBlock" hidden>
   <div class="bh"><h2 id="hAll">All players</h2></div>
   <div class="player-stats-list-toolbar">
-    <label class="signup-search player-stats-search" for="playerSearch">Search Season 2 players
+    <label class="signup-search player-stats-search" for="playerSearch">Search players
       <input id="playerSearch" type="search" autocomplete="off">
     </label>
+    <p class="player-stats-point-key">1 Goal/Assist = 1 point · 2 Saves = 1 point</p>
     <div class="player-stats-row-controls">
       <div class="player-stats-direction" role="group" aria-label="Sort direction" id="statDirection">
         <button type="button" data-direction="high" aria-pressed="true">Highest</button>
@@ -236,7 +237,7 @@
     }
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
-        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">Assists</th><th scope="col">${goalColumnLabel()}</th></tr></thead>
+        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">Assists</th><th scope="col">${goalColumnLabel()}</th><th scope="col">P</th></tr></thead>
       <tbody>${rows.map(player => `<tr><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
         ? `<img src="${esc(player.photo)}" alt="">`
         : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -247,7 +248,8 @@
         <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
         <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
         <td class="player-stat-cell player-stat-value" data-label="Assists">${source === 'season2' ? '—' : player.a}</td>
-        <td class="player-stat-cell player-stat-value" data-label="${goalColumnLabel()}">${source === 'season2' ? '—' : player.goalie ? player.s : player.g}</td></tr>`).join('')}</tbody>
+        <td class="player-stat-cell player-stat-value" data-label="${goalColumnLabel()}">${source === 'season2' ? '—' : player.goalie ? player.s : player.g}</td>
+        <td class="player-stat-cell player-stat-value" data-label="P">${source === 'season2' ? '—' : player.p}</td></tr>`).join('')}</tbody>
     </table></div>`;
   }
   $('statSelect').addEventListener('change', event => {
