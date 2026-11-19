@@ -60,7 +60,10 @@
       </label>
     </div>
   </div>
-  <div id="all"></div>
+  <div class="player-stats-results">
+    <div id="all"></div>
+    <aside class="player-stats-profile-card" id="playerStatsProfileCard" aria-label="Your player stats" hidden></aside>
+  </div>
 </section>
 </main>
 </div>
@@ -92,12 +95,87 @@
     $('playerFilters').hidden = true;
     $('statsSource').hidden = true;
     $('leaders').innerHTML = MHL.empty('No Season 2 players yet', 'Season 2 signups appear here once they are added.');
-    return;
   }
   const euroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-  const formatValue = value => Number(value) > 0 ? euroFormat.format(Number(value)) : '—';
+  const compactEuroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 1 });
+  const formatValue = raw => {
+    const value = Number(raw) || 0;
+    if (!value) return '—';
+    return value >= 1_000_000
+      ? compactEuroFormat.format(value).replace(/([KMBT])$/, (_, suffix) => suffix.toLowerCase())
+      : euroFormat.format(value);
+  };
   const NAMES = { p: 'Points', gs: 'Goals/Saves', a: 'Assists', value: 'Value' };
   let key = 'p', direction = 'high', filter = 'all', source = 'pug', search = '';
+  let personalPlayer = null;
+  const profileCard = $('playerStatsProfileCard');
+  const showProfileMessage = (title, message, action = '') => {
+    profileCard.innerHTML = `<div class="player-stats-profile-message"><h3>${esc(title)}</h3><p>${esc(message)}</p>${action}</div>`;
+    profileCard.hidden = false;
+  };
+  function renderPersonalStats() {
+    if (!personalPlayer) return;
+    const empty = source === 'season2';
+    const stats = {
+      goals: empty ? '—' : personalPlayer.g,
+      assists: empty ? '—' : personalPlayer.a,
+      saves: empty ? '—' : personalPlayer.s,
+      points: empty ? '—' : personalPlayer.p,
+    };
+    profileCard.innerHTML = `<div class="player-stats-profile-heading">
+      <small>Your ${source === 'pug' ? 'Pug' : 'Season 2'} Stats</small>
+      <div class="player-stats-profile-person">${personalPlayer.photo
+        ? `<img src="${esc(personalPlayer.photo)}" alt="">`
+        : `<span class="avatar" aria-hidden="true">${esc((personalPlayer.name || '?').slice(0, 1).toUpperCase())}</span>`}
+        <div><h3>${esc(personalPlayer.name)}</h3><span>${esc(personalPlayer.position || 'Unassigned')} / ${esc(personalPlayer.t ? personalPlayer.t.name : 'Unassigned')}</span></div>
+      </div>
+    </div>
+    <div class="player-stats-profile-values">
+      <div><span>Goals</span><strong>${stats.goals}</strong></div>
+      <div><span>Assists</span><strong>${stats.assists}</strong></div>
+      <div><span>Saves</span><strong>${stats.saves}</strong></div>
+      <div><span>Points</span><strong>${stats.points}</strong></div>
+    </div>`;
+    profileCard.hidden = false;
+  }
+  async function loadPersonalStatsCard() {
+    try {
+      const sessionResponse = await fetch('/api/player/me', { credentials: 'same-origin', cache: 'no-store' });
+      if (!sessionResponse.ok) throw new Error('Could not check the player session.');
+      const session = await sessionResponse.json();
+      if (!session.authenticated) {
+        showProfileMessage('Sign In To View Your Player Stats', 'Sign in with Steam to see your tracked player stats.',
+          '<a class="player-stats-profile-action" href="/player-login">Sign In</a>');
+        return;
+      }
+
+      const signupResponse = await fetch('/api/player/signup', { credentials: 'same-origin', cache: 'no-store' });
+      if (signupResponse.status === 401) {
+        showProfileMessage('Sign In To View Your Player Stats', 'Your player session expired. Sign in again to view your stats.',
+          '<a class="player-stats-profile-action" href="/player-login">Sign In</a>');
+        return;
+      }
+      if (signupResponse.status === 404) {
+        showProfileMessage('No linked Season 2 signup', 'Link a Season 2 signup to this Steam account to view your player stats.',
+          '<a class="player-stats-profile-action" href="/season-2-players">Season 2 Signups</a>');
+        return;
+      }
+      if (!signupResponse.ok) {
+        const error = await signupResponse.json().catch(() => ({}));
+        throw new Error(error.error || 'Could not load the linked signup.');
+      }
+      const result = await signupResponse.json();
+      personalPlayer = P.find(player => player.id === result.signup.id) || null;
+      if (!personalPlayer) {
+        showProfileMessage('Player stats unavailable', 'Your linked signup could not be found in the current stats list.');
+        return;
+      }
+      renderPersonalStats();
+    } catch (error) {
+      console.error('Unable to load the signed-in player stats:', error);
+      showProfileMessage('Player stats unavailable', 'We could not load your player stats. Please refresh to try again.');
+    }
+  }
   const filtered = () => {
     const query = search.trim().toLocaleLowerCase();
     return P.filter(player => {
@@ -120,7 +198,9 @@
 
   function leaders() {
     if (!filtered().length) {
-      $('leaders').innerHTML = MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.');
+      $('leaders').innerHTML = P.length
+        ? MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.')
+        : MHL.empty('No Season 2 players yet', 'Season 2 signups appear here once they are added.');
       return;
     }
     if (source === 'season2' && key !== 'value') {
@@ -156,7 +236,9 @@
     $('allBlock').hidden = false;
     const rows = rank();
     if (!rows.length) {
-      $('all').innerHTML = MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.');
+      $('all').innerHTML = P.length
+        ? MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.')
+        : MHL.empty('No Season 2 players yet', 'Season 2 signups appear here once they are added.');
       return;
     }
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
@@ -209,10 +291,11 @@
     source = button.dataset.source;
     $('statsSource').querySelectorAll('button').forEach(item =>
       item.setAttribute('aria-pressed', String(item === button)));
+    renderPersonalStats();
     leaders();
     table();
   });
-  leaders(); table();
+  leaders(); table(); loadPersonalStatsCard();
 })();
 </script>
 </body>
