@@ -356,6 +356,7 @@ const modRosterSnapshot = data => {
       position: signup.position,
       teamName: team ? team.name : '',
       photo: okImage(signup.photo) ? signup.photo : '',
+      cardArtwork: okImage(signup.cardArtwork) ? signup.cardArtwork : '',
       badgeImages: equippedBadgeSlotsFor(data, signup).map(id => {
         const badge = badgesById.get(id);
         return badge ? badge.image : '';
@@ -676,6 +677,7 @@ function sanitize(d) {
     captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
     team: ids.has(p.team) ? p.team : '',
     photo: okImage(p.photo) ? p.photo : '',
+    cardArtwork: okImage(p.cardArtwork) ? p.cardArtwork : '',
     badgeSlots: Array.isArray(p.badgeSlots) ? p.badgeSlots.slice(0, 3).map(id => str(id, 40)) : [],
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
@@ -1472,7 +1474,7 @@ const server = http.createServer(async (req, res) => {
         signup: {
           id: signup.id, discord: signup.discord, name: signup.name, steam: signup.steam,
           hours: signup.hours, position: signup.position, captain: signup.captain,
-          photo: signup.photo, team: signup.team, teamName: team ? team.name : '',
+          photo: signup.photo, cardArtwork: signup.cardArtwork || '', team: signup.team, teamName: team ? team.name : '',
           value: signup.position === 'Goalie' ? values.goalieValue : values.skaterValue,
           points: configuredPointsFor(data, stats), trackedStats: stats,
           badgeSlots: equippedBadgeSlotsFor(data, signup),
@@ -1517,6 +1519,22 @@ const server = http.createServer(async (req, res) => {
       syncSignupPlayers(data);
       writeData(data);
       return send(res, 200, { ok: true });
+    }
+    if (p === '/api/player/card-artwork' && req.method === 'PUT') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam before editing your player card.' });
+      const data = readData();
+      const profileKey = steamKey(player.profileUrl);
+      const matches = data.signups.filter(signup =>
+        (player.steamId && signup.steamId === player.steamId) ||
+        (profileKey && steamKey(signup.steam) === profileKey));
+      if (matches.length !== 1) return send(res, matches.length ? 409 : 404, { error: 'Could not find one signup linked to this Steam profile.' });
+      const changes = JSON.parse(await readBody(req) || '{}');
+      if (typeof changes.cardArtwork !== 'string' || (changes.cardArtwork && !okImage(changes.cardArtwork)))
+        return send(res, 400, { error: 'Choose a valid uploaded portrait image.' });
+      matches[0].cardArtwork = changes.cardArtwork || '';
+      writeData(data);
+      return send(res, 200, { ok: true, cardArtwork: matches[0].cardArtwork });
     }
     if (p === '/api/player/logout' && req.method === 'POST') {
       const token = getCookie(req, 'mhl_player');
@@ -1701,6 +1719,8 @@ const server = http.createServer(async (req, res) => {
         const rawSignup = incomingSignups.get(signup.id);
         if (previous && (!rawSignup || !Object.prototype.hasOwnProperty.call(rawSignup, 'badgeSlots')))
           signup.badgeSlots = previous.badgeSlots;
+        if (previous && (!rawSignup || !Object.prototype.hasOwnProperty.call(rawSignup, 'cardArtwork')))
+          signup.cardArtwork = previous.cardArtwork || '';
         byId.set(signup.id, signup);
       });
       clean.signups = [...byId.values()].slice(0, 5000);
@@ -1739,7 +1759,7 @@ const server = http.createServer(async (req, res) => {
       writeData(clean);
       // delete uploads nothing uses anymore
       const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo])
-        .concat(clean.signups.map(signup => signup.photo), clean.badges.map(badge => badge.image))
+        .concat(clean.signups.flatMap(signup => [signup.photo, signup.cardArtwork]), clean.badges.map(badge => badge.image))
         .map(url => path.basename(url || '')));
       for (const f of fs.readdirSync(UPLOAD_DIR)) if (!used.has(f)) fs.unlink(path.join(UPLOAD_DIR, f), () => {});
       const logo = findLogo();
@@ -1795,6 +1815,7 @@ const server = http.createServer(async (req, res) => {
         captain: signup.captain,
         team: '',
         photo: okImage(signup.photo) ? signup.photo : '',
+        cardArtwork: okImage(signup.cardArtwork) ? signup.cardArtwork : '',
         skaterValue: 0,
         goalieValue: 0,
       };
