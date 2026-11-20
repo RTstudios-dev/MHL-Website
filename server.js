@@ -259,6 +259,7 @@ const modRosterSnapshot = data => {
     seenSteamIds.add(steamId);
     players.push({
       steamId,
+      photo: okImage(signup.photo) ? signup.photo : '',
       ...signupValues(signup),
       ...trackedStatsFor(data, signup.id),
       statsAvailable: true,
