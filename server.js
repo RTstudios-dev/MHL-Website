@@ -751,7 +751,7 @@ const applyStatsReports = (data, reports) => {
         else unmatched++;
       } else {
         const signup = signupBySteamId.get(event.steamId);
-        if (signup && signup.position === 'Goalie') {
+        if (signup) {
           const stats = countsFor(signup.id);
           stats.saves = increaseTrackedStat(stats.saves, event.count);
           credited++;
