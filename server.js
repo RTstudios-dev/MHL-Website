@@ -13,7 +13,7 @@
 //   The public mod roster endpoint exposes linked Steam IDs, player values, tracked stats, and the Ice Cap.
 //   NODE_ENV=production  won't start without a password
 //   TRUST_PROXY=1        set when behind a proxy so the login lockout sees the real ip
-const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
+const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto'), zlib = require('zlib');
 
 const PORT = process.env.PORT || 3000;
 const DIR = __dirname;
@@ -32,7 +32,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -50,6 +50,7 @@ if (!fs.existsSync(DATA_FILE)) {
 
 const IMG_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
 const UPLOAD_RE = /^\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)$/;
+const BADGE_UPLOAD_RE = /^\/uploads\/[a-f0-9]{16}\.png$/;
 const uploadFile = urlPath => path.join(DATA_DIR, urlPath);
 // check the actual bytes, content-type can't be trusted
 const sniff = b => {
@@ -58,6 +59,96 @@ const sniff = b => {
   if (b.length > 12 && b.slice(0, 4).toString() === 'RIFF' && b.slice(8, 12).toString() === 'WEBP') return 'webp';
   if (b.length > 6 && /^GIF8[79]a$/.test(b.slice(0, 6).toString())) return 'gif';
   return null;
+};
+const pngCrcTable = Uint32Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit++) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+const pngChunkCrc = (image, start, end) => {
+  let value = 0xffffffff;
+  for (let index = start; index < end; index++)
+    value = pngCrcTable[(value ^ image[index]) & 0xff] ^ (value >>> 8);
+  return (value ^ 0xffffffff) >>> 0;
+};
+const hasBadgeDimensions = image => {
+  if (sniff(image) !== 'png' || image.length < 45) return false;
+  let offset = 8, sawHeader = false, sawData = false, endedData = false, sawEnd = false;
+  let bitDepth = 0, colorType = 0, interlace = 0, palette = false;
+  const imageData = [];
+  while (offset + 12 <= image.length) {
+    const length = image.readUInt32BE(offset);
+    if (length > image.length - offset - 12) return false;
+    const type = image.toString('ascii', offset + 4, offset + 8);
+    const dataStart = offset + 8, crcStart = dataStart + length, chunkEnd = crcStart + 4;
+    if (pngChunkCrc(image, offset + 4, crcStart) !== image.readUInt32BE(crcStart)) return false;
+    if (!sawHeader && (type !== 'IHDR' || length !== 13 || offset !== 8)) return false;
+    if (type === 'IHDR') {
+      if (sawHeader || image.readUInt32BE(dataStart) !== 400 || image.readUInt32BE(dataStart + 4) !== 400)
+        return false;
+      bitDepth = image[dataStart + 8];
+      colorType = image[dataStart + 9];
+      if (image[dataStart + 10] !== 0 || image[dataStart + 11] !== 0) return false;
+      interlace = image[dataStart + 12];
+      if (interlace !== 0 && interlace !== 1) return false;
+      const validDepths = {
+        0: [1, 2, 4, 8, 16], 2: [8, 16], 3: [1, 2, 4, 8], 4: [8, 16], 6: [8, 16],
+      };
+      if (!validDepths[colorType] || !validDepths[colorType].includes(bitDepth)) return false;
+      sawHeader = true;
+    } else if (type === 'PLTE') {
+      if (sawData || length === 0 || length > 768 || length % 3 !== 0) return false;
+      palette = true;
+    } else if (type === 'IDAT') {
+      if (endedData || (colorType === 3 && !palette)) return false;
+      sawData = true;
+      if (length) imageData.push(image.subarray(dataStart, crcStart));
+    } else if (type === 'IEND') {
+      if (length !== 0 || !sawData || chunkEnd !== image.length) return false;
+      sawEnd = true;
+      offset = chunkEnd;
+      break;
+    } else if (sawData) {
+      endedData = true;
+    }
+    offset = chunkEnd;
+  }
+  if (!sawHeader || !sawData || !sawEnd || imageData.length === 0) return false;
+  const channelCount = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colorType];
+  const bitsPerPixel = channelCount * bitDepth;
+  const passes = interlace === 0
+    ? [[0, 0, 1, 1]]
+    : [[0, 0, 8, 8], [4, 0, 8, 8], [0, 4, 4, 8], [2, 0, 4, 4], [0, 2, 2, 4], [1, 0, 2, 2], [0, 1, 1, 2]];
+  let expectedLength = 0;
+  const rows = [];
+  for (const [xStart, yStart, xStep, yStep] of passes) {
+    const width = Math.max(0, Math.ceil((400 - xStart) / xStep));
+    const height = Math.max(0, Math.ceil((400 - yStart) / yStep));
+    const rowLength = Math.ceil(width * bitsPerPixel / 8);
+    for (let row = 0; row < height; row++) rows.push(rowLength);
+    expectedLength += height * (rowLength + 1);
+  }
+  let decoded;
+  try {
+    decoded = zlib.inflateSync(Buffer.concat(imageData), { maxOutputLength: expectedLength + 1 });
+  } catch {
+    return false;
+  }
+  if (decoded.length !== expectedLength) return false;
+  let cursor = 0;
+  for (const rowLength of rows) {
+    if (decoded[cursor] > 4) return false;
+    cursor += rowLength + 1;
+  }
+  return true;
+};
+const isBadgePng400 = filePath => {
+  try {
+    const image = fs.readFileSync(filePath);
+    return hasBadgeDimensions(image);
+  } catch {
+    return false;
+  }
 };
 
 // password
@@ -251,15 +342,24 @@ const signupValues = signup => ({
 const modRosterSnapshot = data => {
   const seenSteamIds = new Set();
   const players = [];
+  const badgesById = new Map(data.badges.map(badge => [badge.id, badge]));
   for (const signup of data.signups) {
     const steamId = signupSteamId(signup);
     if (!/^\d{17}$/.test(steamId)) continue;
     if (seenSteamIds.has(steamId))
       return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
     seenSteamIds.add(steamId);
+    const team = data.teams.find(item => item.id === signup.team);
     players.push({
       steamId,
+      name: signup.name,
+      position: signup.position,
+      teamName: team ? team.name : '',
       photo: okImage(signup.photo) ? signup.photo : '',
+      badgeImages: equippedBadgeSlotsFor(data, signup).map(id => {
+        const badge = badgesById.get(id);
+        return badge ? badge.image : '';
+      }),
       ...signupValues(signup),
       ...trackedStatsFor(data, signup.id),
       statsAvailable: true,
@@ -354,6 +454,7 @@ const signupForPlayer = (data, player) => {
 };
 const score = v => (v === null || v === '' || v === undefined) ? null : num(v, 99);
 const okImage = u => UPLOAD_RE.test(u) && fs.existsSync(uploadFile(u));
+const okBadgeImage = u => BADGE_UPLOAD_RE.test(u) && isBadgePng400(uploadFile(u));
 const steamProfile = v => {
   const u = str(v, 300);
   return /^https:\/\/(?:www\.)?steamcommunity\.com\/(?:id\/[a-z0-9_-]+|profiles\/\d{17})\/?$/i.test(u) ? u : '';
@@ -427,6 +528,38 @@ const normalizeStatsPointRequirements = value => {
     assists: requirement(raw.assists, DEFAULT_STATS_POINT_REQUIREMENTS.assists),
     saves: requirement(raw.saves, DEFAULT_STATS_POINT_REQUIREMENTS.saves),
   };
+};
+const configuredPointsFor = (data, stats) => {
+  const requirements = normalizeStatsPointRequirements(data.site && data.site.statsPointRequirements);
+  return Math.floor(stats.goals / requirements.goals)
+    + Math.floor(stats.assists / requirements.assists)
+    + Math.floor(stats.saves / requirements.saves);
+};
+const badgeIsUnlocked = (data, signup, badge) => {
+  if (!badge || !badge.image) return false;
+  if (badge.manualPlayerIds.includes(signup.id)) return true;
+  if (!badge.allPlayers && !badge.season2Players) return false;
+  const stats = trackedStatsFor(data, signup.id);
+  const requirements = badge.requirements;
+  return stats.goals >= requirements.goals
+    && stats.assists >= requirements.assists
+    && stats.saves >= requirements.saves
+    && configuredPointsFor(data, stats) >= requirements.points;
+};
+const badgeCollectionFor = (data, signup) => data.badges
+  .filter(badge => badge.image)
+  .map(badge => ({
+    id: badge.id,
+    name: badge.name,
+    description: badge.description,
+    image: badge.image,
+    unlocked: badgeIsUnlocked(data, signup, badge),
+    requirements: badge.requirements,
+  }));
+const equippedBadgeSlotsFor = (data, signup) => {
+  const unlocked = new Set(badgeCollectionFor(data, signup).filter(badge => badge.unlocked).map(badge => badge.id));
+  const slots = Array.isArray(signup.badgeSlots) ? signup.badgeSlots : [];
+  return [0, 1, 2].map(index => unlocked.has(slots[index]) ? slots[index] : '');
 };
 const PLAYOFF_STAGES = ['quarterfinals', 'semifinals', 'finals'];
 const PLAYOFF_MATCH_LIMITS = { quarterfinals: 4, semifinals: 2, finals: 1 };
@@ -543,9 +676,50 @@ function sanitize(d) {
     captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
     team: ids.has(p.team) ? p.team : '',
     photo: okImage(p.photo) ? p.photo : '',
+    badgeSlots: Array.isArray(p.badgeSlots) ? p.badgeSlots.slice(0, 3).map(id => str(id, 40)) : [],
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
   const signupIds = new Set(signups.map(signup => signup.id));
+  const badgeIds = new Set();
+  const badges = (Array.isArray(d.badges) ? d.badges : []).slice(0, 500).map(badge => {
+    const source = badge && typeof badge === 'object' ? badge : {};
+    const id = str(source.id, 40) || crypto.randomUUID();
+    if (badgeIds.has(id)) return null;
+    badgeIds.add(id);
+    const manualIds = new Set();
+    const manualPlayerIds = (Array.isArray(source.manualPlayerIds) ? source.manualPlayerIds : [])
+      .slice(0, 5000)
+      .map(value => str(value, 40))
+      .filter(value => signupIds.has(value) && !manualIds.has(value) && manualIds.add(value));
+    const requirements = source.requirements && typeof source.requirements === 'object'
+      ? source.requirements
+      : {};
+    return {
+      id,
+      name: str(source.name, 80) || 'Badge',
+      description: str(source.description, 240),
+      image: okBadgeImage(source.image) ? source.image : '',
+      requirements: {
+        goals: num(requirements.goals, Number.MAX_SAFE_INTEGER),
+        assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
+        saves: num(requirements.saves, Number.MAX_SAFE_INTEGER),
+        points: num(requirements.points, Number.MAX_SAFE_INTEGER),
+      },
+      allPlayers: !!source.allPlayers,
+      season2Players: !!source.season2Players,
+      manualPlayerIds,
+    };
+  }).filter(Boolean);
+  const validBadgeIds = new Set(badges.map(badge => badge.id));
+  signups.forEach(signup => {
+    const used = new Set();
+    signup.badgeSlots = [0, 1, 2].map(index => {
+      const badgeId = signup.badgeSlots[index] || '';
+      if (!validBadgeIds.has(badgeId) || used.has(badgeId)) return '';
+      used.add(badgeId);
+      return badgeId;
+    });
+  });
   const linkedSignupIds = new Set();
   for (const player of players) {
     if (!signupIds.has(player.signupId) || linkedSignupIds.has(player.signupId)) player.signupId = '';
@@ -560,7 +734,7 @@ function sanitize(d) {
   const signupById = new Map(signups.map(signup => [signup.id, signup]));
   draft.picks.forEach(pick => { signupById.get(pick.signupId).team = pick.teamId; });
   syncSignupPlayers({ players, signups });
-  return { site, teams, rounds, matches, players, news, rules, signups, draft };
+  return { site, teams, rounds, matches, players, news, rules, signups, badges, draft };
 }
 
 // team pages
@@ -1244,11 +1418,39 @@ const server = http.createServer(async (req, res) => {
       writeData(data);
       return send(res, 200, { ok: true });
     }
+    if (p === '/api/player/badges' && req.method === 'PUT') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam before editing your badges.' });
+      const data = readData();
+      const profileKey = steamKey(player.profileUrl);
+      const matches = data.signups.filter(signup =>
+        (player.steamId && signup.steamId === player.steamId) ||
+        (profileKey && steamKey(signup.steam) === profileKey));
+      if (matches.length !== 1) return send(res, matches.length ? 409 : 404, { error: 'Could not find one signup linked to this Steam profile.' });
+      const changes = JSON.parse(await readBody(req) || '{}');
+      if (!Array.isArray(changes.badgeSlots) || changes.badgeSlots.length !== 3 ||
+          changes.badgeSlots.some(id => typeof id !== 'string' || id.length > 40)) {
+        return send(res, 400, { error: 'Choose up to three valid badge slots.' });
+      }
+      const badgeSlots = changes.badgeSlots.map(id => id.trim());
+      const chosen = badgeSlots.filter(Boolean);
+      if (new Set(chosen).size !== chosen.length) return send(res, 400, { error: 'A badge can only be equipped once.' });
+      const signup = matches[0];
+      for (const id of chosen) {
+        const badge = data.badges.find(item => item.id === id);
+        if (!badge || !badgeIsUnlocked(data, signup, badge))
+          return send(res, 400, { error: 'One or more selected badges are no longer available.' });
+      }
+      signup.badgeSlots = badgeSlots;
+      writeData(data);
+      return send(res, 200, { ok: true, badgeSlots: equippedBadgeSlotsFor(data, signup) });
+    }
     if (p === '/api/player/signup' && req.method === 'GET') {
       const player = playerSession(req);
       if (!player) return send(res, 401, { error: 'Sign in with Steam to find your signup.' });
       const profileKey = steamKey(player.profileUrl);
-      const matches = readData().signups.filter(signup =>
+      const data = readData();
+      const matches = data.signups.filter(signup =>
         (player.steamId && signup.steamId === player.steamId) ||
         (profileKey && steamKey(signup.steam) === profileKey));
       if (!matches.length) {
@@ -1262,12 +1464,20 @@ const server = http.createServer(async (req, res) => {
       }
       if (matches.length > 1) return send(res, 409, { error: 'More than one signup is linked to this Steam profile. Please ask league staff for help.' });
       const signup = matches[0];
+      const stats = trackedStatsFor(data, signup.id);
+      const team = data.teams.find(item => item.id === signup.team);
+      const values = signupValues(signup);
       return send(res, 200, {
         profileUrl: player.profileUrl,
         signup: {
           id: signup.id, discord: signup.discord, name: signup.name, steam: signup.steam,
           hours: signup.hours, position: signup.position, captain: signup.captain,
-          photo: signup.photo, team: signup.team, ...signupValues(signup),
+          photo: signup.photo, team: signup.team, teamName: team ? team.name : '',
+          value: signup.position === 'Goalie' ? values.goalieValue : values.skaterValue,
+          points: configuredPointsFor(data, stats), trackedStats: stats,
+          badgeSlots: equippedBadgeSlotsFor(data, signup),
+          badges: badgeCollectionFor(data, signup),
+          ...values,
         },
       });
     }
@@ -1407,6 +1617,7 @@ const server = http.createServer(async (req, res) => {
         data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
         data.players = data.players.map(({ steam, ...player }) => player);
+        data.badges = data.badges.map(({ manualPlayerIds, ...badge }) => badge);
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
       const { playerStats, modStatEventIds, statsImportLogs, ...responseData } = data;
@@ -1463,6 +1674,7 @@ const server = http.createServer(async (req, res) => {
       }
       const clean = sanitize(incoming);
       const current = readData();
+      if (!Array.isArray(incoming.badges)) clean.badges = current.badges;
       clean.playerStats = current.playerStats && typeof current.playerStats === 'object' ? { ...current.playerStats } : {};
       clean.modStatEventIds = Array.isArray(current.modStatEventIds) ? current.modStatEventIds : [];
       clean.statsImportLogs = Array.isArray(current.statsImportLogs)
@@ -1481,8 +1693,27 @@ const server = http.createServer(async (req, res) => {
         clean.playerStats[signupId] = { ...trackedStatsFor(current, signupId), ...stats };
       }
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
-      clean.signups.forEach(signup => byId.set(signup.id, signup));
+      const incomingSignups = new Map((Array.isArray(incoming.signups) ? incoming.signups : [])
+        .filter(signup => signup && typeof signup === 'object')
+        .map(signup => [signup.id, signup]));
+      clean.signups.forEach(signup => {
+        const previous = byId.get(signup.id);
+        const rawSignup = incomingSignups.get(signup.id);
+        if (previous && (!rawSignup || !Object.prototype.hasOwnProperty.call(rawSignup, 'badgeSlots')))
+          signup.badgeSlots = previous.badgeSlots;
+        byId.set(signup.id, signup);
+      });
       clean.signups = [...byId.values()].slice(0, 5000);
+      const badgeIds = new Set(clean.badges.map(badge => badge.id));
+      for (const signup of clean.signups) {
+        const usedBadges = new Set();
+        signup.badgeSlots = [0, 1, 2].map(index => {
+          const badgeId = (signup.badgeSlots || [])[index] || '';
+          if (!badgeIds.has(badgeId) || usedBadges.has(badgeId)) return '';
+          usedBadges.add(badgeId);
+          return badgeId;
+        });
+      }
       const currentDraft = normalizeDraft(current.draft, current.teams, current.signups);
       if (clearAllAssignments) {
         clean.signups.forEach(signup => { signup.team = ''; });
@@ -1507,7 +1738,9 @@ const server = http.createServer(async (req, res) => {
       syncSignupPlayers(clean);
       writeData(clean);
       // delete uploads nothing uses anymore
-      const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo]).concat(clean.signups.map(s => s.photo)).map(u => path.basename(u || '')));
+      const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo])
+        .concat(clean.signups.map(signup => signup.photo), clean.badges.map(badge => badge.image))
+        .map(url => path.basename(url || '')));
       for (const f of fs.readdirSync(UPLOAD_DIR)) if (!used.has(f)) fs.unlink(path.join(UPLOAD_DIR, f), () => {});
       const logo = findLogo();
       attachTrackedStats(clean);
@@ -1568,6 +1801,15 @@ const server = http.createServer(async (req, res) => {
       data.signups.push(entry);
       writeData(data);
       return send(res, 201, { ok: true });
+    }
+    if (p === '/api/admin/badge-upload' && req.method === 'POST') {
+      if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
+      let buf;
+      try { buf = await readRaw(req, 8_000_000); } catch { return send(res, 413, { error: 'Badge image too large (max 8 MB)' }); }
+      if (!hasBadgeDimensions(buf)) return send(res, 400, { error: 'Badges must be 400x400 PNG images.' });
+      const name = crypto.randomBytes(8).toString('hex') + '.png';
+      fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
+      return send(res, 200, { url: '/uploads/' + name });
     }
     if (p === '/api/upload' && req.method === 'POST') {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });

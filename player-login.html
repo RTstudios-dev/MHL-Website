@@ -19,19 +19,50 @@
 .profile-stats[hidden]{display:none}
 #steamStatus{max-width:680px;margin-bottom:16px;color:var(--muted)}
 .profile-overview,.profile-identity{display:flex;align-items:center;gap:18px}
-.profile-overview{justify-content:space-between}
-.profile-identity img,.profile-avatar-fallback{width:96px;height:96px;flex:none;object-fit:cover;border:1px solid var(--rule);border-radius:50%;background:var(--paper)}
+.profile-overview{justify-content:space-between;align-items:stretch}
+.profile-card-main{flex:1;min-width:0}
+.profile-card-side{width:82px;flex:none;display:flex;flex-direction:column;align-items:center;gap:12px}
+.profile-identity img,.profile-avatar-fallback{width:104px;height:104px;flex:none;object-fit:cover;border:1px solid var(--rule);border-radius:0;background:var(--paper)}
 .profile-avatar-fallback{display:grid;place-items:center;color:var(--gold);font-family:var(--disp);font-size:44px}
-.profile-identity small{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.profile-identity small{display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .profile-identity h2{font-family:var(--disp);font-size:32px;font-weight:500;line-height:1.05}
+.profile-discord{margin:5px 0 0;color:var(--muted);font-size:13px}
+.profile-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.profile-card-meta span{display:grid;gap:3px;padding-top:8px;border-top:1px solid var(--line);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.profile-card-meta strong{font-family:var(--disp);font-size:20px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--ink)}
 .player-login .ed,.player-edit .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:18px}
 .player-login p,.player-edit p,.profile-summary p{color:var(--muted)}
 .player-login .profile{display:inline-block;margin-top:8px;color:var(--gold);text-decoration:underline;text-underline-offset:3px}
 .signup-link{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
-.profile-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:26px}
-.profile-stats div{padding-top:12px;border-top:1px solid var(--line)}
-.profile-stats span{display:block;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
-.profile-stats strong{font-family:var(--disp);font-size:32px;font-weight:500;color:var(--gold)}
+.profile-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:14px}
+.profile-stats div{padding-top:8px;border-top:1px solid var(--line)}
+.profile-stats span{display:block;color:var(--muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.profile-stats strong{font-family:var(--disp);font-size:28px;font-weight:500;color:var(--gold)}
+.profile-badge-slots{display:grid;gap:8px}
+.profile-badge-slot{width:72px;height:72px;padding:0;display:grid;place-items:center;overflow:hidden;border:1px solid var(--rule);border-radius:50%;background:var(--paper);color:var(--muted);font:500 11px var(--body);cursor:pointer}
+.profile-badge-slot img{width:100%;height:100%;object-fit:cover}
+.profile-badge-slot:hover,.profile-badge-slot:focus-visible{outline:1px solid var(--gold);border-color:var(--gold);color:var(--gold)}
+.profile-badge-collection{max-width:680px;margin:0 0 32px}
+.profile-badge-collection[hidden]{display:none}
+.profile-badge-collection h2{font-family:var(--disp);font-size:30px;font-weight:500;margin-bottom:6px}
+.profile-badge-collection>p{color:var(--muted);margin-bottom:16px}
+.profile-badge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.profile-badge-card{min-width:0;padding:14px;border:1px solid var(--line);background:var(--card)}
+.profile-badge-card img{width:76px;height:76px;object-fit:cover;border-radius:50%;border:1px solid var(--rule);margin-bottom:10px}
+.profile-badge-card.locked img{filter:grayscale(1);opacity:.38}
+.profile-badge-card strong{display:block;font-size:14px}
+.profile-badge-card small{display:block;margin-top:4px;color:var(--muted)}
+.profile-badge-card .badge-state{margin-top:8px;color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.profile-badge-card.locked .badge-state{color:var(--muted)}
+.badge-picker{width:min(620px,calc(100% - 24px));max-height:min(80vh,720px);padding:24px;border:1px solid var(--rule);background:var(--ice);color:var(--ink)}
+.badge-picker::backdrop{background:rgba(0,0,0,.72)}
+.badge-picker-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}
+.badge-picker-head h2{font-family:var(--disp);font-size:30px;font-weight:500}
+.badge-picker-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:12px}
+.badge-picker-option{display:grid;justify-items:center;gap:8px;padding:14px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;cursor:pointer}
+.badge-picker-option:hover,.badge-picker-option:focus-visible{border-color:var(--gold);outline:1px solid var(--gold)}
+.badge-picker-option img{width:76px;height:76px;object-fit:cover;border-radius:50%}
+.badge-picker-message{grid-column:1/-1;color:var(--muted)}
 .player-profile-status{margin-top:14px;min-height:1.5em}
 .player-profile-status.error{color:#e08474}
 .player-edit label{display:grid;gap:6px;color:var(--ink);font-weight:500}
@@ -47,7 +78,11 @@
   .profile-identity{gap:12px}
   .profile-identity img,.profile-avatar-fallback{width:72px;height:72px}
   .profile-identity h2{font-size:26px}
-  .profile-overview{align-items:flex-start}
+  .profile-overview{align-items:stretch;flex-direction:column}
+  .profile-card-side{width:100%;display:flex;align-items:stretch}
+  .profile-badge-slots{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .profile-badge-slot{width:64px;height:64px}
+  .profile-card-side>.btn{align-self:flex-end}
   .profile-stats{gap:10px}
   .profile-stats strong{font-size:26px}
 }
@@ -65,24 +100,46 @@
 <p id="steamStatus" role="status" aria-live="polite">Sign in with Steam to view your player profile.</p>
 <section class="profile-summary" id="profileSummary" aria-label="Player profile" hidden>
   <div class="profile-overview">
-    <div class="profile-identity">
-      <img id="profileAvatar" alt="" hidden>
-      <span class="profile-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">S</span>
-      <div>
-        <small>Discord username</small>
-        <h2 id="profileDiscord">Steam Player</h2>
-        <a class="profile" id="steamProfile" href="#" target="_blank" rel="noopener">View Steam profile</a>
+    <div class="profile-card-main">
+      <div class="profile-identity">
+        <img id="profileAvatar" alt="" hidden>
+        <span class="profile-avatar-fallback" id="profileAvatarFallback" aria-hidden="true">S</span>
+        <div>
+          <small>MHL Player</small>
+          <h2 id="profileName">Steam Player</h2>
+          <p class="profile-discord" id="profileDiscord"></p>
+          <a class="profile" id="steamProfile" href="#" target="_blank" rel="noopener">View Steam profile</a>
+        </div>
+      </div>
+      <div class="profile-card-meta">
+        <span>Team<strong id="profileTeam">Unassigned</strong></span>
+        <span>Value<strong id="profileValue">—</strong></span>
+      </div>
+      <div class="profile-stats" id="profileStats" hidden>
+        <div><span>Goals</span><strong id="profileGoals">0</strong></div>
+        <div><span>Assists</span><strong id="profileAssists">0</strong></div>
+        <div><span>Saves</span><strong id="profileSaves">0</strong></div>
       </div>
     </div>
-    <button class="btn line" id="steamLogout" type="button">Sign out</button>
-  </div>
-  <div class="profile-stats" id="profileStats" hidden>
-    <div><span>Goals</span><strong id="profileGoals">0</strong></div>
-    <div><span>Assists</span><strong id="profileAssists">0</strong></div>
-    <div><span>Points</span><strong id="profilePoints">0</strong></div>
+    <div class="profile-card-side">
+      <div class="profile-badge-slots" id="profileBadgeSlots" aria-label="Equipped badges"></div>
+      <button class="btn line" id="steamLogout" type="button">Sign out</button>
+    </div>
   </div>
   <p class="player-profile-status" id="statsStatus" role="status" aria-live="polite"></p>
 </section>
+<section class="profile-badge-collection" id="badgeCollection" hidden aria-label="Collectible badges">
+  <h2>Collectible Badges</h2>
+  <p>Unlocked badges can be equipped in one of the three slots on your player card.</p>
+  <div class="profile-badge-grid" id="badgeCollectionGrid"></div>
+</section>
+<dialog class="badge-picker" id="badgePicker" aria-labelledby="badgePickerTitle">
+  <div class="badge-picker-head">
+    <h2 id="badgePickerTitle">Choose a badge</h2>
+    <button class="btn line" id="closeBadgePicker" type="button">Close</button>
+  </div>
+  <div class="badge-picker-list" id="badgePickerList"></div>
+</dialog>
 <section class="player-login" id="loginPanel" aria-label="Steam account">
   <div class="ed">
     <a class="btn" id="steamLogin" href="/auth/steam">Sign in with Steam</a>
@@ -142,14 +199,23 @@
   const login = document.getElementById('steamLogin');
   const logout = document.getElementById('steamLogout');
   const profileSummary = document.getElementById('profileSummary');
+  const badgeCollection = document.getElementById('badgeCollection');
+  const badgeCollectionGrid = document.getElementById('badgeCollectionGrid');
+  const badgePicker = document.getElementById('badgePicker');
+  const badgePickerList = document.getElementById('badgePickerList');
+  const closeBadgePicker = document.getElementById('closeBadgePicker');
+  const profileBadgeSlots = document.getElementById('profileBadgeSlots');
   const profileAvatar = document.getElementById('profileAvatar');
   const profileAvatarFallback = document.getElementById('profileAvatarFallback');
+  const profileName = document.getElementById('profileName');
   const profileDiscord = document.getElementById('profileDiscord');
   const profileLink = document.getElementById('steamProfile');
+  const profileTeam = document.getElementById('profileTeam');
+  const profileValue = document.getElementById('profileValue');
   const profileStats = document.getElementById('profileStats');
   const profileGoals = document.getElementById('profileGoals');
   const profileAssists = document.getElementById('profileAssists');
-  const profilePoints = document.getElementById('profilePoints');
+  const profileSaves = document.getElementById('profileSaves');
   const statsStatus = document.getElementById('statsStatus');
   const signupLink = document.getElementById('signupLink');
   const editTitle = document.getElementById('editTitle');
@@ -160,16 +226,147 @@
   let currentPhoto = '';
   let currentSession = null;
   let currentSignup = null;
-  let siteDataPromise = null;
+
+  function badgeRequirementsText(badge) {
+    const requirements = badge.requirements || {};
+    return [
+      Number(requirements.goals) > 0 ? `${requirements.goals} goals` : '',
+      Number(requirements.assists) > 0 ? `${requirements.assists} assists` : '',
+      Number(requirements.saves) > 0 ? `${requirements.saves} saves` : '',
+      Number(requirements.points) > 0 ? `${requirements.points} points` : '',
+    ].filter(Boolean).join(' · ');
+  }
+
+  function renderBadgeSlots() {
+    const slots = Array.isArray(currentSignup && currentSignup.badgeSlots) ? currentSignup.badgeSlots : [];
+    const badges = Array.isArray(currentSignup && currentSignup.badges) ? currentSignup.badges : [];
+    profileBadgeSlots.replaceChildren(...[0, 1, 2].map(index => {
+      const badge = badges.find(item => item.id === slots[index] && item.unlocked);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'profile-badge-slot';
+      button.setAttribute('aria-label', badge ? `Change badge slot ${index + 1}: ${badge.name}` : `Add badge to slot ${index + 1}`);
+      button.addEventListener('click', () => openBadgePicker(index));
+      if (badge) {
+        const image = document.createElement('img');
+        image.src = badge.image;
+        image.alt = badge.name;
+        button.append(image);
+      } else {
+        const label = document.createElement('span');
+        label.textContent = 'Add badge';
+        button.append(label);
+      }
+      return button;
+    }));
+  }
+
+  function renderBadgeCollection() {
+    const badges = Array.isArray(currentSignup && currentSignup.badges) ? currentSignup.badges : [];
+    badgeCollection.hidden = !currentSignup;
+    badgeCollectionGrid.replaceChildren();
+    if (!currentSignup) return;
+    if (!badges.length) {
+      const message = document.createElement('p');
+      message.className = 'profile-badge-message';
+      message.textContent = 'No collectible badges have been added yet.';
+      badgeCollectionGrid.append(message);
+      return;
+    }
+    badges.forEach(badge => {
+      const card = document.createElement('article');
+      card.className = `profile-badge-card${badge.unlocked ? '' : ' locked'}`;
+      const image = document.createElement('img');
+      image.src = badge.image;
+      image.alt = badge.name;
+      const name = document.createElement('strong');
+      name.textContent = badge.name;
+      const description = document.createElement('small');
+      description.textContent = badge.description || badgeRequirementsText(badge) || 'A collectible MHL badge.';
+      const state = document.createElement('div');
+      state.className = 'badge-state';
+      state.textContent = badge.unlocked ? 'Unlocked' : 'Locked';
+      card.append(image, name, description, state);
+      badgeCollectionGrid.append(card);
+    });
+  }
+
+  function openBadgePicker(slot) {
+    if (!currentSignup) return;
+    const slots = Array.isArray(currentSignup.badgeSlots) ? currentSignup.badgeSlots : [];
+    const badges = Array.isArray(currentSignup.badges) ? currentSignup.badges : [];
+    badgePickerList.replaceChildren();
+    const available = badges.filter(badge => badge.unlocked && slots.every((id, index) => index === slot || id !== badge.id));
+    if (!available.length) {
+      const message = document.createElement('p');
+      message.className = 'badge-picker-message';
+      message.textContent = 'You do not have any available badges to add right now.';
+      badgePickerList.append(message);
+    } else {
+      available.forEach(badge => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'badge-picker-option';
+        const image = document.createElement('img');
+        image.src = badge.image;
+        image.alt = '';
+        const name = document.createElement('strong');
+        name.textContent = badge.name;
+        button.append(image, name);
+        button.addEventListener('click', () => saveBadgeSlot(slot, badge.id));
+        badgePickerList.append(button);
+      });
+    }
+    if (slots[slot]) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn line';
+      remove.textContent = 'Remove badge';
+      remove.addEventListener('click', () => saveBadgeSlot(slot, ''));
+      badgePickerList.append(remove);
+    }
+    badgePicker.showModal();
+  }
+
+  async function saveBadgeSlot(slot, badgeId) {
+    const slots = Array.isArray(currentSignup.badgeSlots) ? [...currentSignup.badgeSlots] : ['', '', ''];
+    slots[slot] = badgeId;
+    badgePicker.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    try {
+      const response = await fetch('/api/player/badges', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ badgeSlots: slots }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not update your badges.');
+      currentSignup.badgeSlots = result.badgeSlots;
+      renderBadgeSlots();
+      badgePicker.close();
+    } catch (error) {
+      const message = document.createElement('p');
+      message.className = 'badge-picker-message';
+      message.textContent = error.message || 'Could not update your badges.';
+      badgePickerList.prepend(message);
+      badgePicker.querySelectorAll('button').forEach(button => { button.disabled = false; });
+    }
+  }
 
   function showProfile(signup, session) {
     currentSignup = signup;
     currentSession = session;
-    const name = signup && (signup.discord || signup.name) || 'Steam Player';
-    profileDiscord.textContent = name;
+    const name = signup && signup.name || 'Steam Player';
+    profileName.textContent = name;
+    profileDiscord.textContent = signup && signup.discord ? `Discord: ${signup.discord}` : '';
     profileLink.href = session.profileUrl;
+    profileTeam.textContent = signup && signup.teamName || 'Unassigned';
+    const value = signup && (signup.position === 'Goalie' ? signup.goalieValue : signup.skaterValue);
+    profileValue.textContent = value !== undefined && Number.isFinite(Number(value)) && Number(value) > 0
+      ? `€${Number(value)}`
+      : '—';
     if (signup && signup.photo) {
       profileAvatar.src = signup.photo;
+      profileAvatar.alt = `${name} profile picture`;
       profileAvatar.hidden = false;
       profileAvatarFallback.hidden = true;
     } else {
@@ -178,6 +375,8 @@
       profileAvatarFallback.textContent = name.trim().charAt(0).toUpperCase() || 'S';
       profileAvatarFallback.hidden = false;
     }
+    renderBadgeSlots();
+    renderBadgeCollection();
     profileSummary.hidden = false;
   }
 
@@ -185,26 +384,16 @@
     profileStats.hidden = false;
     statsStatus.textContent = '';
     statsStatus.className = 'player-profile-status';
-    try {
-      if (!siteDataPromise) siteDataPromise = MHL.load();
-      const data = await siteDataPromise;
-      const playerName = String(signup.name || '').trim().toLowerCase();
-      const rosterPlayer = data.players.find(player => String(player.name || '').trim().toLowerCase() === playerName);
-      const goals = rosterPlayer ? Number(rosterPlayer.g) || 0 : 0;
-      const assists = rosterPlayer ? Number(rosterPlayer.a) || 0 : 0;
-      const requirements = data.site && data.site.statsPointRequirements || {};
-      const goalsPerPoint = Number.isSafeInteger(requirements.goals) && requirements.goals > 0 ? requirements.goals : 1;
-      const assistsPerPoint = Number.isSafeInteger(requirements.assists) && requirements.assists > 0 ? requirements.assists : 1;
-      profileGoals.textContent = goals;
-      profileAssists.textContent = assists;
-      profilePoints.textContent = Math.floor(goals / goalsPerPoint) + Math.floor(assists / assistsPerPoint);
-      if (!rosterPlayer) statsStatus.textContent = 'Stats will appear once your in-game name is on the player roster.';
-    } catch (error) {
-      statsStatus.textContent = 'Could not load player stats. Please reload the page to try again.';
-      statsStatus.className = 'player-profile-status error';
-      console.error('Could not load player stats:', error);
-    }
+    const stats = signup.trackedStats || {};
+    profileGoals.textContent = Number(stats.goals) || 0;
+    profileAssists.textContent = Number(stats.assists) || 0;
+    profileSaves.textContent = Number(stats.saves) || 0;
   }
+
+  closeBadgePicker.addEventListener('click', () => badgePicker.close());
+  badgePicker.addEventListener('click', event => {
+    if (event.target === badgePicker) badgePicker.close();
+  });
 
   async function loadSignup() {
     try {
@@ -215,6 +404,7 @@
         form.hidden = true;
         editTitle.hidden = true;
         profileSummary.hidden = true;
+        badgeCollection.hidden = true;
         loginPanel.hidden = false;
         login.hidden = false;
         signupLink.hidden = true;
@@ -234,6 +424,7 @@
         editTitle.hidden = false;
         signupLink.hidden = false;
         profileStats.hidden = true;
+        badgeCollection.hidden = true;
         statsStatus.textContent = 'Complete your signup to add your Discord name and player stats here.';
         steamStatus.textContent = result.error || 'No signup was found for this Steam profile.';
         return;

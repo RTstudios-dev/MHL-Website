@@ -132,6 +132,13 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .signup-table[hidden]{display:none}
 .caps-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:640px;margin-bottom:16px}
 .checkline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.badge-admin-card{margin-top:14px}
+.badge-image-picker .thumb{width:88px;height:88px;border-radius:50%}
+.badge-requirements{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.badge-audiences{display:flex;flex-wrap:wrap;gap:12px 24px}
+.manual-badge-awards{border-top:1px solid var(--line);padding-top:10px}
+.manual-badge-awards summary{cursor:pointer;color:var(--gold);font-weight:600}
+.manual-badge-awards>div{max-height:240px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;padding:12px 0}
 
 @media (max-width:820px){
   .teams-row{grid-template-columns:1fr 1fr}
@@ -139,6 +146,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
   .draft-order-panel{position:static}
   .team-draft-settings{grid-template-columns:1fr}
   .point-requirements{grid-template-columns:1fr}
+  .badge-requirements{grid-template-columns:repeat(2,minmax(0,1fr))}
   .match{grid-template-columns:1fr}
   .bar .right{margin-left:0}
 }
@@ -242,6 +250,7 @@ const MHLA = (() => {
     const r = await fetch('/api/data', { cache: 'no-store' });
     D = await r.json();
     D.signups = Array.isArray(D.signups) ? D.signups : [];
+    D.badges = Array.isArray(D.badges) ? D.badges : [];
     trackedStatsEdits = {};
     dirty = false;
     draw();
@@ -294,6 +303,18 @@ const MHLA = (() => {
     return j.url;
   }
 
+  async function uploadBadge(file) {
+    try {
+      const r = await fetch('/api/admin/badge-upload', { method: 'POST', body: file });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(j.error || 'Badge upload failed'); return null; }
+      return j.url;
+    } catch (error) {
+      alert(error.message || 'Badge upload failed. Please try again.');
+      return null;
+    }
+  }
+
   async function importStatsReports(reports) {
     if (!Array.isArray(reports)) return;
     if (dirty && !confirm('Importing stats will discard your unsaved admin changes. Continue?')) return;
@@ -324,7 +345,7 @@ const MHLA = (() => {
   }
 
   // frame
-  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Player Sign Ups'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
+  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Player Sign Ups'], ['badges', 'Badges'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
   function draw() {
     const y = scrollY;
     const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
@@ -344,7 +365,7 @@ const MHLA = (() => {
           if (dirty && !confirm('You have unsaved changes. Log out anyway?')) return;
           dirty = false; await fetch('/api/logout', { method: 'POST' }); login();
         } }, 'Log out'))));
-    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, signups, news, rules, logs, settings })[tab]());
+    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, signups, badges, news, rules, logs, settings })[tab]());
     root.replaceChildren(bar, panel);
     scrollTo(0, y);
   }
@@ -946,6 +967,102 @@ const MHLA = (() => {
           h('td', {}, valueInput(signup, 'goalieValue', 'Goalie Value')),
           h('td', {}, imgPicker(signup, 'photo', '')),
         ))))) : h('div', { class: 'empty' }, h('b', {}, 'No Season 2 signups yet'), 'New entries from the public signup form will appear here.'),
+    ];
+  }
+
+  // collectible badges
+  function badges() {
+    D.badges = Array.isArray(D.badges) ? D.badges : [];
+    const add = h('button', { class: 'btn sm', type: 'button', onclick: () => {
+      D.badges.push({
+        id: uid(), name: 'New badge', description: '', image: '',
+        requirements: { goals: 0, assists: 0, saves: 0, points: 0 },
+        allPlayers: false, season2Players: false, manualPlayerIds: [],
+      });
+      touch(); draw();
+    } }, 'Add badge');
+    const cards = D.badges.map(badge => {
+      badge.requirements = badge.requirements || { goals: 0, assists: 0, saves: 0, points: 0 };
+      badge.manualPlayerIds = Array.isArray(badge.manualPlayerIds) ? badge.manualPlayerIds : [];
+      const uploadInput = h('input', {
+        type: 'file', accept: 'image/png', style: 'display:none',
+        onchange: async event => {
+          const file = event.target.files[0];
+          if (!file) return;
+          if (file.size > 8_000_000) {
+            alert('Badge image too large (max 8 MB)');
+            event.target.value = '';
+            return;
+          }
+          const url = await uploadBadge(file);
+          if (!url) return;
+          badge.image = url;
+          touch();
+          draw();
+        },
+      });
+      const requirementFields = ['goals', 'assists', 'saves', 'points'].map(key =>
+        field(key.charAt(0).toUpperCase() + key.slice(1), h('input', {
+          type: 'number', min: 0, max: 1000000, step: 1, value: badge.requirements[key] || 0,
+          oninput: event => {
+            const value = Number(event.target.value);
+            if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) return;
+            badge.requirements[key] = value;
+            touch();
+          },
+        })));
+      const manualAwards = h('details', { class: 'manual-badge-awards' },
+        h('summary', {}, `Manual awards (${badge.manualPlayerIds.length})`),
+        D.signups.length ? h('div', {}, D.signups.map(signup => h('label', { class: 'checkline' },
+          h('input', {
+            type: 'checkbox',
+            checked: badge.manualPlayerIds.includes(signup.id),
+            onchange: event => {
+              if (event.target.checked) {
+                if (!badge.manualPlayerIds.includes(signup.id)) badge.manualPlayerIds.push(signup.id);
+              } else badge.manualPlayerIds = badge.manualPlayerIds.filter(id => id !== signup.id);
+              touch();
+              const summary = event.target.closest('details').querySelector('summary');
+              summary.textContent = `Manual awards (${badge.manualPlayerIds.length})`;
+            },
+          }),
+          `${signup.name}${signup.team ? ` — ${teamName(signup.team)}` : ''}`))) : h('p', { class: 'help' }, 'No Season 2 signups are available to award manually.'));
+      return h('section', { class: 'ed badge-admin-card' },
+        h('div', { class: 'row', style: 'grid-template-columns:minmax(0,1fr) auto' },
+          field('Badge name', text(badge, 'name', { maxlength: 80 })),
+          h('div', { class: 'acts' },
+            h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+              if (!confirm(`Delete the badge "${badge.name || 'Badge'}"?`)) return;
+              D.badges = D.badges.filter(item => item !== badge);
+              D.signups.forEach(signup => { signup.badgeSlots = (signup.badgeSlots || []).map(id => id === badge.id ? '' : id); });
+              touch(); draw();
+            } }, 'Delete badge'))),
+        field('Description', text(badge, 'description', { maxlength: 240 })),
+        h('div', { class: 'img badge-image-picker' },
+          h('span', { class: 'thumb' }, badge.image ? h('img', { src: badge.image, alt: `${badge.name} badge preview` }) : 'No image'),
+          h('div', {},
+            h('div', { class: 'f' }, 'Badge image', h('small', {}, 'PNG only; exactly 400×400 pixels; maximum 8 MB.')),
+            h('div', { class: 'acts', style: 'justify-content:flex-start' },
+              h('button', { class: 'btn line sm', type: 'button', onclick: () => uploadInput.click() }, badge.image ? 'Replace PNG' : 'Upload PNG'),
+              badge.image ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { badge.image = ''; touch(); draw(); } }, 'Remove') : null),
+            uploadInput)),
+        h('div', { class: 'badge-requirements' }, requirementFields),
+        h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together. Points use the website’s configured points formula.'),
+        h('div', { class: 'badge-audiences' },
+          h('label', { class: 'checkline' }, h('input', {
+            type: 'checkbox', checked: badge.allPlayers,
+            onchange: event => { badge.allPlayers = event.target.checked; touch(); },
+          }), 'All players'),
+          h('label', { class: 'checkline' }, h('input', {
+            type: 'checkbox', checked: badge.season2Players,
+            onchange: event => { badge.season2Players = event.target.checked; touch(); },
+          }), 'Season 2 players')),
+        manualAwards);
+    });
+    return [
+      head('Badges', add),
+      h('p', { class: 'help' }, 'Players can equip up to three unlocked badges on their profile. Locked badges remain visible in their collection. The in-game list currently includes Steam-linked Season 2 players.'),
+      cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.'),
     ];
   }
 
