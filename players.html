@@ -55,6 +55,7 @@
       <label for="statSelect">Sort by
         <select id="statSelect">
           <option value="p">Points</option>
+          <option value="w">Wins</option>
           <option value="g">Goals</option>
           <option value="s">Saves</option>
           <option value="a">Assists</option>
@@ -94,8 +95,9 @@
   const P = (D.signups || []).map(player => {
     const stats = player.trackedStats || {};
     const g = Number(stats.goals) || 0, a = Number(stats.assists) || 0, s = Number(stats.saves) || 0;
+    const w = Number(stats.wins) || 0, l = Number(stats.losses) || 0;
     return {
-      ...player, g, a, s,
+      ...player, g, a, s, w, l,
       p: Math.floor(g / goalsPerPoint) + Math.floor(a / assistsPerPoint) + Math.floor(s / savesPerPoint),
       value: Number(player.position === 'Goalie' ? player.goalieValue : player.skaterValue) || 0,
       goalie: player.position === 'Goalie',
@@ -122,7 +124,7 @@
       ? compactEuroFormat.format(value).replace(/([KMBT])$/, (_, suffix) => suffix.toLowerCase())
       : euroFormat.format(value);
   };
-  const NAMES = { p: 'Points', g: 'Goals', s: 'Saves', a: 'Assists', value: 'Value' };
+  const NAMES = { p: 'Points', w: 'Wins', g: 'Goals', s: 'Saves', a: 'Assists', value: 'Value' };
   let key = 'p', direction = 'high', filter = 'all', source = 'pug', search = '';
   let personalPlayer = null;
   const profileCard = $('playerStatsProfileCard');
@@ -138,6 +140,7 @@
       assists: empty ? '—' : personalPlayer.a,
       saves: empty ? '—' : personalPlayer.s,
       points: empty ? '—' : personalPlayer.p,
+      record: empty ? '—' : `${personalPlayer.w}:${personalPlayer.l}`,
     };
     profileCard.innerHTML = `<div class="player-stats-profile-heading">
       <small>Your ${source === 'pug' ? 'Pug' : 'Season 2'} Stats</small>
@@ -152,6 +155,7 @@
       <div><span>Assists</span><strong>${stats.assists}</strong></div>
       <div><span>Saves</span><strong>${stats.saves}</strong></div>
       <div><span>Points</span><strong>${stats.points}</strong></div>
+      <div><span>W:L</span><strong>${stats.record}</strong></div>
     </div>`;
     profileCard.hidden = false;
   }
@@ -213,9 +217,10 @@
       : filter === 'skater' ? skaterValue : Math.max(skaterValue, goalieValue);
   };
   const metricValue = player => key === 'p' ? player.p
-    : key === 'g' ? player.g
-      : key === 's' ? player.s
-      : key === 'a' ? player.a : valueForCurrentFilter(player);
+    : key === 'w' ? player.w
+      : key === 'g' ? player.g
+        : key === 's' ? player.s
+          : key === 'a' ? player.a : valueForCurrentFilter(player);
   const rank = () => {
     const list = [...filtered()];
     if (source === 'season2' && key !== 'value') return list.sort(compareName);
@@ -284,7 +289,7 @@
     const showSaves = filter !== 'skater';
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
-        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">A</th>${showGoals ? '<th scope="col">G</th>' : ''}${showSaves ? '<th scope="col">S</th>' : ''}<th scope="col">P</th></tr></thead>
+        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">W:L</th><th scope="col">A</th>${showGoals ? '<th scope="col">G</th>' : ''}${showSaves ? '<th scope="col">S</th>' : ''}<th scope="col">P</th></tr></thead>
       <tbody>${rows.map(player => `<tr><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
         ? `<img src="${esc(player.photo)}" alt="">`
         : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -294,6 +299,7 @@
         <td class="l" data-label="Team"><span class="team">${player.t ? `${MHL.badge(player.t)}${MHL.teamLink(player.t)}` : '—'}</span></td>
         <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
         <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
+        <td class="player-stat-cell player-stat-value" data-label="W:L">${source === 'season2' ? '—' : `${player.w}:${player.l}`}</td>
         <td class="player-stat-cell player-stat-value" data-label="A">${source === 'season2' ? '—' : player.a}</td>
         ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="G">${source === 'season2' ? '—' : player.g}</td>` : ''}
         ${showSaves ? `<td class="player-stat-cell player-stat-value" data-label="S">${source === 'season2' ? '—' : player.s}</td>` : ''}

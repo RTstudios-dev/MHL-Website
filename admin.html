@@ -296,6 +296,43 @@ const MHLA = (() => {
     const s2 = document.getElementById('status'); s2.textContent = 'Saved. The site is updated.';
   }
 
+  async function downloadSiteBackup(button) {
+    const status = document.getElementById('backupStatus');
+    button.disabled = true;
+    if (status) {
+      status.className = 'help';
+      status.textContent = 'Preparing backup...';
+    }
+
+    try {
+      const response = await fetch('/api/admin/backup', { cache: 'no-store' });
+      if (response.status === 401)
+        return login('Your admin session ended. Log in again to download a backup.');
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'Could not create the site backup.');
+      }
+
+      const downloadUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'mhl-site-backup.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      if (status) status.textContent = 'Backup downloaded.';
+    } catch (error) {
+      console.error('Could not download site backup:', error);
+      if (status) {
+        status.className = 'help err';
+        status.textContent = 'Backup download failed: ' + (error.message || 'Please try again.');
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function upload(file) {
     const r = await fetch('/api/upload', { method: 'POST', body: file });
     const j = await r.json().catch(() => ({}));
@@ -705,7 +742,7 @@ const MHLA = (() => {
       touch();
     };
     const trackedStatInput = (signup, key, label) => {
-      const stats = signup.trackedStats || (signup.trackedStats = { goals: 0, assists: 0, saves: 0 });
+      const stats = signup.trackedStats || (signup.trackedStats = { goals: 0, assists: 0, saves: 0, wins: 0, losses: 0 });
       return h('input', {
         type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
         'aria-label': `${label} for ${signup.name}`,
@@ -781,11 +818,11 @@ const MHLA = (() => {
           h('p', {}, 'Select the pending stats file from the game server. The file is read automatically; review the preview, then import.'),
           fileInput, ' ', importButton, status);
       })(),
-      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists and saves here. Game mod events continue adding to the tracked stats. Point requirements are set independently under Settings.'),
+      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists, saves, wins and losses here. Game mod events continue adding to the tracked stats. Point requirements are set independently under Settings.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', 'Saves', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', 'Saves', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {},
           h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
           h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
@@ -800,6 +837,8 @@ const MHLA = (() => {
             playerStatCell(p, 'goals', 'Goals'),
             playerStatCell(p, 'assists', 'Assists'),
             playerStatCell(p, 'saves', 'Saves'),
+            playerStatCell(p, 'wins', 'Wins'),
+            playerStatCell(p, 'losses', 'Losses'),
           h('td', {}, h('button', { class: 'btn del sm', type: 'button', disabled: !!p.signupId, title: p.signupId ? 'Manage this player through the Season 2 Player Sign Ups tab.' : '', onclick: () => {
             const t = tot[p.id] || { g: 0, a: 0 };
             if (!confirm(`Delete ${p.name || 'this player'}?` + (t.g || t.a ? ` Their ${t.g} goals and ${t.a} assists are removed from the matches too.` : ''))) return;
@@ -1186,6 +1225,14 @@ const MHLA = (() => {
           requirementInput('saves', 'Saves per point')),
         h('p', { class: 'help', style: 'margin:0' }, 'Each stat earns points independently: one point per configured number of goals, assists, or saves. Defaults are 1 goal, 1 assist, and 2 saves. Values must be whole numbers from 1 to 100,000.'),
         h('p', { class: 'help', style: 'margin:0' }, D.hasLogo ? `The league logo (${D.logoUrl.slice(1)}) is in use.` : 'No league logo yet: the site shows the MHL wordmark. To add one, put logo.png (or logo.webp / logo.jpg) next to server.js and reload the site.')),
+      h('div', { class: 'ed', style: 'max-width:640px' },
+        h('b', {}, 'Full site backup'),
+        h('p', { class: 'help' }, 'Download all saved site entries, statistics, and uploaded images in one JSON file. The file does not include website source code or server secrets.'),
+        h('button', {
+          class: 'btn sm', type: 'button',
+          onclick: event => downloadSiteBackup(event.currentTarget),
+        }, 'Download full site backup'),
+        h('p', { id: 'backupStatus', class: 'help', role: 'status', 'aria-live': 'polite' })),
     ];
   }
 

@@ -470,7 +470,7 @@ const signupSteamId = signup => {
   const storedId = String(signup.steamId || '');
   return /^\d{17}$/.test(storedId) ? storedId : '';
 };
-const emptyTrackedStats = () => ({ goals: 0, assists: 0, saves: 0 });
+const emptyTrackedStats = () => ({ goals: 0, assists: 0, saves: 0, wins: 0, losses: 0 });
 const increaseTrackedStat = (value, amount = 1) =>
   Math.min(Number.MAX_SAFE_INTEGER, num(value, Number.MAX_SAFE_INTEGER) + amount);
 const trackedStatsFor = (data, signupId) => {
@@ -481,6 +481,8 @@ const trackedStatsFor = (data, signupId) => {
     goals: num(raw && raw.goals, Number.MAX_SAFE_INTEGER),
     assists: num(raw && raw.assists, Number.MAX_SAFE_INTEGER),
     saves: num(raw && raw.saves, Number.MAX_SAFE_INTEGER),
+    wins: num(raw && raw.wins, Number.MAX_SAFE_INTEGER),
+    losses: num(raw && raw.losses, Number.MAX_SAFE_INTEGER),
   };
 };
 const attachTrackedStats = data => {
@@ -780,6 +782,37 @@ const writeData = d => {
   fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(d, null, 2));
   fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
 };
+const createSiteBackup = () => {
+  const assets = [];
+  for (const fileName of fs.readdirSync(UPLOAD_DIR)) {
+    if (!/^[a-f0-9]{16}\.(png|jpg|webp|gif)$/i.test(fileName)) continue;
+    const filePath = path.join(UPLOAD_DIR, fileName);
+    if (!fs.statSync(filePath).isFile()) continue;
+    const extension = path.extname(fileName).slice(1).toLowerCase();
+    assets.push({
+      path: 'uploads/' + fileName,
+      contentType: IMG_TYPES[extension],
+      base64: fs.readFileSync(filePath).toString('base64'),
+    });
+  }
+
+  const logo = findLogo();
+  if (logo) {
+    assets.push({
+      path: path.basename(logo.file),
+      contentType: logo.type,
+      base64: fs.readFileSync(logo.file).toString('base64'),
+    });
+  }
+
+  return {
+    format: 'mhl-site-backup',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: readData(),
+    assets,
+  };
+};
 const appendStatsImportLog = (data, entry) => {
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
   const safeText = (value, maxLength) => String(value || '')
@@ -857,6 +890,11 @@ const normalizeStatsReports = rawReports => {
         if (!/^\d{17}$/.test(steamId) || !Number.isSafeInteger(count) || count < 1 || count > 1000)
           return { error: 'A save event is invalid.' };
         events.push({ eventId, type, steamId, count });
+      } else if (type === 'win' || type === 'loss') {
+        const steamId = str(raw.steamId, 17);
+        if (!/^\d{17}$/.test(steamId))
+          return { error: 'A result event has an invalid Steam ID.' };
+        events.push({ eventId, type, steamId });
       } else {
         return { error: 'A stats event has an unknown type.' };
       }
@@ -926,11 +964,19 @@ const applyStatsReports = (data, reports) => {
         }
         if (eventCredited) credited++;
         else unmatched++;
-      } else {
+      } else if (event.type === 'save') {
         const signup = signupBySteamId.get(event.steamId);
         if (signup) {
           const stats = countsFor(signup.id);
           stats.saves = increaseTrackedStat(stats.saves, event.count);
+          credited++;
+        } else unmatched++;
+      } else {
+        const signup = signupBySteamId.get(event.steamId);
+        if (signup) {
+          const stats = countsFor(signup.id);
+          const key = event.type === 'win' ? 'wins' : 'losses';
+          stats[key] = increaseTrackedStat(stats[key]);
           credited++;
         } else unmatched++;
       }
@@ -1610,6 +1656,12 @@ const server = http.createServer(async (req, res) => {
       if (result.accepted > 0) writeData(data);
       return send(res, 200, result);
     }
+    if (p === '/api/admin/backup' && req.method === 'GET') {
+      if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
+      return send(res, 200, createSiteBackup(), 'application/json; charset=utf-8', {
+        'Content-Disposition': 'attachment; filename="mhl-site-backup.json"',
+      });
+    }
     if (p === '/api/admin/stats-import-logs' && req.method === 'GET') {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
       const logs = readData().statsImportLogs;
@@ -1698,7 +1750,7 @@ const server = http.createServer(async (req, res) => {
       clean.statsImportLogs = Array.isArray(current.statsImportLogs)
         ? current.statsImportLogs.slice(0, MAX_STATS_IMPORT_LOGS)
         : [];
-      const trackedStatKeys = new Set(['goals', 'assists', 'saves']);
+      const trackedStatKeys = new Set(['goals', 'assists', 'saves', 'wins', 'losses']);
       const currentSignupIds = new Set(current.signups.map(signup => signup.id));
       for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
         if (!currentSignupIds.has(signupId) || !stats || typeof stats !== 'object' || Array.isArray(stats) ||

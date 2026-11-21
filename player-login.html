@@ -28,7 +28,7 @@
 .player-login .ed,.player-edit .ed{background:var(--card);border-top:1px solid var(--rule);padding:24px;display:grid;gap:18px}
 .player-login p,.player-edit p,.profile-summary p{color:var(--muted)}
 .signup-link{color:var(--gold);text-decoration:underline;text-underline-offset:3px}
-.profile-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:26px}
+.profile-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:26px}
 .profile-stats div{padding-top:12px;border-top:1px solid var(--line)}
 .profile-stats span{display:block;color:var(--muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
 .profile-stats strong{font-family:var(--disp);font-size:32px;font-weight:500;color:var(--gold)}
@@ -98,7 +98,7 @@
   .profile-identity{gap:12px}
   .profile-identity img,.profile-avatar-fallback{width:72px;height:72px}
   .profile-identity h2{font-size:26px}
-  .profile-stats{gap:10px}
+  .profile-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .profile-stats strong{font-size:26px}
   .player-card{padding:10px;column-gap:8px;row-gap:0}
   .player-card-name{margin-bottom:8px;font-size:24px}
@@ -140,6 +140,7 @@
   <div class="profile-stats" id="profileStats" hidden>
     <div><span>Goals</span><strong id="profileGoals">0</strong></div>
     <div><span>Assists</span><strong id="profileAssists">0</strong></div>
+    <div><span>W:L</span><strong id="profileWinsLosses">0:0</strong></div>
     <div><span>Points</span><strong id="profilePoints">0</strong></div>
   </div>
   <p class="player-profile-status" id="statsStatus" role="status" aria-live="polite"></p>
@@ -267,6 +268,7 @@
   const profileStats = document.getElementById('profileStats');
   const profileGoals = document.getElementById('profileGoals');
   const profileAssists = document.getElementById('profileAssists');
+  const profileWinsLosses = document.getElementById('profileWinsLosses');
   const profilePoints = document.getElementById('profilePoints');
   const playerCardAvatar = document.getElementById('playerCardAvatar');
   const playerCardAvatarFallback = document.getElementById('playerCardAvatarFallback');
@@ -541,11 +543,13 @@
       const rosterPlayer = data.players.find(player => String(player.name || '').trim().toLowerCase() === playerName);
       const goals = rosterPlayer ? Number(rosterPlayer.g) || 0 : 0;
       const assists = rosterPlayer ? Number(rosterPlayer.a) || 0 : 0;
+      const trackedStats = rosterPlayer && rosterPlayer.trackedStats || {};
       const requirements = data.site && data.site.statsPointRequirements || {};
       const goalsPerPoint = Number.isSafeInteger(requirements.goals) && requirements.goals > 0 ? requirements.goals : 1;
       const assistsPerPoint = Number.isSafeInteger(requirements.assists) && requirements.assists > 0 ? requirements.assists : 1;
       profileGoals.textContent = goals;
       profileAssists.textContent = assists;
+      profileWinsLosses.textContent = `${Number(trackedStats.wins) || 0}:${Number(trackedStats.losses) || 0}`;
       profilePoints.textContent = Math.floor(goals / goalsPerPoint) + Math.floor(assists / assistsPerPoint);
       if (!rosterPlayer) statsStatus.textContent = 'Stats will appear once your in-game name is on the player roster.';
     } catch (error) {
