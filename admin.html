@@ -1018,16 +1018,22 @@ const MHLA = (() => {
   // collectible badges
   function badges() {
     D.badges = Array.isArray(D.badges) ? D.badges : [];
+    const badgeRequirementDefaults = {
+      goals: 0, assists: 0, saves: 0, points: 0,
+      gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
+      gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
+      gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
+    };
     const add = h('button', { class: 'btn sm', type: 'button', onclick: () => {
       D.badges.push({
         id: uid(), name: 'New badge', description: '', image: '',
-        requirements: { goals: 0, assists: 0, saves: 0, points: 0 },
+        requirements: { ...badgeRequirementDefaults },
         allPlayers: false, season2Players: false, manualPlayerIds: [],
       });
       touch(); draw();
     } }, 'Add badge');
     const cards = D.badges.map(badge => {
-      badge.requirements = badge.requirements || { goals: 0, assists: 0, saves: 0, points: 0 };
+      badge.requirements = { ...badgeRequirementDefaults, ...(badge.requirements || {}) };
       badge.manualPlayerIds = Array.isArray(badge.manualPlayerIds) ? badge.manualPlayerIds : [];
       const uploadInput = h('input', {
         type: 'file', accept: 'image/png', style: 'display:none',
@@ -1046,8 +1052,22 @@ const MHLA = (() => {
           draw();
         },
       });
-      const requirementFields = ['goals', 'assists', 'saves', 'points'].map(key =>
-        field(key.charAt(0).toUpperCase() + key.slice(1), h('input', {
+      const requirementLabels = {
+        goals: 'Goals',
+        assists: 'Assists',
+        saves: 'Saves',
+        points: 'Points',
+        gamesScoredIn: 'Games with a goal',
+        gamesWith3Goals: 'Games with 3+ goals',
+        gamesWith5Goals: 'Games with 5+ goals',
+        gamesWith10Goals: 'Games with 10+ goals',
+        gamesWith100PercentSavePercentage: 'Games with 100% SV%',
+        gamesWith10Saves: 'Games with 10+ saves',
+        gamesWith20Saves: 'Games with 20+ saves',
+        gamesWith30Saves: 'Games with 30+ saves',
+      };
+      const requirementFields = Object.entries(requirementLabels).map(([key, label]) =>
+        field(label, h('input', {
           type: 'number', min: 0, max: 1000000, step: 1, value: badge.requirements[key] || 0,
           oninput: event => {
             const value = Number(event.target.value);
@@ -1229,7 +1249,7 @@ const MHLA = (() => {
           requirementInput('goals', 'Goals per point'),
           requirementInput('assists', 'Assists per point'),
           requirementInput('saves', 'Saves per point')),
-        h('p', { class: 'help', style: 'margin:0' }, 'Each stat earns points independently: one point per configured number of goals, assists, or saves. Defaults are 1 goal, 1 assist, and 2 saves. Values must be whole numbers from 1 to 100,000.'),
+        h('p', { class: 'help', style: 'margin:0' }, 'Skaters earn points from goals and assists; goalies earn points from saves and assists. Each configured threshold awards one point. Defaults are 1 goal, 1 assist, and 2 saves. Values must be whole numbers from 1 to 100,000.'),
         h('p', { class: 'help', style: 'margin:0' }, D.hasLogo ? `The league logo (${D.logoUrl.slice(1)}) is in use.` : 'No league logo yet: the site shows the MHL wordmark. To add one, put logo.png (or logo.webp / logo.jpg) next to server.js and reload the site.')),
       h('div', { class: 'ed', style: 'max-width:640px' },
         h('b', {}, 'Full site backup'),

@@ -161,6 +161,14 @@
     <div><span>Assists / Game</span><strong id="trackedAssistsPerGame">0.00</strong></div>
     <div><span>Saves / Game</span><strong id="trackedSavesPerGame">0.00</strong></div>
     <div><span>Average Save % / Game</span><strong id="trackedAverageSavePercentage">—</strong></div>
+    <div><span>Games Scored In</span><strong id="trackedGamesScoredIn">0</strong></div>
+    <div><span>Games With 3+ Goals</span><strong id="trackedGamesWith3Goals">0</strong></div>
+    <div><span>Games With 5+ Goals</span><strong id="trackedGamesWith5Goals">0</strong></div>
+    <div><span>Games With 10+ Goals</span><strong id="trackedGamesWith10Goals">0</strong></div>
+    <div><span>Games With 100% Save Percentage</span><strong id="trackedGamesWith100PercentSavePercentage">0</strong></div>
+    <div><span>Games With 10+ Saves</span><strong id="trackedGamesWith10Saves">0</strong></div>
+    <div><span>Games With 20+ Saves</span><strong id="trackedGamesWith20Saves">0</strong></div>
+    <div><span>Games With 30+ Saves</span><strong id="trackedGamesWith30Saves">0</strong></div>
   </div>
   <p class="player-profile-status" id="statsStatus" role="status" aria-live="polite"></p>
 </section>
@@ -301,6 +309,14 @@
     bodySaves: document.getElementById('trackedBodySaves'),
     passes: document.getElementById('trackedPasses'),
     gamesPlayed: document.getElementById('trackedGamesPlayed'),
+    gamesScoredIn: document.getElementById('trackedGamesScoredIn'),
+    gamesWith3Goals: document.getElementById('trackedGamesWith3Goals'),
+    gamesWith5Goals: document.getElementById('trackedGamesWith5Goals'),
+    gamesWith10Goals: document.getElementById('trackedGamesWith10Goals'),
+    gamesWith100PercentSavePercentage: document.getElementById('trackedGamesWith100PercentSavePercentage'),
+    gamesWith10Saves: document.getElementById('trackedGamesWith10Saves'),
+    gamesWith20Saves: document.getElementById('trackedGamesWith20Saves'),
+    gamesWith30Saves: document.getElementById('trackedGamesWith30Saves'),
     goalsPerGame: document.getElementById('trackedGoalsPerGame'),
     assistsPerGame: document.getElementById('trackedAssistsPerGame'),
     savesPerGame: document.getElementById('trackedSavesPerGame'),
@@ -325,7 +341,6 @@
   let currentCardArtwork = '';
   let currentSession = null;
   let currentSignup = null;
-  let siteDataPromise = null;
 
   function badgeRequirementsText(badge) {
     const requirements = badge.requirements || {};
@@ -333,6 +348,16 @@
       Number(requirements.goals) > 0 ? `${requirements.goals} goals` : '',
       Number(requirements.assists) > 0 ? `${requirements.assists} assists` : '',
       Number(requirements.saves) > 0 ? `${requirements.saves} saves` : '',
+      Number(requirements.gamesScoredIn) > 0 ? `${requirements.gamesScoredIn} games with a goal` : '',
+      Number(requirements.gamesWith3Goals) > 0 ? `${requirements.gamesWith3Goals} games with 3+ goals` : '',
+      Number(requirements.gamesWith5Goals) > 0 ? `${requirements.gamesWith5Goals} games with 5+ goals` : '',
+      Number(requirements.gamesWith10Goals) > 0 ? `${requirements.gamesWith10Goals} games with 10+ goals` : '',
+      Number(requirements.gamesWith100PercentSavePercentage) > 0
+        ? `${requirements.gamesWith100PercentSavePercentage} games with 100% save percentage`
+        : '',
+      Number(requirements.gamesWith10Saves) > 0 ? `${requirements.gamesWith10Saves} games with 10+ saves` : '',
+      Number(requirements.gamesWith20Saves) > 0 ? `${requirements.gamesWith20Saves} games with 20+ saves` : '',
+      Number(requirements.gamesWith30Saves) > 0 ? `${requirements.gamesWith30Saves} games with 30+ saves` : '',
       Number(requirements.points) > 0 ? `${requirements.points} points` : '',
     ].filter(Boolean).join(' · ');
   }
@@ -568,52 +593,48 @@
     profileSummary.hidden = false;
   }
 
-  async function loadStats(signup) {
+  function loadStats(signup) {
     profileStats.hidden = false;
     statsStatus.textContent = '';
     statsStatus.className = 'player-profile-status';
-    try {
-      if (!siteDataPromise) siteDataPromise = MHL.load();
-      const data = await siteDataPromise;
-      const playerName = String(signup.name || '').trim().toLowerCase();
-      const rosterPlayer = data.players.find(player => String(player.name || '').trim().toLowerCase() === playerName);
-      const goals = rosterPlayer ? Number(rosterPlayer.g) || 0 : 0;
-      const assists = rosterPlayer ? Number(rosterPlayer.a) || 0 : 0;
-      const trackedStats = rosterPlayer && rosterPlayer.trackedStats || {};
-      const requirements = data.site && data.site.statsPointRequirements || {};
-      const goalsPerPoint = Number.isSafeInteger(requirements.goals) && requirements.goals > 0 ? requirements.goals : 1;
-      const assistsPerPoint = Number.isSafeInteger(requirements.assists) && requirements.assists > 0 ? requirements.assists : 1;
-      profileGoals.textContent = goals;
-      profileAssists.textContent = assists;
-      profileWinsLosses.textContent = `${Number(trackedStats.wins) || 0}:${Number(trackedStats.losses) || 0}`;
-      profilePoints.textContent = Math.floor(goals / goalsPerPoint) + Math.floor(assists / assistsPerPoint);
-      const gamesPlayed = Number(trackedStats.gamesPlayed) || 0;
-      const perGame = value => gamesPlayed ? (Number(value) / gamesPlayed).toFixed(2) : '0.00';
-      const savePercentageGames = Number(trackedStats.savePercentageGames) || 0;
-      const averageSavePercentage = savePercentageGames
-        ? `${((Number(trackedStats.savePercentageTotalBasisPoints) || 0) / savePercentageGames / 100).toFixed(1)}%`
-        : '—';
-      profileTrackedStatElements.goals.textContent = Number(trackedStats.goals) || 0;
-      profileTrackedStatElements.assists.textContent = Number(trackedStats.assists) || 0;
-      profileTrackedStatElements.saves.textContent = Number(trackedStats.saves) || 0;
-      profileTrackedStatElements.wins.textContent = Number(trackedStats.wins) || 0;
-      profileTrackedStatElements.losses.textContent = Number(trackedStats.losses) || 0;
-      profileTrackedStatElements.stickSaves.textContent = Number(trackedStats.stickSaves) || 0;
-      profileTrackedStatElements.bodySaves.textContent = Number(trackedStats.bodySaves) || 0;
-      profileTrackedStatElements.passes.textContent = Number(trackedStats.passes) || 0;
-      profileTrackedStatElements.gamesPlayed.textContent = gamesPlayed;
-      profileTrackedStatElements.goalsPerGame.textContent = perGame(trackedStats.goals);
-      profileTrackedStatElements.assistsPerGame.textContent = perGame(trackedStats.assists);
-      profileTrackedStatElements.savesPerGame.textContent = perGame(trackedStats.saves);
-      profileTrackedStatElements.averageSavePercentage.textContent = averageSavePercentage;
-      profileTrackedStatsTitle.hidden = false;
-      profileTrackedStats.hidden = false;
-      if (!rosterPlayer) statsStatus.textContent = 'Stats will appear once your in-game name is on the player roster.';
-    } catch (error) {
-      statsStatus.textContent = 'Could not load player stats. Please reload the page to try again.';
-      statsStatus.className = 'player-profile-status error';
-      console.error('Could not load player stats:', error);
-    }
+    const trackedStats = signup.trackedStats || {};
+    const goals = Number(trackedStats.goals) || 0;
+    const assists = Number(trackedStats.assists) || 0;
+    const saves = Number(trackedStats.saves) || 0;
+    const gamesPlayed = Number(trackedStats.gamesPlayed) || 0;
+    const perGame = value => gamesPlayed ? (Number(value) / gamesPlayed).toFixed(2) : '0.00';
+    const savePercentageGames = Number(trackedStats.savePercentageGames) || 0;
+    const averageSavePercentage = savePercentageGames
+      ? `${((Number(trackedStats.savePercentageTotalBasisPoints) || 0) / savePercentageGames / 100).toFixed(1)}%`
+      : '—';
+    profileGoals.textContent = goals;
+    profileAssists.textContent = assists;
+    profileWinsLosses.textContent = `${Number(trackedStats.wins) || 0}:${Number(trackedStats.losses) || 0}`;
+    profilePoints.textContent = Number.isSafeInteger(signup.points) ? signup.points : 0;
+    profileTrackedStatElements.goals.textContent = goals;
+    profileTrackedStatElements.assists.textContent = assists;
+    profileTrackedStatElements.saves.textContent = saves;
+    profileTrackedStatElements.wins.textContent = Number(trackedStats.wins) || 0;
+    profileTrackedStatElements.losses.textContent = Number(trackedStats.losses) || 0;
+    profileTrackedStatElements.stickSaves.textContent = Number(trackedStats.stickSaves) || 0;
+    profileTrackedStatElements.bodySaves.textContent = Number(trackedStats.bodySaves) || 0;
+    profileTrackedStatElements.passes.textContent = Number(trackedStats.passes) || 0;
+    profileTrackedStatElements.gamesPlayed.textContent = gamesPlayed;
+    profileTrackedStatElements.gamesScoredIn.textContent = Number(trackedStats.gamesScoredIn) || 0;
+    profileTrackedStatElements.gamesWith3Goals.textContent = Number(trackedStats.gamesWith3Goals) || 0;
+    profileTrackedStatElements.gamesWith5Goals.textContent = Number(trackedStats.gamesWith5Goals) || 0;
+    profileTrackedStatElements.gamesWith10Goals.textContent = Number(trackedStats.gamesWith10Goals) || 0;
+    profileTrackedStatElements.gamesWith100PercentSavePercentage.textContent =
+      Number(trackedStats.gamesWith100PercentSavePercentage) || 0;
+    profileTrackedStatElements.gamesWith10Saves.textContent = Number(trackedStats.gamesWith10Saves) || 0;
+    profileTrackedStatElements.gamesWith20Saves.textContent = Number(trackedStats.gamesWith20Saves) || 0;
+    profileTrackedStatElements.gamesWith30Saves.textContent = Number(trackedStats.gamesWith30Saves) || 0;
+    profileTrackedStatElements.goalsPerGame.textContent = perGame(goals);
+    profileTrackedStatElements.assistsPerGame.textContent = perGame(assists);
+    profileTrackedStatElements.savesPerGame.textContent = perGame(saves);
+    profileTrackedStatElements.averageSavePercentage.textContent = averageSavePercentage;
+    profileTrackedStatsTitle.hidden = false;
+    profileTrackedStats.hidden = false;
   }
 
   closeBadgePicker.addEventListener('click', () => badgePicker.close());
@@ -682,7 +703,7 @@
       editTitle.hidden = false;
       form.hidden = false;
       steamStatus.textContent = `Signed in as ${signup.discord}.`;
-      await loadStats(signup);
+      loadStats(signup);
     } catch (error) {
       form.hidden = true;
       editTitle.hidden = true;
@@ -761,7 +782,7 @@
         photo,
       };
       showProfile(currentSignup, currentSession);
-      await loadStats(currentSignup);
+      loadStats(currentSignup);
       if (MHL.refreshPlayerButton) {
         try { await MHL.refreshPlayerButton(); }
         catch (error) { console.error('Could not refresh the Steam profile button:', error); }

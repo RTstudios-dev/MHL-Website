@@ -88,9 +88,8 @@
   const pointRuleText = (value, singular, plural) =>
     `${value} ${value === 1 ? singular : plural} = 1 point`;
   $('playerStatsPointKey').textContent = [
-    pointRuleText(goalsPerPoint, 'Goal', 'Goals'),
-    pointRuleText(assistsPerPoint, 'Assist', 'Assists'),
-    pointRuleText(savesPerPoint, 'Save', 'Saves'),
+    `Skaters: ${pointRuleText(goalsPerPoint, 'Goal', 'Goals')} + ${pointRuleText(assistsPerPoint, 'Assist', 'Assists')}`,
+    `Goalies: ${pointRuleText(savesPerPoint, 'Save', 'Saves')} + ${pointRuleText(assistsPerPoint, 'Assist', 'Assists')}`,
   ].join(' · ');
   const P = (D.signups || []).map(player => {
     const stats = player.trackedStats || {};
@@ -98,7 +97,8 @@
     const w = Number(stats.wins) || 0, l = Number(stats.losses) || 0;
     return {
       ...player, g, a, s, w, l,
-      p: Math.floor(g / goalsPerPoint) + Math.floor(a / assistsPerPoint) + Math.floor(s / savesPerPoint),
+      p: (player.position === 'Goalie' ? Math.floor(s / savesPerPoint) : Math.floor(g / goalsPerPoint))
+        + Math.floor(a / assistsPerPoint),
       value: Number(player.position === 'Goalie' ? player.goalieValue : player.skaterValue) || 0,
       goalie: player.position === 'Goalie',
       t: D.T[player.team] || null,
