@@ -32,6 +32,8 @@
 .profile-stats div{padding-top:12px;border-top:1px solid var(--line)}
 .profile-stats span{display:block;color:var(--muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
 .profile-stats strong{font-family:var(--disp);font-size:32px;font-weight:500;color:var(--gold)}
+.profile-stat-heading{margin-top:30px;font-family:var(--disp);font-size:24px;font-weight:500}
+.profile-tracked-stats{margin-top:12px}
 .player-card-section{max-width:680px;margin-bottom:28px}
 .player-card-section[hidden]{display:none}
 .player-card-title{font-family:var(--disp);font-size:30px;font-weight:500;margin-bottom:8px}
@@ -100,6 +102,7 @@
   .profile-identity h2{font-size:26px}
   .profile-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .profile-stats strong{font-size:26px}
+  .profile-tracked-stats{gap:10px}
   .player-card{padding:10px;column-gap:8px;row-gap:0}
   .player-card-name{margin-bottom:8px;font-size:24px}
   .player-card-visuals{gap:12px;margin-right:2px}
@@ -142,6 +145,22 @@
     <div><span>Assists</span><strong id="profileAssists">0</strong></div>
     <div><span>W:L</span><strong id="profileWinsLosses">0:0</strong></div>
     <div><span>Points</span><strong id="profilePoints">0</strong></div>
+  </div>
+  <h3 class="profile-stat-heading" id="profileTrackedStatsTitle" hidden>Tracked Game Stats</h3>
+  <div class="profile-stats profile-tracked-stats" id="profileTrackedStats" hidden>
+    <div><span>Goals</span><strong id="trackedGoals">0</strong></div>
+    <div><span>Assists</span><strong id="trackedAssists">0</strong></div>
+    <div><span>Saves</span><strong id="trackedSaves">0</strong></div>
+    <div><span>Wins</span><strong id="trackedWins">0</strong></div>
+    <div><span>Losses</span><strong id="trackedLosses">0</strong></div>
+    <div><span>Stick Saves</span><strong id="trackedStickSaves">0</strong></div>
+    <div><span>Body Saves</span><strong id="trackedBodySaves">0</strong></div>
+    <div><span>Passes</span><strong id="trackedPasses">0</strong></div>
+    <div><span>Games Played</span><strong id="trackedGamesPlayed">0</strong></div>
+    <div><span>Goals / Game</span><strong id="trackedGoalsPerGame">0.00</strong></div>
+    <div><span>Assists / Game</span><strong id="trackedAssistsPerGame">0.00</strong></div>
+    <div><span>Saves / Game</span><strong id="trackedSavesPerGame">0.00</strong></div>
+    <div><span>Average Save % / Game</span><strong id="trackedAverageSavePercentage">—</strong></div>
   </div>
   <p class="player-profile-status" id="statsStatus" role="status" aria-live="polite"></p>
 </section>
@@ -270,6 +289,23 @@
   const profileAssists = document.getElementById('profileAssists');
   const profileWinsLosses = document.getElementById('profileWinsLosses');
   const profilePoints = document.getElementById('profilePoints');
+  const profileTrackedStatsTitle = document.getElementById('profileTrackedStatsTitle');
+  const profileTrackedStats = document.getElementById('profileTrackedStats');
+  const profileTrackedStatElements = {
+    goals: document.getElementById('trackedGoals'),
+    assists: document.getElementById('trackedAssists'),
+    saves: document.getElementById('trackedSaves'),
+    wins: document.getElementById('trackedWins'),
+    losses: document.getElementById('trackedLosses'),
+    stickSaves: document.getElementById('trackedStickSaves'),
+    bodySaves: document.getElementById('trackedBodySaves'),
+    passes: document.getElementById('trackedPasses'),
+    gamesPlayed: document.getElementById('trackedGamesPlayed'),
+    goalsPerGame: document.getElementById('trackedGoalsPerGame'),
+    assistsPerGame: document.getElementById('trackedAssistsPerGame'),
+    savesPerGame: document.getElementById('trackedSavesPerGame'),
+    averageSavePercentage: document.getElementById('trackedAverageSavePercentage'),
+  };
   const playerCardAvatar = document.getElementById('playerCardAvatar');
   const playerCardAvatarFallback = document.getElementById('playerCardAvatarFallback');
   const playerCardName = document.getElementById('playerCardName');
@@ -551,6 +587,27 @@
       profileAssists.textContent = assists;
       profileWinsLosses.textContent = `${Number(trackedStats.wins) || 0}:${Number(trackedStats.losses) || 0}`;
       profilePoints.textContent = Math.floor(goals / goalsPerPoint) + Math.floor(assists / assistsPerPoint);
+      const gamesPlayed = Number(trackedStats.gamesPlayed) || 0;
+      const perGame = value => gamesPlayed ? (Number(value) / gamesPlayed).toFixed(2) : '0.00';
+      const savePercentageGames = Number(trackedStats.savePercentageGames) || 0;
+      const averageSavePercentage = savePercentageGames
+        ? `${((Number(trackedStats.savePercentageTotalBasisPoints) || 0) / savePercentageGames / 100).toFixed(1)}%`
+        : '—';
+      profileTrackedStatElements.goals.textContent = Number(trackedStats.goals) || 0;
+      profileTrackedStatElements.assists.textContent = Number(trackedStats.assists) || 0;
+      profileTrackedStatElements.saves.textContent = Number(trackedStats.saves) || 0;
+      profileTrackedStatElements.wins.textContent = Number(trackedStats.wins) || 0;
+      profileTrackedStatElements.losses.textContent = Number(trackedStats.losses) || 0;
+      profileTrackedStatElements.stickSaves.textContent = Number(trackedStats.stickSaves) || 0;
+      profileTrackedStatElements.bodySaves.textContent = Number(trackedStats.bodySaves) || 0;
+      profileTrackedStatElements.passes.textContent = Number(trackedStats.passes) || 0;
+      profileTrackedStatElements.gamesPlayed.textContent = gamesPlayed;
+      profileTrackedStatElements.goalsPerGame.textContent = perGame(trackedStats.goals);
+      profileTrackedStatElements.assistsPerGame.textContent = perGame(trackedStats.assists);
+      profileTrackedStatElements.savesPerGame.textContent = perGame(trackedStats.saves);
+      profileTrackedStatElements.averageSavePercentage.textContent = averageSavePercentage;
+      profileTrackedStatsTitle.hidden = false;
+      profileTrackedStats.hidden = false;
       if (!rosterPlayer) statsStatus.textContent = 'Stats will appear once your in-game name is on the player roster.';
     } catch (error) {
       statsStatus.textContent = 'Could not load player stats. Please reload the page to try again.';

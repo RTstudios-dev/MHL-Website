@@ -742,7 +742,10 @@ const MHLA = (() => {
       touch();
     };
     const trackedStatInput = (signup, key, label) => {
-      const stats = signup.trackedStats || (signup.trackedStats = { goals: 0, assists: 0, saves: 0, wins: 0, losses: 0 });
+      const stats = signup.trackedStats || (signup.trackedStats = {
+        goals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
+        stickSaves: 0, bodySaves: 0, passes: 0,
+      });
       return h('input', {
         type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
         'aria-label': `${label} for ${signup.name}`,
@@ -818,11 +821,11 @@ const MHLA = (() => {
           h('p', {}, 'Select the pending stats file from the game server. The file is read automatically; review the preview, then import.'),
           fileInput, ' ', importButton, status);
       })(),
-      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists, saves, wins and losses here. Game mod events continue adding to the tracked stats. Point requirements are set independently under Settings.'),
+      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists, saves, stick saves, body saves, passes, wins and losses here. Game mod events continue adding to the tracked stats. Point requirements are set independently under Settings.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', 'Saves', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', 'Saves', 'Stick saves', 'Body saves', 'Passes', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {},
           h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
           h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
@@ -837,6 +840,9 @@ const MHLA = (() => {
             playerStatCell(p, 'goals', 'Goals'),
             playerStatCell(p, 'assists', 'Assists'),
             playerStatCell(p, 'saves', 'Saves'),
+            playerStatCell(p, 'stickSaves', 'Stick saves'),
+            playerStatCell(p, 'bodySaves', 'Body saves'),
+            playerStatCell(p, 'passes', 'Passes'),
             playerStatCell(p, 'wins', 'Wins'),
             playerStatCell(p, 'losses', 'Losses'),
           h('td', {}, h('button', { class: 'btn del sm', type: 'button', disabled: !!p.signupId, title: p.signupId ? 'Manage this player through the Season 2 Player Sign Ups tab.' : '', onclick: () => {

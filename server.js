@@ -470,7 +470,11 @@ const signupSteamId = signup => {
   const storedId = String(signup.steamId || '');
   return /^\d{17}$/.test(storedId) ? storedId : '';
 };
-const emptyTrackedStats = () => ({ goals: 0, assists: 0, saves: 0, wins: 0, losses: 0 });
+const emptyTrackedStats = () => ({
+  goals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
+  stickSaves: 0, bodySaves: 0, passes: 0, gamesPlayed: 0,
+  savePercentageTotalBasisPoints: 0, savePercentageGames: 0,
+});
 const increaseTrackedStat = (value, amount = 1) =>
   Math.min(Number.MAX_SAFE_INTEGER, num(value, Number.MAX_SAFE_INTEGER) + amount);
 const trackedStatsFor = (data, signupId) => {
@@ -483,6 +487,12 @@ const trackedStatsFor = (data, signupId) => {
     saves: num(raw && raw.saves, Number.MAX_SAFE_INTEGER),
     wins: num(raw && raw.wins, Number.MAX_SAFE_INTEGER),
     losses: num(raw && raw.losses, Number.MAX_SAFE_INTEGER),
+    stickSaves: num(raw && raw.stickSaves, Number.MAX_SAFE_INTEGER),
+    bodySaves: num(raw && raw.bodySaves, Number.MAX_SAFE_INTEGER),
+    passes: num(raw && raw.passes, Number.MAX_SAFE_INTEGER),
+    gamesPlayed: num(raw && raw.gamesPlayed, Number.MAX_SAFE_INTEGER),
+    savePercentageTotalBasisPoints: num(raw && raw.savePercentageTotalBasisPoints, Number.MAX_SAFE_INTEGER),
+    savePercentageGames: num(raw && raw.savePercentageGames, Number.MAX_SAFE_INTEGER),
   };
 };
 const attachTrackedStats = data => {
@@ -884,12 +894,31 @@ const normalizeStatsReports = rawReports => {
           return { error: 'A goal event has an invalid Steam ID.' };
         }
         events.push({ eventId, type, scorerSteamId, assist1SteamId, assist2SteamId });
-      } else if (type === 'save') {
+      } else if (type === 'save' || type === 'stickSave' || type === 'bodySave' || type === 'pass') {
         const steamId = str(raw.steamId, 17);
         const count = Number(raw.count);
         if (!/^\d{17}$/.test(steamId) || !Number.isSafeInteger(count) || count < 1 || count > 1000)
-          return { error: 'A save event is invalid.' };
+          return { error: 'A player stat event is invalid.' };
         events.push({ eventId, type, steamId, count });
+      } else if (type === 'game') {
+        const steamId = str(raw.steamId, 17);
+        const savePercentageBasisPoints = raw.savePercentageBasisPoints;
+        if (!/^\d{17}$/.test(steamId) ||
+            !Number.isSafeInteger(savePercentageBasisPoints) ||
+            savePercentageBasisPoints < -1 || savePercentageBasisPoints > 10000) {
+          return { error: 'A game summary event is invalid.' };
+        }
+        events.push({ eventId, type, steamId, savePercentageBasisPoints });
+      } else if (type === 'statAdjustment') {
+        const steamId = str(raw.steamId, 17);
+        const stat = raw.stat;
+        const count = Number(raw.count);
+        if (!/^\d{17}$/.test(steamId) ||
+            !['save', 'stickSave', 'bodySave', 'pass'].includes(stat) ||
+            !Number.isSafeInteger(count) || count < 1 || count > 1000) {
+          return { error: 'A player stat adjustment event is invalid.' };
+        }
+        events.push({ eventId, type, steamId, stat, count });
       } else if (type === 'win' || type === 'loss') {
         const steamId = str(raw.steamId, 17);
         if (!/^\d{17}$/.test(steamId))
@@ -964,11 +993,45 @@ const applyStatsReports = (data, reports) => {
         }
         if (eventCredited) credited++;
         else unmatched++;
-      } else if (event.type === 'save') {
+      } else if (event.type === 'save' || event.type === 'stickSave' ||
+          event.type === 'bodySave' || event.type === 'pass') {
         const signup = signupBySteamId.get(event.steamId);
         if (signup) {
           const stats = countsFor(signup.id);
-          stats.saves = increaseTrackedStat(stats.saves, event.count);
+          const key = event.type === 'stickSave'
+            ? 'stickSaves'
+            : event.type === 'bodySave'
+              ? 'bodySaves'
+              : event.type === 'pass'
+                ? 'passes'
+                : 'saves';
+          stats[key] = increaseTrackedStat(stats[key], event.count);
+          credited++;
+        } else unmatched++;
+      } else if (event.type === 'game') {
+        const signup = signupBySteamId.get(event.steamId);
+        if (signup) {
+          const stats = countsFor(signup.id);
+          stats.gamesPlayed = increaseTrackedStat(stats.gamesPlayed);
+          if (event.savePercentageBasisPoints >= 0) {
+            stats.savePercentageTotalBasisPoints = increaseTrackedStat(
+              stats.savePercentageTotalBasisPoints, event.savePercentageBasisPoints);
+            stats.savePercentageGames = increaseTrackedStat(stats.savePercentageGames);
+          }
+          credited++;
+        } else unmatched++;
+      } else if (event.type === 'statAdjustment') {
+        const signup = signupBySteamId.get(event.steamId);
+        if (signup) {
+          const stats = countsFor(signup.id);
+          const key = event.stat === 'stickSave'
+            ? 'stickSaves'
+            : event.stat === 'bodySave'
+              ? 'bodySaves'
+              : event.stat === 'pass'
+                ? 'passes'
+                : 'saves';
+          stats[key] = Math.max(0, num(stats[key], Number.MAX_SAFE_INTEGER) - event.count);
           credited++;
         } else unmatched++;
       } else {
@@ -1750,7 +1813,9 @@ const server = http.createServer(async (req, res) => {
       clean.statsImportLogs = Array.isArray(current.statsImportLogs)
         ? current.statsImportLogs.slice(0, MAX_STATS_IMPORT_LOGS)
         : [];
-      const trackedStatKeys = new Set(['goals', 'assists', 'saves', 'wins', 'losses']);
+      const trackedStatKeys = new Set([
+        'goals', 'assists', 'saves', 'wins', 'losses', 'stickSaves', 'bodySaves', 'passes',
+      ]);
       const currentSignupIds = new Set(current.signups.map(signup => signup.id));
       for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
         if (!currentSignupIds.has(signupId) || !stats || typeof stats !== 'object' || Array.isArray(stats) ||
