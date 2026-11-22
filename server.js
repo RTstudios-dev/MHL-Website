@@ -32,7 +32,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannerSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerDefaults: { badge: '', banner: '', helmet: '', torso: '', stick: '', puck: '' }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -343,6 +343,21 @@ const modRosterSnapshot = data => {
   const seenSteamIds = new Set();
   const players = [];
   const badgesById = new Map(data.badges.map(badge => [badge.id, badge]));
+  const spriteCollections = {
+    banner: data.bannerSprites || [],
+    helmet: data.helmetSprites || [],
+    torso: data.torsoSprites || [],
+    stick: data.stickSprites || [],
+    puck: data.puckSprites || [],
+  };
+  const spriteByTypeAndId = {};
+  for (const [type, items] of Object.entries(spriteCollections))
+    spriteByTypeAndId[type] = new Map(items.map(item => [item.id, item]));
+  const defaults = data.bannerDefaults || {};
+  const resolvedDefaultSprite = (type, id) => {
+    const item = id ? spriteByTypeAndId[type].get(id) : null;
+    return item && item.image ? item.image : '';
+  };
   for (const signup of data.signups) {
     const steamId = signupSteamId(signup);
     if (!/^\d{17}$/.test(steamId)) continue;
@@ -350,6 +365,28 @@ const modRosterSnapshot = data => {
       return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
     seenSteamIds.add(steamId);
     const team = data.teams.find(item => item.id === signup.team);
+    const config = signup.bannerConfig && typeof signup.bannerConfig === 'object'
+      ? signup.bannerConfig
+      : {};
+    const resolvedSprite = (type, id, defaultId) => {
+      const selected = id ? spriteByTypeAndId[type].get(id) : null;
+      if (selected && selected.image) return selected.image;
+      return resolvedDefaultSprite(type, defaultId);
+    };
+    const selectedBadges = equippedBadgeSlotsFor(data, signup).map(id => {
+      const badge = badgesById.get(id);
+      return badge ? badge.image : '';
+    });
+    const defaultBadge = data.badges.find(badge => badge.id === defaults.badge);
+    if (!selectedBadges[0] && defaultBadge && defaultBadge.image)
+      selectedBadges[0] = defaultBadge.image;
+    const transformOrDefault = value => ({
+      x: Number.isFinite(Number(value && value.x)) ? Number(value.x) : 0,
+      y: Number.isFinite(Number(value && value.y)) ? Number(value.y) : 0,
+      scale: Number.isFinite(Number(value && value.scale)) ? Number(value.scale) : 1,
+      rotation: Number.isFinite(Number(value && value.rotation)) ? Number(value.rotation) : 0,
+      equipped: !(value && value.equipped === false),
+    });
     players.push({
       steamId,
       name: signup.name,
@@ -357,10 +394,33 @@ const modRosterSnapshot = data => {
       teamName: team ? team.name : '',
       photo: okImage(signup.photo) ? signup.photo : '',
       cardArtwork: okImage(signup.cardArtwork) ? signup.cardArtwork : '',
-      badgeImages: equippedBadgeSlotsFor(data, signup).map(id => {
-        const badge = badgesById.get(id);
-        return badge ? badge.image : '';
-      }),
+      bannerConfig: sanitizeBannerConfig(signup.bannerConfig),
+      badgeImages: selectedBadges,
+      bannerImage: resolvedSprite('banner', config.bannerSpriteId, defaults.banner),
+      helmetImage: resolvedSprite('helmet', config.helmetSpriteId, defaults.helmet),
+      torsoImage: resolvedSprite('torso', config.torsoSpriteId, defaults.torso),
+      stickImage: resolvedSprite('stick', config.stickSpriteId, defaults.stick),
+      puckImage: resolvedSprite('puck', config.puckSpriteId, defaults.puck),
+      defaultBadgeImages: [
+        defaultBadge && defaultBadge.image ? defaultBadge.image : '',
+        '',
+        '',
+      ],
+      defaultBannerImage: resolvedDefaultSprite('banner', defaults.banner),
+      defaultHelmetImage: resolvedDefaultSprite('helmet', defaults.helmet),
+      defaultTorsoImage: resolvedDefaultSprite('torso', defaults.torso),
+      defaultStickImage: resolvedDefaultSprite('stick', defaults.stick),
+      defaultPuckImage: resolvedDefaultSprite('puck', defaults.puck),
+      badgeTransforms: (Array.isArray(config.badgeTransforms) ? config.badgeTransforms : [])
+        .slice(0, 3)
+        .map(transformOrDefault),
+      helmetTransform: transformOrDefault(config.helmetTransform),
+      torsoTransform: transformOrDefault(config.torsoTransform),
+      stickTransform: transformOrDefault(config.stickTransform),
+      puckTransform: transformOrDefault(config.puckTransform),
+      equippedStats: Array.isArray(config.equippedStats)
+        ? config.equippedStats.slice(0, 20).map(value => str(value, 40)).filter(Boolean)
+        : [],
       ...signupValues(signup),
       ...trackedStatsFor(data, signup.id),
       statsAvailable: true,
@@ -456,6 +516,9 @@ const signupForPlayer = (data, player) => {
 const score = v => (v === null || v === '' || v === undefined) ? null : num(v, 99);
 const okImage = u => UPLOAD_RE.test(u) && fs.existsSync(uploadFile(u));
 const okBadgeImage = u => BADGE_UPLOAD_RE.test(u) && isBadgePng400(uploadFile(u));
+const okSpriteImage = u => typeof u === 'string'
+  && /^\/uploads\/[a-f0-9]{16}\.png$/i.test(u)
+  && fs.existsSync(uploadFile(u));
 const steamProfile = v => {
   const u = str(v, 300);
   return /^https:\/\/(?:www\.)?steamcommunity\.com\/(?:id\/[a-z0-9_-]+|profiles\/\d{17})\/?$/i.test(u) ? u : '';
@@ -606,6 +669,42 @@ const normalizePlayoffStage = round => {
   if (['final', 'finals'].includes(name)) return 'finals';
   return '';
 };
+const sanitizeTransform = value => {
+  const transform = value && typeof value === 'object' ? value : {};
+  const finite = (input, fallback, limit) => {
+    const number = Number(input);
+    return Number.isFinite(number) ? Math.max(-limit, Math.min(limit, number)) : fallback;
+  };
+  return {
+    x: finite(transform.x, 0, 2),
+    y: finite(transform.y, 0, 2),
+    scale: finite(transform.scale, 1, 3),
+    rotation: finite(transform.rotation, 0, 360),
+    equipped: transform.equipped !== false,
+  };
+};
+const sanitizeBannerConfig = value => {
+  const config = value && typeof value === 'object' ? value : {};
+  const badgeTransforms = Array.isArray(config.badgeTransforms)
+    ? config.badgeTransforms.slice(0, 3).map(sanitizeTransform)
+    : [];
+  while (badgeTransforms.length < 3) badgeTransforms.push(sanitizeTransform(null));
+  return {
+    bannerSpriteId: str(config.bannerSpriteId, 40),
+    helmetSpriteId: str(config.helmetSpriteId, 40),
+    torsoSpriteId: str(config.torsoSpriteId, 40),
+    stickSpriteId: str(config.stickSpriteId, 40),
+    puckSpriteId: str(config.puckSpriteId, 40),
+    badgeTransforms,
+    helmetTransform: sanitizeTransform(config.helmetTransform),
+    torsoTransform: sanitizeTransform(config.torsoTransform),
+    stickTransform: sanitizeTransform(config.stickTransform),
+    puckTransform: sanitizeTransform(config.puckTransform),
+    equippedStats: Array.isArray(config.equippedStats)
+      ? config.equippedStats.slice(0, 20).map(item => str(item, 40)).filter(Boolean)
+      : [],
+  };
+};
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
   const s = d.site && typeof d.site === 'object' ? d.site : {};
@@ -712,6 +811,7 @@ function sanitize(d) {
     photo: okImage(p.photo) ? p.photo : '',
     cardArtwork: okImage(p.cardArtwork) ? p.cardArtwork : '',
     badgeSlots: Array.isArray(p.badgeSlots) ? p.badgeSlots.slice(0, 3).map(id => str(id, 40)) : [],
+    bannerConfig: sanitizeBannerConfig(p.bannerConfig),
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
   const signupIds = new Set(signups.map(signup => signup.id));
@@ -754,7 +854,62 @@ function sanitize(d) {
       manualPlayerIds,
     };
   }).filter(Boolean);
+  const normalizeSpriteCollection = (key, signupIds) => {
+    const byId = new Set();
+    return (Array.isArray(d[key]) ? d[key] : []).slice(0, 500).map(source => {
+      if (!source || typeof source !== 'object') return null;
+      const id = str(source.id, 40) || crypto.randomUUID();
+      if (byId.has(id)) return null;
+      byId.add(id);
+      const requirements = source.requirements && typeof source.requirements === 'object'
+        ? source.requirements : {};
+      const manualIds = new Set();
+      const manualPlayerIds = (Array.isArray(source.manualPlayerIds) ? source.manualPlayerIds : [])
+        .slice(0, 5000)
+        .map(value => str(value, 40))
+        .filter(value => signupIds.has(value) && !manualIds.has(value) && manualIds.add(value));
+      return {
+        id,
+        name: str(source.name, 80) || 'Sprite',
+        description: str(source.description, 240),
+        image: okSpriteImage(source.image) ? source.image : '',
+        requirements: {
+          goals: num(requirements.goals, Number.MAX_SAFE_INTEGER),
+          assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
+          saves: num(requirements.saves, Number.MAX_SAFE_INTEGER),
+          points: num(requirements.points, Number.MAX_SAFE_INTEGER),
+          gamesScoredIn: num(requirements.gamesScoredIn, Number.MAX_SAFE_INTEGER),
+          gamesWith3Goals: num(requirements.gamesWith3Goals, Number.MAX_SAFE_INTEGER),
+          gamesWith5Goals: num(requirements.gamesWith5Goals, Number.MAX_SAFE_INTEGER),
+          gamesWith10Goals: num(requirements.gamesWith10Goals, Number.MAX_SAFE_INTEGER),
+          gamesWith100PercentSavePercentage: num(requirements.gamesWith100PercentSavePercentage, Number.MAX_SAFE_INTEGER),
+          gamesWith10Saves: num(requirements.gamesWith10Saves, Number.MAX_SAFE_INTEGER),
+          gamesWith20Saves: num(requirements.gamesWith20Saves, Number.MAX_SAFE_INTEGER),
+          gamesWith30Saves: num(requirements.gamesWith30Saves, Number.MAX_SAFE_INTEGER),
+        },
+        allPlayers: !!source.allPlayers,
+        season2Players: !!source.season2Players,
+        manualPlayerIds,
+      };
+    }).filter(Boolean);
+  };
+  const bannerSprites = normalizeSpriteCollection('bannerSprites', signupIds);
+  const helmetSprites = normalizeSpriteCollection('helmetSprites', signupIds);
+  const torsoSprites = normalizeSpriteCollection('torsoSprites', signupIds);
+  const stickSprites = normalizeSpriteCollection('stickSprites', signupIds);
+  const puckSprites = normalizeSpriteCollection('puckSprites', signupIds);
   const validBadgeIds = new Set(badges.map(badge => badge.id));
+  const rawDefaults = d.bannerDefaults && typeof d.bannerDefaults === 'object'
+    ? d.bannerDefaults : {};
+  const findSpriteId = (items, id) => items.some(item => item.id === id) ? str(id, 40) : '';
+  const bannerDefaults = {
+    badge: validBadgeIds.has(rawDefaults.badge) ? str(rawDefaults.badge, 40) : '',
+    banner: findSpriteId(bannerSprites, rawDefaults.banner),
+    helmet: findSpriteId(helmetSprites, rawDefaults.helmet),
+    torso: findSpriteId(torsoSprites, rawDefaults.torso),
+    stick: findSpriteId(stickSprites, rawDefaults.stick),
+    puck: findSpriteId(puckSprites, rawDefaults.puck),
+  };
   signups.forEach(signup => {
     const used = new Set();
     signup.badgeSlots = [0, 1, 2].map(index => {
@@ -778,7 +933,11 @@ function sanitize(d) {
   const signupById = new Map(signups.map(signup => [signup.id, signup]));
   draft.picks.forEach(pick => { signupById.get(pick.signupId).team = pick.teamId; });
   syncSignupPlayers({ players, signups });
-  return { site, teams, rounds, matches, players, news, rules, signups, badges, draft };
+  return {
+    site, teams, rounds, matches, players, news, rules, signups, badges, draft,
+    bannerSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
+    bannerDefaults,
+  };
 }
 
 // team pages
@@ -1640,6 +1799,13 @@ const server = http.createServer(async (req, res) => {
           points: configuredPointsFor(data, signup, stats), trackedStats: stats,
           badgeSlots: equippedBadgeSlotsFor(data, signup),
           badges: badgeCollectionFor(data, signup),
+          bannerConfig: signup.bannerConfig,
+          bannerSprites: data.bannerSprites || [],
+          helmetSprites: data.helmetSprites || [],
+          torsoSprites: data.torsoSprites || [],
+          stickSprites: data.stickSprites || [],
+          puckSprites: data.puckSprites || [],
+          bannerDefaults: data.bannerDefaults || {},
           ...values,
         },
       });
@@ -1680,6 +1846,42 @@ const server = http.createServer(async (req, res) => {
       syncSignupPlayers(data);
       writeData(data);
       return send(res, 200, { ok: true });
+    }
+    if (p === '/api/player/banner-config' && req.method === 'PUT') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam before editing your player banner.' });
+      const data = readData();
+      const profileKey = steamKey(player.profileUrl);
+      const matches = data.signups.filter(signup =>
+        (player.steamId && signup.steamId === player.steamId) ||
+        (profileKey && steamKey(signup.steam) === profileKey));
+      if (matches.length !== 1) return send(res, matches.length ? 409 : 404, { error: 'Could not find one signup linked to this Steam profile.' });
+      const changes = JSON.parse(await readBody(req) || '{}');
+      const signup = matches[0];
+      const collections = {
+        bannerSpriteId: ['bannerSprites', 'banner'],
+        helmetSpriteId: ['helmetSprites', 'helmet'],
+        torsoSpriteId: ['torsoSprites', 'torso'],
+        stickSpriteId: ['stickSprites', 'stick'],
+        puckSpriteId: ['puckSprites', 'puck'],
+      };
+      for (const [field, [key]] of Object.entries(collections)) {
+        const id = typeof changes[field] === 'string' ? changes[field].trim() : '';
+        if (!id) continue;
+        const sprite = (data[key] || []).find(item => item.id === id);
+        if (!sprite || !sprite.image || !badgeIsUnlocked(data, signup, sprite))
+          return send(res, 400, { error: 'One or more selected player-banner sprites are unavailable.' });
+      }
+      const equippedStats = Array.isArray(changes.equippedStats)
+        ? changes.equippedStats.slice(0, 20).map(value => str(value, 40)).filter(Boolean)
+        : [];
+      signup.bannerConfig = sanitizeBannerConfig({
+        ...sanitizeBannerConfig(signup.bannerConfig),
+        ...changes,
+        equippedStats,
+      });
+      writeData(data);
+      return send(res, 200, { ok: true, bannerConfig: signup.bannerConfig });
     }
     if (p === '/api/player/card-artwork' && req.method === 'PUT') {
       const player = playerSession(req);
@@ -1890,6 +2092,8 @@ const server = http.createServer(async (req, res) => {
           signup.badgeSlots = previous.badgeSlots;
         if (previous && (!rawSignup || !Object.prototype.hasOwnProperty.call(rawSignup, 'cardArtwork')))
           signup.cardArtwork = previous.cardArtwork || '';
+        if (previous && (!rawSignup || !Object.prototype.hasOwnProperty.call(rawSignup, 'bannerConfig')))
+          signup.bannerConfig = previous.bannerConfig || sanitizeBannerConfig(null);
         byId.set(signup.id, signup);
       });
       clean.signups = [...byId.values()].slice(0, 5000);
@@ -1928,7 +2132,15 @@ const server = http.createServer(async (req, res) => {
       writeData(clean);
       // delete uploads nothing uses anymore
       const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo])
-        .concat(clean.signups.flatMap(signup => [signup.photo, signup.cardArtwork]), clean.badges.map(badge => badge.image))
+        .concat(
+          clean.signups.flatMap(signup => [signup.photo, signup.cardArtwork]),
+          clean.badges.map(badge => badge.image),
+          (clean.bannerSprites || []).map(sprite => sprite.image),
+          (clean.helmetSprites || []).map(sprite => sprite.image),
+          (clean.torsoSprites || []).map(sprite => sprite.image),
+          (clean.stickSprites || []).map(sprite => sprite.image),
+          (clean.puckSprites || []).map(sprite => sprite.image),
+        )
         .map(url => path.basename(url || '')));
       for (const f of fs.readdirSync(UPLOAD_DIR)) if (!used.has(f)) fs.unlink(path.join(UPLOAD_DIR, f), () => {});
       const logo = findLogo();

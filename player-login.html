@@ -57,6 +57,13 @@
 .player-card-artwork-status{width:min(100%,430px);min-height:1.2em;margin:4px auto 0;text-align:center;font-size:12px}
 .player-card-artwork-status.success{color:var(--gold)}
 .player-card-artwork-status.error{color:#e08474}
+.banner-editor{width:min(100%,680px);margin:18px auto 0;padding:18px;border:1px solid var(--line);background:var(--card)}
+.banner-editor h3{font-family:var(--disp);font-size:24px;font-weight:500;margin:0 0 12px}
+.banner-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.banner-editor label{display:grid;gap:6px;color:var(--ink);font-size:13px}
+.banner-editor select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:9px 10px;min-height:42px}
+.banner-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;margin-top:12px}
+.banner-stats label{display:flex;align-items:center;gap:8px;color:var(--muted)}
 .player-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px}
 .player-card-meta div{min-width:0;padding-top:7px;border-top:1px solid var(--line)}
 .player-card-meta span,.player-card-stats span{display:block;color:var(--muted);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
@@ -203,6 +210,22 @@
     <button class="btn line" id="removePlayerCardArtwork" type="button" hidden>Remove</button>
   </div>
   <p class="player-card-artwork-status" id="playerCardArtworkStatus" role="status" aria-live="polite"></p>
+  <section class="banner-editor" id="bannerEditor" aria-label="Edit player banner">
+    <h3>Edit Banner</h3>
+    <div class="banner-editor-grid">
+      <label>Banner<select id="bannerSpriteSelect"></select></label>
+      <label>Helmet<select id="helmetSpriteSelect"></select></label>
+      <label>Torso<select id="torsoSpriteSelect"></select></label>
+      <label>Stick<select id="stickSpriteSelect"></select></label>
+      <label>Puck<select id="puckSpriteSelect"></select></label>
+    </div>
+    <h4 style="margin:16px 0 8px">Stats</h4>
+    <div class="banner-stats" id="bannerStats"></div>
+    <div class="acts" style="margin-top:14px">
+      <button class="btn" id="saveBannerConfig" type="button">Save Banner</button>
+    </div>
+    <p class="player-card-artwork-status" id="bannerEditorStatus" role="status" aria-live="polite"></p>
+  </section>
 </section>
 <section class="profile-badge-collection" id="badgeCollection" hidden aria-label="Collectible badges">
   <h2>Collectible Badges</h2>
@@ -330,6 +353,15 @@
   const playerCardGoals = document.getElementById('playerCardGoals');
   const playerCardAssists = document.getElementById('playerCardAssists');
   const playerCardSaves = document.getElementById('playerCardSaves');
+  const bannerEditor = document.getElementById('bannerEditor');
+  const bannerSpriteSelect = document.getElementById('bannerSpriteSelect');
+  const helmetSpriteSelect = document.getElementById('helmetSpriteSelect');
+  const torsoSpriteSelect = document.getElementById('torsoSpriteSelect');
+  const stickSpriteSelect = document.getElementById('stickSpriteSelect');
+  const puckSpriteSelect = document.getElementById('puckSpriteSelect');
+  const bannerStats = document.getElementById('bannerStats');
+  const saveBannerConfig = document.getElementById('saveBannerConfig');
+  const bannerEditorStatus = document.getElementById('bannerEditorStatus');
   const statsStatus = document.getElementById('statsStatus');
   const signupLink = document.getElementById('signupLink');
   const editTitle = document.getElementById('editTitle');
@@ -478,6 +510,78 @@
     }
   }
 
+  function populateBannerSelect(select, items, selectedId) {
+    select.replaceChildren();
+    select.add(new Option('Use default', ''));
+    (items || []).forEach(item => {
+      if (!item.image) return;
+      select.add(new Option(item.name || 'Sprite', item.id, false, item.id === selectedId));
+    });
+  }
+
+  function renderBannerEditor(signup) {
+    if (!signup) {
+      bannerEditor.hidden = true;
+      return;
+    }
+    bannerEditor.hidden = false;
+    const config = signup.bannerConfig || {};
+    populateBannerSelect(bannerSpriteSelect, signup.bannerSprites, config.bannerSpriteId);
+    populateBannerSelect(helmetSpriteSelect, signup.helmetSprites, config.helmetSpriteId);
+    populateBannerSelect(torsoSpriteSelect, signup.torsoSprites, config.torsoSpriteId);
+    populateBannerSelect(stickSpriteSelect, signup.stickSprites, config.stickSpriteId);
+    populateBannerSelect(puckSpriteSelect, signup.puckSprites, config.puckSpriteId);
+    const stats = [
+      'Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
+      'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
+      '3-Goal Games', '5-Goal Games', '10-Goal Games',
+      '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
+      'Skater Value', 'Goalie Value',
+    ];
+    const equipped = new Set(config.equippedStats || []);
+    bannerStats.replaceChildren(...stats.map(stat => {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = stat;
+      checkbox.checked = equipped.has(stat);
+      label.append(checkbox, document.createTextNode(stat));
+      return label;
+    }));
+  }
+
+  saveBannerConfig.addEventListener('click', async () => {
+    saveBannerConfig.disabled = true;
+    bannerEditorStatus.textContent = 'Saving banner...';
+    bannerEditorStatus.className = 'player-card-artwork-status';
+    try {
+      const equippedStats = [...bannerStats.querySelectorAll('input:checked')].map(input => input.value);
+      const config = {
+        bannerSpriteId: bannerSpriteSelect.value,
+        helmetSpriteId: helmetSpriteSelect.value,
+        torsoSpriteId: torsoSpriteSelect.value,
+        stickSpriteId: stickSpriteSelect.value,
+        puckSpriteId: puckSpriteSelect.value,
+        equippedStats,
+      };
+      const response = await fetch('/api/player/banner-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save your banner.');
+      currentSignup.bannerConfig = result.bannerConfig;
+      bannerEditorStatus.textContent = 'Banner saved.';
+      bannerEditorStatus.className = 'player-card-artwork-status success';
+    } catch (error) {
+      bannerEditorStatus.textContent = error.message || 'Could not save your banner.';
+      bannerEditorStatus.className = 'player-card-artwork-status error';
+    } finally {
+      saveBannerConfig.disabled = false;
+    }
+  });
+
   function renderPlayerCard(signup) {
     playerCardSection.hidden = !signup;
     if (!signup) return;
@@ -490,7 +594,18 @@
     playerCardGoals.textContent = Number(stats.goals) || 0;
     playerCardAssists.textContent = Number(stats.assists) || 0;
     playerCardSaves.textContent = Number(stats.saves) || 0;
-    currentCardArtwork = signup.cardArtwork || '';
+    const bannerConfig = signup.bannerConfig || {};
+    const findSelectedSprite = (items, id) => (items || []).find(item => item.id === id);
+    const selectedBanner = findSelectedSprite(signup.bannerSprites, bannerConfig.bannerSpriteId);
+    const defaultBanner = findSelectedSprite(
+      signup.bannerSprites,
+      signup.bannerDefaults && signup.bannerDefaults.banner);
+    const bannerImage = selectedBanner && selectedBanner.image
+      ? selectedBanner.image
+      : defaultBanner && defaultBanner.image
+        ? defaultBanner.image
+        : '';
+    currentCardArtwork = bannerImage || signup.cardArtwork || '';
     if (currentCardArtwork) {
       playerCardArtwork.src = currentCardArtwork;
       playerCardArtwork.alt = `${name} player card portrait`;
@@ -590,6 +705,7 @@
     }
     renderPlayerCard(signup);
     renderBadgeCollection();
+    renderBannerEditor(signup);
     profileSummary.hidden = false;
   }
 
