@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edit Player Banner | MHL</title>
+<meta name="description" content="Customize your MHL player banner.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+.banner-editor-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.banner-editor-heading h1{font-family:var(--disp);font-size:clamp(36px,4.4vw,58px);font-weight:500;line-height:1.02}
+.banner-editor-layout{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);align-items:start;gap:28px}
+.banner-stage{position:relative;min-width:0}
+.player-banner-frame{position:relative;width:min(560px,100%);aspect-ratio:849/1200;margin:0 auto;overflow:hidden;background:#151418;box-shadow:0 12px 40px #0007}
+.player-banner-canvas{position:absolute;left:0;top:0;width:849px;height:1200px;overflow:hidden;transform-origin:top left;background:#151418;color:#ece6da}
+.player-banner-image{position:absolute;display:block;max-width:none;object-fit:contain;pointer-events:none}
+.player-banner-text{position:absolute;transform-origin:top left;white-space:nowrap;pointer-events:none}
+.player-banner-name{color:#f2eee5;font:500 34px var(--disp);text-shadow:0 2px 3px #000}
+.player-banner-value{color:#c9a35c;font:500 28px var(--disp);text-shadow:0 2px 3px #000}
+.player-banner-stat-label{color:var(--primary);font:500 15px var(--disp)}
+.player-banner-stat-value{color:#c9a35c;font:500 64px var(--disp)}
+.player-banner-target{z-index:500!important;cursor:pointer!important;pointer-events:auto!important;transition:transform .16s ease,filter .16s ease}
+.player-banner-target:hover,.player-banner-target:focus-visible{z-index:600!important;transform:scale(1.055);filter:drop-shadow(0 0 12px #e0bf80)}
+.player-banner-badge-target{position:absolute;display:block;padding:0;border:0;background:transparent;pointer-events:none}
+.player-banner-badge-target.player-banner-target{border:2px dashed #e0bf80;background:#c9a35c22}
+.player-banner-badge-target.player-banner-target:hover{background:#c9a35c55}
+.swap-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.82)}
+.swap-backdrop[hidden]{display:none}
+.banner-editor-layout.is-targeting{position:relative;z-index:1001}
+.banner-editor-layout.is-targeting .banner-inventory{filter:brightness(.18);pointer-events:none}
+.banner-stage.is-targeting{z-index:1001}
+.swap-notice{position:absolute;z-index:1002;left:50%;bottom:16px;display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100% - 24px);padding:10px 12px;background:#151418;border:1px solid var(--gold);color:var(--ink);transform:translateX(-50%);box-shadow:0 5px 24px #000b}
+.swap-notice[hidden]{display:none}
+.swap-notice button{min-height:32px;padding:0 10px;border:1px solid var(--line);background:var(--card);color:var(--gold);font:600 11px var(--body);text-transform:uppercase}
+.banner-inventory{min-width:0;padding:20px;border:1px solid var(--line);background:var(--card)}
+.banner-inventory-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-bottom:18px}
+.banner-inventory-tab{min-height:42px;padding:6px;border:1px solid var(--line);background:var(--paper);color:var(--muted);font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase}
+.banner-inventory-tab[aria-selected=true]{border-color:var(--gold);background:var(--gold);color:var(--on-gold)}
+.banner-inventory h2{margin-bottom:4px;font-family:var(--disp);font-size:30px;font-weight:500}
+.banner-inventory-help{min-height:3em;margin-bottom:14px;color:var(--muted);font-size:13px;line-height:1.45}
+.banner-item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;max-height:min(65vh,720px);overflow:auto;padding:2px 4px 4px 2px}
+.banner-inventory-card{position:relative;display:flex;min-width:0;min-height:220px;flex-direction:column;align-items:flex-start;padding:12px;border:1px solid var(--line);background:var(--paper);transition:border-color .16s ease,transform .16s ease}
+.banner-inventory-card:hover,.banner-inventory-card:focus-within{border-color:var(--gold);transform:translateY(-2px)}
+.banner-inventory-card.selected{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.banner-item-image{width:100%;height:100px;margin-bottom:10px;object-fit:contain;background:#111013}
+.banner-item-placeholder{display:grid;width:100%;height:100px;margin-bottom:10px;place-items:center;background:#111013;color:var(--gold);font-family:var(--disp);font-size:30px}
+.banner-inventory-card strong{display:block;color:var(--ink);font-size:13px}
+.banner-inventory-card small{display:block;margin-top:4px;color:var(--muted);font-size:11px;line-height:1.35}
+.banner-item-order{position:absolute;top:8px;right:8px;display:grid;width:28px;height:28px;place-items:center;border:1px solid var(--gold);border-radius:50%;background:#151418;color:var(--gold);font:600 14px var(--body)}
+.banner-item-action{width:100%;min-height:36px;margin-top:auto;padding:6px;border:1px solid var(--gold);background:var(--gold);color:var(--on-gold);font:600 11px var(--body);letter-spacing:.05em;text-transform:uppercase;opacity:0;transition:opacity .14s ease}
+.banner-inventory-card:hover .banner-item-action,.banner-inventory-card:focus-within .banner-item-action{opacity:1}
+.banner-item-action:disabled{opacity:.45;cursor:not-allowed}
+.banner-stat-grid{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.banner-stat-option{min-width:0;min-height:44px;padding:8px 10px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:500 12px var(--body);line-height:1.2;text-align:center;transition:border-color .16s ease,background .16s ease,transform .16s ease}
+.banner-stat-option:hover:not(:disabled),.banner-stat-option:focus-visible{border-color:var(--gold);transform:translateY(-1px)}
+.banner-stat-option[aria-pressed=true]{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.banner-stat-option:disabled{opacity:.45;cursor:not-allowed}
+.banner-editor-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}
+.banner-editor-status{min-height:1.5em;margin-top:10px;color:var(--muted);font-size:13px}
+.banner-editor-status.error{color:#e08474}
+.banner-editor-status.success{color:var(--gold)}
+.banner-login-prompt{margin-top:16px;padding:20px;border-top:1px solid var(--rule);background:var(--card)}
+.banner-login-prompt[hidden],.banner-editor-layout[hidden]{display:none}
+@media(max-width:980px){
+  .banner-editor-layout{grid-template-columns:minmax(0,1fr);gap:20px}
+  .player-banner-frame{width:min(560px,100%)}
+  .banner-inventory{width:100%}
+  .banner-item-grid{max-height:520px}
+}
+@media(max-width:560px){
+  .banner-editor-heading{align-items:flex-start}
+  .banner-editor-heading .btn{min-height:38px;padding:0 10px;font-size:10px}
+  .banner-inventory{padding:14px}
+  .banner-item-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .banner-item-action{opacity:1}
+  .banner-editor-footer{align-items:stretch;flex-direction:column-reverse}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+  <div class="banner-editor-heading">
+    <h1>Edit Player Banner</h1>
+    <a class="btn line" href="/player-login">Back to Profile</a>
+  </div>
+  <p id="pageStatus" role="status" aria-live="polite">Loading your player banner…</p>
+  <div class="banner-login-prompt" id="loginPrompt" hidden>
+    <p>Sign in with Steam and link a Season 2 signup to customize your banner.</p>
+    <a class="btn" href="/player-login">Open Player Profile</a>
+  </div>
+  <div class="banner-editor-layout" id="bannerEditorLayout" hidden>
+    <div class="banner-stage" id="bannerStage">
+      <div class="player-banner-frame" id="bannerViewport" aria-label="Player banner preview">
+        <div class="player-banner-canvas" id="bannerCanvas"></div>
+      </div>
+      <div class="swap-notice" id="swapNotice" hidden>
+        <span>Choose the highlighted component to replace it.</span>
+        <button type="button" id="cancelTarget">Cancel</button>
+      </div>
+    </div>
+    <section class="banner-inventory" aria-label="Banner components">
+      <div class="banner-inventory-tabs" role="tablist" aria-label="Component types">
+        <button type="button" class="banner-inventory-tab" data-category="badges" aria-selected="true">Badges</button>
+        <button type="button" class="banner-inventory-tab" data-category="helmet" aria-selected="false">Helmets</button>
+        <button type="button" class="banner-inventory-tab" data-category="torso" aria-selected="false">Torso</button>
+        <button type="button" class="banner-inventory-tab" data-category="stick" aria-selected="false">Stick</button>
+        <button type="button" class="banner-inventory-tab" data-category="puck" aria-selected="false">Puck</button>
+        <button type="button" class="banner-inventory-tab" data-category="stats" aria-selected="false">Stats</button>
+      </div>
+      <h2 id="inventoryTitle">Collectible Badges</h2>
+      <p class="banner-inventory-help" id="inventoryHelp"></p>
+      <div class="banner-item-grid" id="inventoryGrid"></div>
+      <div class="banner-editor-footer">
+        <span>Remember to save your changes.</span>
+        <button class="btn" id="saveBanner" type="button">Save Banner</button>
+      </div>
+      <p class="banner-editor-status" id="editorStatus" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+  <div class="swap-backdrop" id="swapBackdrop" hidden></div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/standings.js"></script>
+<script src="/site.js"></script>
+<script src="/player-banner.js"></script>
+<script>
+(() => {
+  const pageStatus = document.getElementById('pageStatus');
+  const loginPrompt = document.getElementById('loginPrompt');
+  const editorLayout = document.getElementById('bannerEditorLayout');
+  const bannerStage = document.getElementById('bannerStage');
+  const bannerViewport = document.getElementById('bannerViewport');
+  const bannerCanvas = document.getElementById('bannerCanvas');
+  const swapNotice = document.getElementById('swapNotice');
+  const swapBackdrop = document.getElementById('swapBackdrop');
+  const inventoryTitle = document.getElementById('inventoryTitle');
+  const inventoryHelp = document.getElementById('inventoryHelp');
+  const inventoryGrid = document.getElementById('inventoryGrid');
+  const editorStatus = document.getElementById('editorStatus');
+  const saveButton = document.getElementById('saveBanner');
+  const categories = {
+    badges: { title: 'Collectible Badges', field: '', items: signup => signup.badges || [] },
+    helmet: { title: 'Helmets', field: 'helmetSpriteId', items: signup => signup.helmetSprites || [] },
+    torso: { title: 'Torso', field: 'torsoSpriteId', items: signup => signup.torsoSprites || [] },
+    stick: { title: 'Stick', field: 'stickSpriteId', items: signup => signup.stickSprites || [] },
+    puck: { title: 'Puck', field: 'puckSpriteId', items: signup => signup.puckSprites || [] },
+    stats: { title: 'Stats', field: '', items: () => [] },
+  };
+  const stats = [
+    'Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
+    'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
+    '3-Goal Games', '5-Goal Games', '10-Goal Games',
+    '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
+    'Skater Value', 'Goalie Value',
+  ];
+  let signup = null;
+  let activeCategory = 'badges';
+  let pendingTarget = null;
+  let dirty = false;
+
+  const status = (message, kind = '') => {
+    editorStatus.textContent = message;
+    editorStatus.className = `banner-editor-status${kind ? ` ${kind}` : ''}`;
+  };
+  const badgeRequirementsText = badge => {
+    const requirements = badge.requirements || {};
+    return [
+      Number(requirements.goals) > 0 ? `${requirements.goals} goals` : '',
+      Number(requirements.assists) > 0 ? `${requirements.assists} assists` : '',
+      Number(requirements.saves) > 0 ? `${requirements.saves} saves` : '',
+      Number(requirements.gamesScoredIn) > 0 ? `${requirements.gamesScoredIn} games with a goal` : '',
+      Number(requirements.gamesWith3Goals) > 0 ? `${requirements.gamesWith3Goals} games with 3+ goals` : '',
+      Number(requirements.gamesWith5Goals) > 0 ? `${requirements.gamesWith5Goals} games with 5+ goals` : '',
+      Number(requirements.gamesWith10Goals) > 0 ? `${requirements.gamesWith10Goals} games with 10+ goals` : '',
+      Number(requirements.gamesWith100PercentSavePercentage) > 0
+        ? `${requirements.gamesWith100PercentSavePercentage} games with 100% save percentage` : '',
+      Number(requirements.gamesWith10Saves) > 0 ? `${requirements.gamesWith10Saves} games with 10+ saves` : '',
+      Number(requirements.gamesWith20Saves) > 0 ? `${requirements.gamesWith20Saves} games with 20+ saves` : '',
+      Number(requirements.gamesWith30Saves) > 0 ? `${requirements.gamesWith30Saves} games with 30+ saves` : '',
+      Number(requirements.points) > 0 ? `${requirements.points} points` : '',
+    ].filter(Boolean).join(' · ');
+  };
+  const setTargetMode = target => {
+    pendingTarget = target;
+    const targeting = !!target;
+    document.body.classList.toggle('swap-mode', targeting);
+    editorLayout.classList.toggle('is-targeting', targeting);
+    bannerStage.classList.toggle('is-targeting', targeting);
+    swapBackdrop.hidden = !targeting;
+    swapNotice.hidden = !targeting;
+    renderBanner();
+  };
+  const renderBanner = () => {
+    window.MHLPlayerBanner.render(bannerViewport, bannerCanvas, signup, {
+      targeting: pendingTarget && pendingTarget.category,
+      onTarget: target => {
+        if (!pendingTarget || !signup) return;
+        if (target.category === 'badges') {
+          const slots = Array.isArray(signup.badgeSlots) ? [...signup.badgeSlots] : [];
+          while (slots.length < 3) slots.push('');
+          slots[target.slot] = pendingTarget.itemId;
+          signup.badgeSlots = slots.slice(0, 3);
+        } else {
+          const field = categories[target.category].field;
+          window.MHLPlayerBanner.ensureConfig(signup)[field] = pendingTarget.itemId;
+        }
+        dirty = true;
+        setTargetMode(null);
+        renderInventory();
+        status('Component updated. Save your banner to keep the change.');
+      },
+    });
+  };
+  const itemCard = ({ title, image, description, selected, order, action, disabled = false }) => {
+    const card = document.createElement('article');
+    card.className = `banner-inventory-card${selected ? ' selected' : ''}`;
+    if (image) {
+      const thumbnail = document.createElement('img');
+      thumbnail.className = 'banner-item-image';
+      thumbnail.src = image;
+      thumbnail.alt = '';
+      card.append(thumbnail);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'banner-item-placeholder';
+      placeholder.setAttribute('aria-hidden', 'true');
+      placeholder.textContent = title.slice(0, 1).toUpperCase();
+      card.append(placeholder);
+    }
+    if (order) {
+      const number = document.createElement('span');
+      number.className = 'banner-item-order';
+      number.textContent = String(order);
+      number.setAttribute('aria-label', `Stat position ${order}`);
+      card.append(number);
+    }
+    const name = document.createElement('strong');
+    name.textContent = title;
+    const detail = document.createElement('small');
+    detail.textContent = description || (selected ? 'Equipped on your banner.' : '');
+    card.append(name, detail);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'banner-item-action';
+    button.textContent = action.label;
+    button.disabled = disabled;
+    button.addEventListener('click', action.run);
+    card.append(button);
+    inventoryGrid.append(card);
+  };
+  const renderInventory = () => {
+    if (!signup) return;
+    const definition = categories[activeCategory];
+    inventoryTitle.textContent = definition.title;
+    inventoryGrid.replaceChildren();
+    inventoryGrid.classList.toggle('banner-stat-grid', activeCategory === 'stats');
+    if (activeCategory === 'stats') {
+      inventoryHelp.textContent = 'Select up to three stats. Click a selected box to remove it.';
+      const config = window.MHLPlayerBanner.ensureConfig(signup);
+      stats.forEach(stat => {
+        const selected = config.equippedStats.includes(stat);
+        const full = config.equippedStats.length >= 3;
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'banner-stat-option';
+        option.textContent = stat;
+        option.setAttribute('aria-pressed', String(selected));
+        option.disabled = !selected && full;
+        option.addEventListener('click', () => {
+          config.equippedStats = selected
+            ? config.equippedStats.filter(item => item !== stat)
+            : [...config.equippedStats, stat];
+          dirty = true;
+          renderBanner();
+          renderInventory();
+          status(selected
+            ? `${stat} removed. Save your banner to keep the change.`
+            : `${stat} added. Save your banner to keep the change.`);
+        });
+        inventoryGrid.append(option);
+      });
+      return;
+    }
+
+    if (activeCategory === 'badges') {
+      inventoryHelp.textContent = 'Hover over an unlocked badge and choose Equip, then select one of the three highlighted badge slots on your banner.';
+      const slots = Array.isArray(signup.badgeSlots) ? signup.badgeSlots : [];
+      const defaultBadge = (signup.badges || []).find(item => item.id === (signup.bannerDefaults || {}).badge);
+      itemCard({
+        title: 'Use default / clear slot',
+        image: defaultBadge && defaultBadge.image,
+        description: 'Restore the admin default in slot 1, or clear slots 2–3.',
+        selected: !slots.some(Boolean),
+        action: { label: 'Equip', run: () => setTargetMode({ category: 'badges', itemId: '' }) },
+      });
+      const badges = signup.badges || [];
+      if (!badges.length) {
+        const empty = document.createElement('p');
+        empty.className = 'banner-editor-status';
+        empty.textContent = 'No collectible badges have been added yet.';
+        inventoryGrid.append(empty);
+      }
+      badges.forEach(badge => {
+        const isEquipped = slots.includes(badge.id);
+        itemCard({
+          title: badge.name || 'Badge',
+          image: badge.image,
+          description: badge.description || badgeRequirementsText(badge) || (badge.unlocked ? 'Unlocked badge.' : 'Complete its requirements to unlock.'),
+          selected: isEquipped,
+          action: {
+            label: badge.unlocked ? 'Equip' : 'Locked',
+            run: () => setTargetMode({ category: 'badges', itemId: badge.id }),
+          },
+          disabled: !badge.unlocked,
+        });
+      });
+      return;
+    }
+
+    inventoryHelp.textContent = `Hover over a ${definition.title.toLowerCase()} sprite and choose Equip, then click the matching component on your banner.`;
+    const config = window.MHLPlayerBanner.ensureConfig(signup);
+    const selectedId = config[definition.field] || '';
+    const items = definition.items(signup);
+    const defaultId = (signup.bannerDefaults || {})[activeCategory];
+    const defaultItem = items.find(item => item.id === defaultId);
+    itemCard({
+      title: 'Use default',
+      image: defaultItem && defaultItem.image,
+      description: 'Use the administrator’s default sprite.',
+      selected: !selectedId,
+      action: { label: 'Equip', run: () => setTargetMode({ category: activeCategory, itemId: '' }) },
+    });
+    items.filter(item => item.image).forEach(item => {
+      itemCard({
+        title: item.name || `${definition.title} sprite`,
+        image: item.image,
+        selected: selectedId === item.id,
+        description: selectedId === item.id ? 'Currently equipped.' : '',
+        action: {
+          label: 'Equip',
+          run: () => setTargetMode({ category: activeCategory, itemId: item.id }),
+        },
+      });
+    });
+  };
+
+  document.querySelectorAll('[data-category]').forEach(button => {
+    button.addEventListener('click', () => {
+      if (pendingTarget) setTargetMode(null);
+      activeCategory = button.dataset.category;
+      document.querySelectorAll('[data-category]').forEach(tab =>
+        tab.setAttribute('aria-selected', String(tab === button)));
+      renderInventory();
+      status('');
+    });
+  });
+  document.getElementById('cancelTarget').addEventListener('click', () => setTargetMode(null));
+  swapBackdrop.addEventListener('click', () => setTargetMode(null));
+  window.addEventListener('resize', () => window.MHLPlayerBanner.fit(bannerViewport, bannerCanvas));
+  if ('ResizeObserver' in window)
+    new ResizeObserver(() => window.MHLPlayerBanner.fit(bannerViewport, bannerCanvas)).observe(bannerViewport);
+
+  saveButton.addEventListener('click', async () => {
+    if (!signup) return;
+    saveButton.disabled = true;
+    status('Saving banner…');
+    try {
+      const config = window.MHLPlayerBanner.ensureConfig(signup);
+      const response = await fetch('/api/player/banner-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...config, badgeSlots: signup.badgeSlots || ['', '', ''] }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save your banner.');
+      signup.bannerConfig = result.bannerConfig;
+      if (Array.isArray(result.badgeSlots)) signup.badgeSlots = result.badgeSlots;
+      dirty = false;
+      renderBanner();
+      renderInventory();
+      status('Banner saved.', 'success');
+    } catch (error) {
+      status(error.message || 'Could not save your banner.', 'error');
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+
+  window.addEventListener('beforeunload', event => {
+    if (!dirty) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
+  const loadBanner = async () => {
+    try {
+      const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
+      if (!sessionResponse.ok) throw new Error('Could not check Steam sign-in.');
+      const session = await sessionResponse.json();
+      if (!session.authenticated) {
+        pageStatus.textContent = 'Sign in with Steam to customize your player banner.';
+        loginPrompt.hidden = false;
+        return;
+      }
+      const response = await fetch('/api/player/signup', { cache: 'no-store' });
+      const result = await response.json();
+      if (response.status === 404) {
+        pageStatus.textContent = result.error || 'No signup was found for this Steam profile.';
+        loginPrompt.hidden = false;
+        return;
+      }
+      if (!response.ok) throw new Error(result.error || 'Could not load your player banner.');
+      signup = result.signup;
+      editorLayout.hidden = false;
+      pageStatus.hidden = true;
+      window.MHLPlayerBanner.ensureConfig(signup);
+      renderBanner();
+      renderInventory();
+    } catch (error) {
+      pageStatus.textContent = error.message || 'Could not load your player banner. Please reload and try again.';
+      pageStatus.classList.add('error');
+      loginPrompt.hidden = false;
+    }
+  };
+  loadBanner();
+})();
+</script>
+</body>
+</html>

@@ -138,4 +138,4 @@ Back up `data.json` and `uploads/` from the disk every now and then.
 ## Security
 
 Only the admin can change anything, and uploads have to be real images.
-5 wrong passwords locks login for 5 minutes. Logins last 12 hours, restarting the server logs everyone out.
+5 wrong passwords locks login for 5 minutes. Admin and player logins last 12 hours. Player sessions are stored under `DATA_DIR/.player-sessions/`, so they survive server restarts when `DATA_DIR` is on persistent storage. If you run multiple server instances, they must share the same `DATA_DIR`; otherwise a sign-in may not be recognized by another instance.

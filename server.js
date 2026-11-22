@@ -2,7 +2,7 @@
 //
 // env vars (none needed locally):
 //   PORT                 default 3000
-//   DATA_DIR             where data.json + uploads/ live. point it at the persistent disk when hosted
+//   DATA_DIR             where data.json, uploads/, and player sessions live; use persistent storage when hosted
 //   ADMIN_PASSWORD_HASH  from `node hash-password.js` (use this when hosted)
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
 //   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
@@ -21,6 +21,7 @@ const DATA_DIR = path.resolve(process.env.DATA_DIR || DIR);
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const PW_FILE = path.join(DATA_DIR, '.admin-password');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const PLAYER_SESSION_DIR = path.join(DATA_DIR, '.player-sessions');
 const STEAM_OPENID = 'https://steamcommunity.com/openid/login';
 const STEAM_API_KEY = (process.env.STEAM_API_KEY || '').trim();
 const MHL_MOD_API_KEY = (process.env.MHL_MOD_API_KEY || '').trim();
@@ -36,6 +37,7 @@ const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, 
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+fs.mkdirSync(PLAYER_SESSION_DIR, { recursive: true, mode: 0o700 });
 if (!fs.existsSync(DATA_FILE)) {
   const seed = path.join(DIR, 'data.json');
   if (DATA_DIR !== DIR && fs.existsSync(seed)) {
@@ -211,7 +213,6 @@ const STATIC = {
 
 const sessions = new Map(); // token -> expiry
 const SESSION_MS = 12 * 3600 * 1000;
-const playerSessions = new Map(); // token -> { steamId, expires }
 const steamStates = new Map(); // state -> { returnTo, realm, expires }
 const steamNonces = new Map(); // nonce -> expiry
 const PLAYER_SESSION_MS = 12 * 3600 * 1000;
@@ -221,7 +222,7 @@ const publicLimits = new Map(); // key -> {n, until}
 setInterval(() => {
   const now = Date.now();
   for (const [t, exp] of sessions) if (exp < now) sessions.delete(t);
-  for (const [t, player] of playerSessions) if (player.expires < now) playerSessions.delete(t);
+  prunePlayerSessions(now);
   for (const [state, entry] of steamStates) if (entry.expires < now) steamStates.delete(state);
   for (const [nonce, exp] of steamNonces) if (exp < now) steamNonces.delete(nonce);
   for (const [ip, f] of fails) if (f.until < now && f.n === 0) fails.delete(ip);
@@ -251,6 +252,55 @@ const getCookie = (req, name) => {
   const m = (req.headers.cookie || '').split(/;\s*/).find(c => c.startsWith(name + '='));
   return m ? m.slice(name.length + 1) : null;
 };
+const playerSessionFile = token => path.join(
+  PLAYER_SESSION_DIR,
+  crypto.createHash('sha256').update(token).digest('hex') + '.json',
+);
+const removePlayerSession = token => {
+  try {
+    fs.unlinkSync(playerSessionFile(token));
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      error.statusCode = 500;
+      throw error;
+    }
+  }
+};
+const prunePlayerSessions = (now = Date.now()) => {
+  let names;
+  try {
+    names = fs.readdirSync(PLAYER_SESSION_DIR);
+  } catch (error) {
+    console.error('[player-session] Could not list session storage:', error.message);
+    return;
+  }
+  for (const name of names) {
+    if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
+    const file = path.join(PLAYER_SESSION_DIR, name);
+    let session;
+    try {
+      session = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      if (!(error instanceof SyntaxError)) {
+        console.error('[player-session] Could not read session file:', name, error.message);
+        continue;
+      }
+      console.error('[player-session] Removing invalid session file:', name, error.message);
+    }
+    if (!session || !Number.isFinite(session.expires) || session.expires <= now) {
+      try {
+        fs.unlinkSync(file);
+      } catch (error) {
+        if (error.code !== 'ENOENT')
+          console.error('[player-session] Could not remove expired session file:', name, error.message);
+      }
+    }
+  }
+};
+const savePlayerSession = (token, session) => {
+  fs.writeFileSync(playerSessionFile(token), JSON.stringify(session), { flag: 'wx', mode: 0o600 });
+};
 const isAdmin = req => {
   const t = getCookie(req, 'mhl_session');
   const exp = t && sessions.get(t);
@@ -260,9 +310,30 @@ const isAdmin = req => {
 };
 const playerSession = req => {
   const token = getCookie(req, 'mhl_player');
-  const session = token && playerSessions.get(token);
-  if (!session) return null;
-  if (session.expires < Date.now()) { playerSessions.delete(token); return null; }
+  if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
+  const file = playerSessionFile(token);
+  let contents;
+  try {
+    contents = fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    error.statusCode = 500;
+    throw error;
+  }
+  let session;
+  try {
+    session = JSON.parse(contents);
+  } catch (error) {
+    console.error('[player-session] Removing invalid session file:', path.basename(file), error.message);
+    removePlayerSession(token);
+    return null;
+  }
+  if (!session || !/^\d{17}$/.test(session.steamId) ||
+      typeof session.profileUrl !== 'string' || typeof session.lookupFailed !== 'boolean' ||
+      !Number.isFinite(session.expires) || session.expires <= Date.now()) {
+    removePlayerSession(token);
+    return null;
+  }
   return session;
 };
 const requestOrigin = req => {
@@ -1743,7 +1814,12 @@ const server = http.createServer(async (req, res) => {
 
       const steamId = idMatch[1], token = crypto.randomBytes(32).toString('hex');
       const { profileUrl, lookupFailed } = await steamProfileUrl(steamId);
-      playerSessions.set(token, { steamId, profileUrl, lookupFailed, expires: Date.now() + PLAYER_SESSION_MS });
+      try {
+        savePlayerSession(token, { steamId, profileUrl, lookupFailed, expires: Date.now() + PLAYER_SESSION_MS });
+      } catch (error) {
+        console.error('[player-session] Could not persist Steam sign-in:', error.message);
+        return send(res, 500, { error: 'Could not save your Steam sign-in. Please try again.' });
+      }
       const secure = origin.startsWith('https://') ? '; Secure' : '';
       return send(res, 303, 'Signed in with Steam', 'text/plain; charset=utf-8', {
         Location: `${pending.returnPath}?steam=connected`,
@@ -1987,7 +2063,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/player/logout' && req.method === 'POST') {
       const token = getCookie(req, 'mhl_player');
-      if (token) playerSessions.delete(token);
+      if (token && /^[a-f0-9]{64}$/.test(token)) removePlayerSession(token);
       const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
       return send(res, 200, { ok: true }, 'application/json', {
         'Set-Cookie': `mhl_player=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`,
@@ -2353,6 +2429,10 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) return send(res, 404, { error: 'Not found' });
     send(res, 404, '<!doctype html><meta charset="utf-8"><title>Not found | MHL</title><p style="font:18px system-ui;padding:40px">Page not found. <a href="/">Back to the MHL home page</a></p>', HTML);
   } catch (e) {
+    if (e.statusCode === 500) {
+      console.error('[player-session] Could not read session storage:', e.message);
+      return send(res, 500, { error: 'Could not verify the player sign-in. Please try again.' });
+    }
     send(res, 400, { error: 'Bad request' });
   }
 });
