@@ -653,6 +653,7 @@ const badgeCollectionFor = (data, signup) => data.badges
     name: badge.name,
     description: badge.description,
     image: badge.image,
+    scale: badge.scale,
     unlocked: badgeIsUnlocked(data, signup, badge),
     requirements: badge.requirements,
   }));
@@ -852,6 +853,7 @@ function sanitize(d) {
       name: str(source.name, 80) || 'Badge',
       description: str(source.description, 240),
       image: okBadgeImage(source.image) ? source.image : '',
+      scale: Math.max(0.1, Math.min(5, Number.isFinite(Number(source.scale)) ? Number(source.scale) : 1)),
       requirements: {
         goals: num(requirements.goals, Number.MAX_SAFE_INTEGER),
         assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
@@ -872,6 +874,10 @@ function sanitize(d) {
       manualPlayerIds,
     };
   }).filter(Boolean);
+  const dimension = value => {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number > 0 && number <= 10000 ? number : 0;
+  };
   const normalizeSpriteCollection = (key, signupIds) => {
     const byId = new Set();
     return (Array.isArray(d[key]) ? d[key] : []).slice(0, 500).map(source => {
@@ -891,6 +897,8 @@ function sanitize(d) {
         name: str(source.name, 80) || 'Sprite',
         description: str(source.description, 240),
         image: okSpriteImage(source.image) ? source.image : '',
+        naturalWidth: dimension(source.naturalWidth),
+        naturalHeight: dimension(source.naturalHeight),
         transform: sanitizeCanvasTransform(source.transform, { x: 334, y: 510, scale: 1 }),
         requirements: {
           goals: num(requirements.goals, Number.MAX_SAFE_INTEGER),
@@ -924,10 +932,6 @@ function sanitize(d) {
     const id = str(source.id, 40) || crypto.randomUUID();
     if (bannerLayerIds.has(id)) return null;
     bannerLayerIds.add(id);
-    const dimension = value => {
-      const number = Number(value);
-      return Number.isSafeInteger(number) && number > 0 && number <= 10000 ? number : 0;
-    };
     return {
       id,
       name: str(source.name, 80) || 'New layer',

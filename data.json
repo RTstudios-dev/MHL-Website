@@ -219,6 +219,14 @@
       "y": 120,
       "scale": 1
     },
+    "layerOrder": [
+      "badges",
+      "stick",
+      "torso",
+      "puck",
+      "helmet",
+      "background"
+    ],
     "canvasVersion": 4
   },
   "playerStats": {},

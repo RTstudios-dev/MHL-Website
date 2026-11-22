@@ -234,9 +234,6 @@
 .banner-positioner{position:relative;width:500px;height:500px;overflow:hidden;border:1px solid var(--line);background:#111013;touch-action:none}
 .positioner-circle-guide{position:absolute;z-index:5;width:400px;height:400px;left:50px;top:50px;border:2px solid #c9a35c;border-radius:50%;pointer-events:none}
 .positioner-sprite{position:absolute;width:200px;height:200px;left:150px;top:150px;object-fit:contain;cursor:move;user-select:none}
-.positioner-controls{display:grid;gap:8px;margin-top:12px}
-.positioner-controls label{display:grid;gap:6px;color:var(--muted);font-size:12px}
-.positioner-controls input[type="range"]{width:100%}
 .banner-editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .banner-editor-status{min-height:1.4em;margin:8px 0 0;text-align:right;color:var(--muted)}
 .player-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px}
@@ -640,7 +637,7 @@
         button.append(image);
       }
       const transform = config.badgeTransforms[index];
-      const scale = Math.max(0.25, Math.min(3, Number(transform.scale) || 1));
+      const scale = Math.max(0.1, Math.min(5, Number(badge && badge.scale) || 1));
       const x = Math.max(-0.5, Math.min(0.5, Number(transform.x) || 0));
       const y = Math.max(-0.5, Math.min(0.5, Number(transform.y) || 0));
       button.style.width = `${128 * scale}px`;
@@ -781,41 +778,16 @@
     return config[categoryTransformKey(category)];
   }
 
-  function applyPositionerTransform(kind, transform) {
+  function applyPositionerTransform(kind, transform, assetScale = 1) {
     const sprite = kind === 'badge' ? badgePositionerSprite : spritePositionerSprite;
     if (!sprite) return;
-    const scale = Math.max(0.25, Math.min(3, Number(transform.scale) || 1));
+    const scale = Math.max(0.1, Math.min(5, Number(assetScale) || 1));
     const x = Math.max(-1, Math.min(1, Number(transform.x) || 0));
     const y = Math.max(-1, Math.min(1, Number(transform.y) || 0));
     sprite.style.width = `${40 * scale}%`;
     sprite.style.height = `${40 * scale}%`;
     sprite.style.left = `calc(${50 + x * 50}% - ${20 * scale}%)`;
     sprite.style.top = `calc(${50 + y * 50}% - ${20 * scale}%)`;
-  }
-
-  function renderPositionerControls(positioner, kind, transform) {
-    positioner.querySelectorAll('.positioner-controls').forEach(control => control.remove());
-    const controls = document.createElement('div');
-    controls.className = 'positioner-controls';
-    controls.style.position = 'absolute';
-    controls.style.zIndex = '20';
-    controls.style.left = '12px';
-    controls.style.right = '12px';
-    controls.style.bottom = '12px';
-    const scaleLabel = document.createElement('label');
-    scaleLabel.textContent = 'Scale';
-    const scale = document.createElement('input');
-    scale.type = 'range';
-    scale.min = '25';
-    scale.max = '300';
-    scale.value = String(Math.round((Number(transform.scale) || 1) * 100));
-    scale.addEventListener('input', () => {
-      transform.scale = Number(scale.value) / 100;
-      applyPositionerTransform(kind, transform);
-    });
-    scaleLabel.append(scale);
-    controls.append(scaleLabel);
-    positioner.append(controls);
   }
 
   function enablePositionerDrag(positioner, sprite, kind) {
@@ -830,7 +802,7 @@
         : getTransform(config, currentSpriteCategory);
       transform.x = Math.max(-0.5, Math.min(0.5, (event.clientX - rect.left) / rect.width - 0.5));
       transform.y = Math.max(-0.5, Math.min(0.5, (event.clientY - rect.top) / rect.height - 0.5));
-      applyPositionerTransform(kind, transform);
+      applyPositionerTransform(kind, transform, Number(sprite.dataset.assetScale) || 1);
     };
     sprite.addEventListener('pointerdown', event => {
       dragging = true;
@@ -852,6 +824,7 @@
     const badge = badges.find(item => item.id === slots[currentBadgeSlot] && item.unlocked);
     badgePositionerSprite.src = badge ? badge.image : '';
     badgePositionerSprite.hidden = !badge;
+    badgePositionerSprite.dataset.assetScale = String(badge && badge.scale || 1);
     badgePickerPanel.replaceChildren();
     const addChoice = (label, image, active, onClick) => {
       const button = document.createElement('button');
@@ -875,8 +848,7 @@
         () => saveBadgeSlot(currentBadgeSlot, item.id).catch(() => {}));
     });
     const transform = config.badgeTransforms[currentBadgeSlot];
-    applyPositionerTransform('badge', transform);
-    renderPositionerControls(badgePositioner, 'badge', transform);
+    applyPositionerTransform('badge', transform, badge && badge.scale);
   }
 
   function renderSpritePositioner(category) {
@@ -913,12 +885,13 @@
     });
     const selected = items.find(item => item.id === selectedId);
     const defaultItem = items.find(item => item.id === defaultId);
-    const image = selected?.image || defaultItem?.image || '';
+    const spriteItem = selected?.image ? selected : defaultItem;
+    const image = spriteItem?.image || '';
     spritePositionerSprite.src = image;
     spritePositionerSprite.hidden = !image;
+    spritePositionerSprite.dataset.assetScale = String(spriteItem && spriteItem.transform && spriteItem.transform.scale || 1);
     const transform = getTransform(config, category);
-    applyPositionerTransform('sprite', transform);
-    renderPositionerControls(spritePositioner, 'sprite', transform);
+    applyPositionerTransform('sprite', transform, spriteItem && spriteItem.transform && spriteItem.transform.scale);
   }
 
   function renderBannerEditor(signup) {
@@ -962,19 +935,19 @@
     const defaultBanner = findSelectedSprite(
       signup.bannerSprites,
       signup.bannerDefaults && signup.bannerDefaults.banner);
-    const bannerImage = selectedBanner && selectedBanner.image
-      ? selectedBanner.image
-      : defaultBanner && defaultBanner.image
-        ? defaultBanner.image
-        : '';
+    const bannerSprite = selectedBanner && selectedBanner.image
+      ? selectedBanner
+      : defaultBanner && defaultBanner.image ? defaultBanner : null;
+    const bannerImage = bannerSprite ? bannerSprite.image : '';
     currentCardArtwork = bannerImage || signup.cardArtwork || '';
     if (currentCardArtwork) {
       playerCardArtwork.src = currentCardArtwork;
       playerCardArtwork.alt = `${name} player banner`;
       playerCardArtwork.hidden = false;
       playerCardArtworkFallback.hidden = true;
-      const bannerTransform = config.bannerTransform || { x: 0, y: 0, scale: 1 };
-      const bannerScale = Math.max(0.25, Math.min(3, Number(bannerTransform.scale) || 1));
+      const bannerTransform = config.bannerTransform || { x: 0, y: 0 };
+      const bannerScale = Math.max(0.1, Math.min(5,
+        Number(bannerSprite && bannerSprite.transform && bannerSprite.transform.scale) || 1));
       const bannerX = Math.max(-0.5, Math.min(0.5, Number(bannerTransform.x) || 0));
       const bannerY = Math.max(-0.5, Math.min(0.5, Number(bannerTransform.y) || 0));
       playerCardArtwork.style.width = `${bannerScale * 100}%`;
@@ -998,7 +971,7 @@
       const image = document.createElement('img');
       image.src = item.image;
       image.alt = '';
-      const scale = Math.max(0.25, Math.min(3, Number(transform.scale) || 1));
+      const scale = Math.max(0.1, Math.min(5, Number(item.transform && item.transform.scale) || 1));
       const x = Math.max(-0.5, Math.min(0.5, Number(transform.x) || 0));
       const y = Math.max(-0.5, Math.min(0.5, Number(transform.y) || 0));
       image.style.width = `${40 * scale}%`;
