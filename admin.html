@@ -140,6 +140,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-scale-preview img{position:absolute;inset:10%;width:80%;height:80%;object-fit:contain;transform:scale(var(--asset-scale));transform-origin:center}
 .banner-scale-preview-circle{position:absolute;inset:10%;box-sizing:border-box;border:1px dashed var(--gold);border-radius:50%;pointer-events:none}
 .banner-component-properties{margin-top:12px}
+.banner-component-properties[hidden]{display:none}
 .banner-component-properties strong{font-family:var(--disp);font-size:20px;font-weight:500}
 .banner-component-coordinate-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .banner-component-selected{outline:2px solid var(--gold)!important;outline-offset:1px!important}
@@ -160,8 +161,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-editor-preview-toggle{display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--ink);font-size:13px}
 .banner-layer-canvas.preview-mode .banner-badge-guide{display:none}
 .banner-layer-canvas.preview-mode .banner-layer-item,.banner-layer-canvas.preview-mode .banner-stat-guide,.banner-layer-canvas.preview-mode .banner-stat-guide-value,.banner-layer-canvas.preview-mode .banner-player-text-guide{cursor:default}
-.banner-layer-canvas:not(.preview-mode) .banner-layer-item,.banner-layer-canvas:not(.preview-mode) .banner-player-text-guide,.banner-layer-canvas:not(.preview-mode) .banner-stat-guide,.banner-layer-canvas:not(.preview-mode) .banner-stat-guide-value,.banner-layer-canvas:not(.preview-mode) .banner-badge-guide{outline:1px dashed rgba(201,163,92,.85);outline-offset:0}
 .banner-component-position{position:absolute;z-index:1000;padding:2px 4px;background:rgba(0,0,0,.88);border:1px solid var(--gold);color:#fff;font:11px/1.2 "Courier New",monospace;white-space:nowrap;pointer-events:none;transform:translateY(-100%)}
+.banner-component-position:not(.banner-component-position-active){display:none}
 .banner-component-position:after{content:"";position:absolute;left:-1px;top:100%;width:5px;height:5px;background:var(--gold);border:1px solid #151418;transform:translate(-50%,-50%)}
 .banner-layer-canvas.preview-mode .banner-component-position{display:none}
 .banner-layer-assets{display:grid;gap:6px;margin-top:10px}
@@ -172,7 +173,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-layer-item{position:absolute;z-index:2;width:260px;height:260px;left:334px;top:510px;object-fit:contain;cursor:move;user-select:none}
 .banner-player-text-guide{position:absolute;z-index:100;color:#f2eee5;font:700 34px "Segoe UI",sans-serif;text-shadow:0 2px 3px #000;white-space:nowrap;cursor:move;user-select:none}
 .banner-player-value-guide{font-size:28px;color:var(--gold)}
-.banner-badge-guide{position:absolute;z-index:200;box-sizing:border-box;width:184px;height:184px;border:1px dashed rgba(201,163,92,.85);border-radius:0;pointer-events:auto;cursor:move}
+.banner-badge-guide{position:absolute;z-index:200;box-sizing:border-box;width:184px;height:184px;border:1px solid transparent;border-radius:0;pointer-events:auto;cursor:move}
 .banner-badge-guide:before{content:"";position:absolute;inset:0;border:1px solid rgba(201,163,92,.45);border-radius:50%;pointer-events:none}
 .banner-stat-guide{position:absolute;z-index:300;color:var(--primary);font:400 15px "Courier New",monospace;white-space:nowrap;cursor:move;user-select:none}
 .banner-stat-guide-value{position:absolute;z-index:301;color:var(--gold);font:400 64px "Segoe UI",sans-serif;cursor:move}
@@ -1259,6 +1260,9 @@ const MHLA = (() => {
       canvas.querySelectorAll('.banner-component-selected').forEach(element => element.classList.remove('banner-component-selected'));
       const selectedElement = [...canvas.children].find(element => element.dataset.componentKey === key);
       if (selectedElement) selectedElement.classList.add('banner-component-selected');
+      canvas.querySelectorAll('.banner-component-position').forEach(label => {
+        label.classList.toggle('banner-component-position-active', label.dataset.componentKey === key);
+      });
       renderComponentProperties();
     };
     const addCanvasComponent = (element, key, name, transform, scaleKey = key) => {
@@ -1298,12 +1302,39 @@ const MHLA = (() => {
       renderLayerButtons();
       renderCanvasAssets();
     };
-    const setActiveLayer = layer => {
-      activeLayer = layer;
+    const selectLayerComponent = layer => {
+      selectedComponent = null;
+      canvas.querySelectorAll('.banner-component-selected').forEach(element => element.classList.remove('banner-component-selected'));
+      canvas.querySelectorAll('.banner-component-position-active').forEach(element => element.classList.remove('banner-component-position-active'));
       if (layer.startsWith('custom:')) {
         const item = D.bannerLayers.find(entry => entry.id === layer.slice(7));
         if (item) selectComponent(layer, item.name || 'Card layer', layerTransform(item), layer);
+        else renderComponentProperties();
+        return;
       }
+      if (layer === 'badges') {
+        const transform = D.bannerDefaults.badgeTransforms[0];
+        selectComponent('badge-slot:0', 'Badge slot 1', transform);
+        return;
+      }
+      const [collectionKey, title] = categoryMap[layer];
+      const items = D[collectionKey] = Array.isArray(D[collectionKey]) ? D[collectionKey] : [];
+      const defaultKey = layer === 'background' ? 'background'
+        : layer === 'helmet' ? 'helmet'
+        : layer === 'torso' ? 'torso'
+        : layer === 'stick' ? 'stick'
+        : 'puck';
+      const selected = items.find(item => item.id === D.bannerDefaults[defaultKey] && item.image)
+        || items.find(item => item.image)
+        || items.find(item => item.id === D.bannerDefaults[defaultKey])
+        || items[0];
+      if (selected)
+        selectComponent(`sprite:${selected.id}`, selected.name || title, layerTransform(selected), `sprite:${selected.id}`);
+      else renderComponentProperties();
+    };
+    const setActiveLayer = layer => {
+      activeLayer = layer;
+      selectLayerComponent(layer);
       renderLayerButtons();
       renderAssets();
     };
@@ -1330,8 +1361,10 @@ const MHLA = (() => {
       let pointerOffsetX = 0;
       let pointerOffsetY = 0;
       const positionLabel = showEditorGuides
-        ? h('div', { class: 'banner-component-position', 'aria-hidden': 'true' })
+        ? h('div', { class: 'banner-component-position', 'data-component-key': key, 'aria-hidden': 'true' })
         : null;
+      if (positionLabel && selectedComponent && selectedComponent.key === key)
+        positionLabel.classList.add('banner-component-position-active');
       const updatePositionLabel = () => {
         if (!positionLabel) return;
         const x = Math.round(Number(transform.x) || 0);
@@ -1493,36 +1526,38 @@ const MHLA = (() => {
         }
       }
 
-      const playerName = h('div', { class: 'banner-player-text-guide' }, 'Player Name');
-      applyGuideTransform(playerName, D.bannerDefaults.playerNameTransform);
-      addCanvasComponent(playerName, 'player-name', 'Player name', D.bannerDefaults.playerNameTransform);
+      if (showEditorGuides) {
+        const playerName = h('div', { class: 'banner-player-text-guide' }, 'Player Name');
+        applyGuideTransform(playerName, D.bannerDefaults.playerNameTransform);
+        addCanvasComponent(playerName, 'player-name', 'Player name', D.bannerDefaults.playerNameTransform);
 
-      const playerValue = h('div', { class: 'banner-player-text-guide banner-player-value-guide' }, 'Player Value');
-      applyGuideTransform(playerValue, D.bannerDefaults.playerValueTransform);
-      addCanvasComponent(playerValue, 'player-value', 'Player value', D.bannerDefaults.playerValueTransform);
+        const playerValue = h('div', { class: 'banner-player-text-guide banner-player-value-guide' }, 'Player Value');
+        applyGuideTransform(playerValue, D.bannerDefaults.playerValueTransform);
+        addCanvasComponent(playerValue, 'player-value', 'Player value', D.bannerDefaults.playerValueTransform);
 
-      for (let index = 0; index < 3; index++) {
-        const badgeTransform = D.bannerDefaults.badgeTransforms[index];
-        if (showEditorGuides && !hiddenEditorLayers.has('badges')) {
-          const badgeGuide = h('div', {
-            class: 'banner-badge-guide',
-            title: `Badge slot ${index + 1}`,
-          });
-          badgeGuide.style.width = '184px';
-          badgeGuide.style.height = '184px';
-          applyGuideTransform(badgeGuide, badgeTransform);
-          addCanvasComponent(badgeGuide, `badge-slot:${index}`, `Badge slot ${index + 1}`, badgeTransform);
+        for (let index = 0; index < 3; index++) {
+          const badgeTransform = D.bannerDefaults.badgeTransforms[index];
+          if (!hiddenEditorLayers.has('badges')) {
+            const badgeGuide = h('div', {
+              class: 'banner-badge-guide',
+              title: `Badge slot ${index + 1}`,
+            });
+            badgeGuide.style.width = '184px';
+            badgeGuide.style.height = '184px';
+            applyGuideTransform(badgeGuide, badgeTransform);
+            addCanvasComponent(badgeGuide, `badge-slot:${index}`, `Badge slot ${index + 1}`, badgeTransform);
+          }
+
+          const statTransform = D.bannerDefaults.statTransforms[index];
+          const label = h('div', { class: 'banner-stat-guide' }, ['Goals', 'Assists', 'Saves'][index]);
+          applyGuideTransform(label, statTransform);
+          addCanvasComponent(label, `stat-label:${index}`, `${['Goals', 'Assists', 'Saves'][index]} label`, statTransform);
+
+          const value = h('div', { class: 'banner-stat-guide-value' }, '0');
+          const valueTransform = D.bannerDefaults.statValueTransforms[index];
+          applyGuideTransform(value, valueTransform);
+          addCanvasComponent(value, `stat-value:${index}`, `${['Goals', 'Assists', 'Saves'][index]} value`, valueTransform);
         }
-
-        const statTransform = D.bannerDefaults.statTransforms[index];
-        const label = h('div', { class: 'banner-stat-guide' }, ['Goals', 'Assists', 'Saves'][index]);
-        applyGuideTransform(label, statTransform);
-        addCanvasComponent(label, `stat-label:${index}`, `${['Goals', 'Assists', 'Saves'][index]} label`, statTransform);
-
-        const value = h('div', { class: 'banner-stat-guide-value' }, '0');
-        const valueTransform = D.bannerDefaults.statValueTransforms[index];
-        applyGuideTransform(value, valueTransform);
-        addCanvasComponent(value, `stat-value:${index}`, `${['Goals', 'Assists', 'Saves'][index]} value`, valueTransform);
       }
       renderComponentProperties();
     };
@@ -2104,7 +2139,7 @@ const MHLA = (() => {
       head('Player Banners', add),
       h('p', { class: 'help' }, 'Players can equip unlocked badges and banner sprites in the in-game player card. One global default can be set for each sprite type.'),
       h('h3', { style: 'margin-top:18px' }, 'Banner Layer Editor'),
-      h('p', { class: 'help' }, 'Uploaded sprite and card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. Dashed bounds show each component’s size; X/Y labels mark its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
+      h('p', { class: 'help' }, 'Uploaded sprite and card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. Only the selected component shows a box and X/Y coordinates at its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
       bannerLayerEditor(),
       h('div', { class: 'ed' }, field('Default Badge', defaultBadgeSelect,
         'Used in the first badge slot for every player until the player equips a badge.')),
