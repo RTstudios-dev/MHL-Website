@@ -196,6 +196,7 @@ const STATIC = {
   '/players': ['players.html', HTML],
   '/sign-up': ['sign-up.html', HTML],
   '/player-login': ['player-login.html', HTML],
+  '/player-banner': ['player-banner.html', HTML],
   '/season-2-players': ['season-2-players.html', HTML],
   '/news': ['news.html', HTML],
   '/rules': ['rules.html', HTML],
@@ -203,6 +204,7 @@ const STATIC = {
   '/site.css': ['site.css', 'text/css; charset=utf-8'],
   '/site.js': ['site.js', JS],
   '/standings.js': ['standings.js', JS],
+  '/player-banner.js': ['player-banner.js', JS],
   '/robots.txt': ['robots.txt', 'text/plain; charset=utf-8'],
   '/bg.webp': ['bg.webp', 'image/webp'],
 };
@@ -1941,6 +1943,17 @@ const server = http.createServer(async (req, res) => {
         if (!sprite || !sprite.image || !badgeIsUnlocked(data, signup, sprite))
           return send(res, 400, { error: 'One or more selected player-banner sprites are unavailable.' });
       }
+      if (changes.badgeSlots !== undefined) {
+        if (!Array.isArray(changes.badgeSlots) || changes.badgeSlots.length > 3)
+          return send(res, 400, { error: 'Choose up to three badge slots.' });
+        const unlockedBadgeIds = new Set(
+          badgeCollectionFor(data, signup).filter(badge => badge.unlocked).map(badge => badge.id));
+        const badgeSlots = changes.badgeSlots.map(value => str(value, 40));
+        if (badgeSlots.some(id => id && !unlockedBadgeIds.has(id)))
+          return send(res, 400, { error: 'One or more selected badges are unavailable.' });
+        while (badgeSlots.length < 3) badgeSlots.push('');
+        signup.badgeSlots = badgeSlots;
+      }
       const equippedStats = Array.isArray(changes.equippedStats)
         ? changes.equippedStats.slice(0, 20).map(value => str(value, 40)).filter(Boolean)
         : [];
@@ -1950,7 +1963,11 @@ const server = http.createServer(async (req, res) => {
         equippedStats,
       });
       writeData(data);
-      return send(res, 200, { ok: true, bannerConfig: signup.bannerConfig });
+      return send(res, 200, {
+        ok: true,
+        bannerConfig: signup.bannerConfig,
+        badgeSlots: equippedBadgeSlotsFor(data, signup),
+      });
     }
     if (p === '/api/player/card-artwork' && req.method === 'PUT') {
       const player = playerSession(req);

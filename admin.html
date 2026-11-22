@@ -171,12 +171,12 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-layer-asset.active{border-color:var(--gold)}
 .banner-layer-canvas{position:relative;width:863px;height:1214px;overflow:hidden;border:7px solid var(--line);background:#151418;touch-action:none}
 .banner-layer-item{position:absolute;z-index:2;width:260px;height:260px;left:334px;top:510px;object-fit:contain;cursor:move;user-select:none}
-.banner-player-text-guide{position:absolute;z-index:100;color:#f2eee5;font:700 34px "Segoe UI",sans-serif;text-shadow:0 2px 3px #000;white-space:nowrap;cursor:move;user-select:none}
+.banner-player-text-guide{position:absolute;z-index:100;color:#f2eee5;font:500 34px var(--disp);text-shadow:0 2px 3px #000;white-space:nowrap;cursor:move;user-select:none}
 .banner-player-value-guide{font-size:28px;color:var(--gold)}
 .banner-badge-guide{position:absolute;z-index:200;box-sizing:border-box;width:184px;height:184px;border:1px solid transparent;border-radius:0;pointer-events:auto;cursor:move}
 .banner-badge-guide:before{content:"";position:absolute;inset:0;border:1px solid rgba(201,163,92,.45);border-radius:50%;pointer-events:none}
-.banner-stat-guide{position:absolute;z-index:300;color:var(--primary);font:400 15px "Courier New",monospace;white-space:nowrap;cursor:move;user-select:none}
-.banner-stat-guide-value{position:absolute;z-index:301;color:var(--gold);font:400 64px "Segoe UI",sans-serif;cursor:move}
+.banner-stat-guide{position:absolute;z-index:300;color:var(--primary);font:500 15px var(--disp);white-space:nowrap;cursor:move;user-select:none}
+.banner-stat-guide-value{position:absolute;z-index:301;color:var(--gold);font:500 64px var(--disp);cursor:move}
 
 @media (max-width:820px){
   .teams-row{grid-template-columns:1fr 1fr}
@@ -2148,7 +2148,7 @@ const MHLA = (() => {
       h('p', { class: 'help' }, 'Uploaded sprite and card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. Only the selected component shows a box and X/Y coordinates at its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
       bannerLayerEditor(),
       h('div', { class: 'ed' }, field('Default Badge', defaultBadgeSelect,
-        'Used in the first badge slot for every player until the player equips a badge.')),
+        'Shown in slot 1 for every player until they equip a different badge in that slot.')),
       h('h3', { style: 'margin-top:18px' }, 'Badges'),
       cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.'),
       ...playerBannerSpriteSection('backgroundSprites', 'Background', 'background'),

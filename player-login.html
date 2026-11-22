@@ -14,7 +14,7 @@
 .player-login,.player-edit{max-width:680px}
 .player-edit-title{font-family:var(--disp);font-weight:500;font-size:34px;line-height:1.05;margin:44px 0 20px}
 .profile-summary{max-width:680px;background:var(--card);border-top:1px solid var(--rule);padding:24px;margin-bottom:28px}
-.profile-summary[hidden],.player-card-section[hidden],.player-edit[hidden],.player-login[hidden]{display:none}
+.profile-summary[hidden],.player-edit[hidden],.player-login[hidden]{display:none}
 .profile-identity img[hidden],.profile-avatar-fallback[hidden]{display:none}
 .profile-stats[hidden]{display:none}
 #steamStatus{max-width:680px;margin-bottom:16px;color:var(--muted)}
@@ -38,54 +38,15 @@
 .profile-banner-column{flex:1;min-width:0}
 .profile-banner-title{font-family:var(--disp);font-size:24px;font-weight:500;margin:0 0 10px}
 .profile-banner-header .profile-banner-title{display:none}
-.banner-edit-button{width:72px;height:38px;flex:none;margin-bottom:0}
-.player-card-section{max-width:680px;margin:0 0 28px}
-.player-card-section[hidden]{display:none}
+.banner-edit-button{display:inline-flex;align-items:center;justify-content:center;width:72px;height:38px;flex:none;margin-bottom:0}
 .player-banner-frame{position:relative;width:min(590px,100%);aspect-ratio:849/1200;margin:0;overflow:hidden;background:#151418}
 .player-banner-canvas{position:absolute;left:0;top:0;width:849px;height:1200px;overflow:hidden;transform:scale(.694935);transform-origin:top left;background:#151418;color:#ece6da}
 .player-banner-image{position:absolute;display:block;max-width:none;object-fit:contain;pointer-events:none}
 .player-banner-text{position:absolute;transform-origin:top left;white-space:nowrap;pointer-events:none}
-.player-banner-name{color:#f2eee5;font:700 34px "Segoe UI",sans-serif;text-shadow:0 2px 3px #000}
-.player-banner-value{color:#c9a35c;font:700 28px "Segoe UI",sans-serif;text-shadow:0 2px 3px #000}
-.player-banner-stat-label{color:var(--primary);font:400 15px "Courier New",monospace}
-.player-banner-stat-value{color:#c9a35c;font:400 64px "Segoe UI",sans-serif}
-.banner-editor{width:min(100%,680px);margin:18px auto 0;padding:18px;border:1px solid var(--line);background:var(--card)}
-.banner-editor h3{font-family:var(--disp);font-size:24px;font-weight:500;margin:0 0 12px}
-.banner-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.banner-editor label{display:grid;gap:6px;color:var(--ink);font-size:13px}
-.banner-editor select{font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--line);padding:9px 10px;min-height:42px}
-.banner-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;margin-top:12px}
-.banner-stats label{display:flex;align-items:center;gap:8px;color:var(--muted)}
-.banner-edit-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-bottom:1px solid var(--line);margin-bottom:18px}
-.banner-edit-tab{min-height:42px;border:0;border-right:1px solid var(--line);background:var(--card);color:var(--muted);font:600 12px var(--body);letter-spacing:.08em;cursor:pointer}
-.banner-edit-tab:last-child{border-right:0}
-.banner-edit-tab.active{background:var(--gold);color:#111013}
-.banner-edit-panel{min-height:520px}
-.banner-edit-panel[hidden]{display:none}
-.banner-edit-panel h2{font-family:var(--disp);font-size:30px;font-weight:500;margin:0 0 6px}
-.banner-panel-help{color:var(--muted);margin:0 0 14px}
-.badge-slot-tabs{display:flex;gap:6px;margin-bottom:12px}
-.badge-slot-tab{min-height:36px;padding:0 12px;border:1px solid var(--line);background:var(--card);color:var(--muted);font:600 12px var(--body);cursor:pointer}
-.badge-slot-tab.active{border-color:var(--gold);color:var(--gold)}
-.sprite-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;max-height:500px;overflow:auto;padding-right:4px}
-.sprite-choice{display:grid;grid-template-columns:64px minmax(0,1fr);align-items:center;gap:10px;min-height:76px;padding:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font:600 13px var(--body);cursor:pointer}
-.sprite-choice.active{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
-.sprite-choice img{width:64px;height:64px;object-fit:contain;background:#111013}
-.sprite-choice-none{min-height:48px}
-.banner-editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
-.banner-editor-status{min-height:1.4em;margin:8px 0 0;text-align:right;color:var(--muted)}
-.profile-badge-collection{max-width:680px;margin:0 0 32px}
-.profile-badge-collection[hidden]{display:none}
-.profile-badge-collection h2{font-family:var(--disp);font-size:30px;font-weight:500;margin-bottom:6px}
-.profile-badge-collection>p{color:var(--muted);margin-bottom:16px}
-.profile-badge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.profile-badge-card{min-width:0;padding:14px;border:1px solid var(--line);background:var(--card)}
-.profile-badge-card img{width:76px;height:76px;object-fit:cover;border-radius:50%;border:1px solid var(--rule);margin-bottom:10px}
-.profile-badge-card.locked img{filter:grayscale(1);opacity:.38}
-.profile-badge-card strong{display:block;font-size:14px}
-.profile-badge-card small{display:block;margin-top:4px;color:var(--muted)}
-.profile-badge-card .badge-state{margin-top:8px;color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
-.profile-badge-card.locked .badge-state{color:var(--muted)}
+.player-banner-name{color:#f2eee5;font:500 34px var(--disp);text-shadow:0 2px 3px #000}
+.player-banner-value{color:#c9a35c;font:500 28px var(--disp);text-shadow:0 2px 3px #000}
+.player-banner-stat-label{color:var(--primary);font:500 15px var(--disp)}
+.player-banner-stat-value{color:#c9a35c;font:500 64px var(--disp)}
 .player-profile-status{margin-top:14px;min-height:1.5em}
 .player-profile-status.error{color:#e08474}
 .player-edit label{display:grid;gap:6px;color:var(--ink);font-weight:500}
@@ -100,7 +61,6 @@
 @media(max-width:560px){
   .profile-banner-header{align-items:flex-start}
   .banner-edit-button{width:64px}
-  .banner-edit-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
   .profile-identity{gap:12px}
   .profile-identity img,.profile-avatar-fallback{width:72px;height:72px}
   .profile-identity h2{font-size:26px}
@@ -128,7 +88,7 @@
         <div class="player-banner-canvas" id="playerBannerCanvas"></div>
       </div>
     </div>
-    <button class="btn banner-edit-button" id="openBannerEditor" type="button">Edit</button>
+    <a class="btn banner-edit-button" id="openBannerEditor" href="/player-banner">Edit</a>
   </div>
   <div class="profile-overview">
     <div class="profile-identity">
@@ -173,50 +133,6 @@
     <div><span>Games With 30+ Saves</span><strong id="trackedGamesWith30Saves">0</strong></div>
   </div>
   <p class="player-profile-status" id="statsStatus" role="status" aria-live="polite"></p>
-</section>
-<section class="player-card-section" id="playerCardSection" hidden aria-label="Player banner editor">
-  <div class="banner-edit-tabs" role="tablist" aria-label="Player banner editor sections">
-    <button type="button" class="banner-edit-tab active" data-banner-tab="badges" role="tab">Badges</button>
-    <button type="button" class="banner-edit-tab" data-banner-tab="helmet" role="tab">Helmets</button>
-    <button type="button" class="banner-edit-tab" data-banner-tab="torso" role="tab">Torso</button>
-    <button type="button" class="banner-edit-tab" data-banner-tab="stick" role="tab">Stick</button>
-    <button type="button" class="banner-edit-tab" data-banner-tab="puck" role="tab">Puck</button>
-    <button type="button" class="banner-edit-tab" data-banner-tab="stats" role="tab">Stats</button>
-  </div>
-
-  <div class="banner-edit-panel active" data-banner-panel="badges">
-    <h2>Collectible Badges</h2>
-    <p class="banner-panel-help">Equip unlocked badges. Their positions and sizes come from the admin card editor.</p>
-    <div class="badge-slot-tabs" id="badgeSlotTabs">
-      <button type="button" class="badge-slot-tab active" data-badge-slot="0">Badge 1</button>
-      <button type="button" class="badge-slot-tab" data-badge-slot="1">Badge 2</button>
-      <button type="button" class="badge-slot-tab" data-badge-slot="2">Badge 3</button>
-    </div>
-    <div class="sprite-picker" id="badgePickerPanel"></div>
-  </div>
-
-  <div class="banner-edit-panel" data-banner-panel="sprite" hidden>
-    <h2 id="bannerSpritePanelTitle">Helmet</h2>
-    <p class="banner-panel-help">Choose a sprite. Its position and scale come from the admin card editor.</p>
-    <div class="sprite-picker" id="spritePickerPanel"></div>
-  </div>
-
-  <div class="banner-edit-panel" data-banner-panel="stats" hidden>
-    <h2>Stats</h2>
-    <p class="banner-panel-help">Choose up to three tracked stats. Their positions and sizes come from the admin card editor.</p>
-    <div class="banner-stats" id="bannerStats"></div>
-  </div>
-
-  <div class="banner-editor-actions">
-    <button class="btn line" id="closeBannerEditor" type="button">Close</button>
-    <button class="btn" id="saveBannerConfig" type="button">Save Banner</button>
-  </div>
-  <p class="banner-editor-status" id="bannerEditorStatus" role="status" aria-live="polite"></p>
-</section>
-<section class="profile-badge-collection" id="badgeCollection" hidden aria-label="Collectible badges">
-  <h2>Collectible Badges</h2>
-  <p>Unlocked badges can be equipped in one of the three slots on your in-game player card.</p>
-  <div class="profile-badge-grid" id="badgeCollectionGrid"></div>
 </section>
 <section class="player-login" id="loginPanel" aria-label="Steam account">
   <div class="ed">
@@ -269,6 +185,7 @@
 <div class="more" id="more" hidden></div>
 <script src="/standings.js"></script>
 <script src="/site.js"></script>
+<script src="/player-banner.js"></script>
 <script>
 (() => {
   const form = document.getElementById('edit');
@@ -277,13 +194,8 @@
   const login = document.getElementById('steamLogin');
   const logout = document.getElementById('steamLogout');
   const profileSummary = document.getElementById('profileSummary');
-  const playerCardSection = document.getElementById('playerCardSection');
-  const badgeCollection = document.getElementById('badgeCollection');
-  const badgeCollectionGrid = document.getElementById('badgeCollectionGrid');
   const playerBannerView = document.getElementById('playerBannerView');
   const playerBannerCanvas = document.getElementById('playerBannerCanvas');
-  const openBannerEditor = document.getElementById('openBannerEditor');
-  const closeBannerEditor = document.getElementById('closeBannerEditor');
   const profileAvatar = document.getElementById('profileAvatar');
   const profileAvatarFallback = document.getElementById('profileAvatarFallback');
   const profileDiscord = document.getElementById('profileDiscord');
@@ -318,13 +230,6 @@
     savesPerGame: document.getElementById('trackedSavesPerGame'),
     averageSavePercentage: document.getElementById('trackedAverageSavePercentage'),
   };
-  const bannerStats = document.getElementById('bannerStats');
-  const saveBannerConfig = document.getElementById('saveBannerConfig');
-  const bannerEditorStatus = document.getElementById('bannerEditorStatus');
-  const badgePickerPanel = document.getElementById('badgePickerPanel');
-  const badgeSlotTabs = document.getElementById('badgeSlotTabs');
-  const spritePickerPanel = document.getElementById('spritePickerPanel');
-  const bannerSpritePanelTitle = document.getElementById('bannerSpritePanelTitle');
   const statsStatus = document.getElementById('statsStatus');
   const signupLink = document.getElementById('signupLink');
   const editTitle = document.getElementById('editTitle');
@@ -335,407 +240,20 @@
   let currentPhoto = '';
   let currentSession = null;
   let currentSignup = null;
-  let currentBannerTab = 'badges';
-  let currentSpriteCategory = 'helmet';
-  let currentBadgeSlot = 0;
   if ('ResizeObserver' in window)
     new ResizeObserver(fitPlayerBanner).observe(playerBannerView);
   window.addEventListener('resize', fitPlayerBanner);
 
-  function badgeRequirementsText(badge) {
-    const requirements = badge.requirements || {};
-    return [
-      Number(requirements.goals) > 0 ? `${requirements.goals} goals` : '',
-      Number(requirements.assists) > 0 ? `${requirements.assists} assists` : '',
-      Number(requirements.saves) > 0 ? `${requirements.saves} saves` : '',
-      Number(requirements.gamesScoredIn) > 0 ? `${requirements.gamesScoredIn} games with a goal` : '',
-      Number(requirements.gamesWith3Goals) > 0 ? `${requirements.gamesWith3Goals} games with 3+ goals` : '',
-      Number(requirements.gamesWith5Goals) > 0 ? `${requirements.gamesWith5Goals} games with 5+ goals` : '',
-      Number(requirements.gamesWith10Goals) > 0 ? `${requirements.gamesWith10Goals} games with 10+ goals` : '',
-      Number(requirements.gamesWith100PercentSavePercentage) > 0
-        ? `${requirements.gamesWith100PercentSavePercentage} games with 100% save percentage`
-        : '',
-      Number(requirements.gamesWith10Saves) > 0 ? `${requirements.gamesWith10Saves} games with 10+ saves` : '',
-      Number(requirements.gamesWith20Saves) > 0 ? `${requirements.gamesWith20Saves} games with 20+ saves` : '',
-      Number(requirements.gamesWith30Saves) > 0 ? `${requirements.gamesWith30Saves} games with 30+ saves` : '',
-      Number(requirements.points) > 0 ? `${requirements.points} points` : '',
-    ].filter(Boolean).join(' · ');
-  }
-
-  function renderBadgeCollection() {
-    const badges = Array.isArray(currentSignup && currentSignup.badges) ? currentSignup.badges : [];
-    badgeCollection.hidden = !currentSignup;
-    badgeCollectionGrid.replaceChildren();
-    if (!currentSignup) return;
-    if (!badges.length) {
-      const message = document.createElement('p');
-      message.className = 'profile-badge-message';
-      message.textContent = 'No collectible badges have been added yet.';
-      badgeCollectionGrid.append(message);
-      return;
-    }
-    badges.forEach(badge => {
-      const card = document.createElement('article');
-      card.className = `profile-badge-card${badge.unlocked ? '' : ' locked'}`;
-      const image = document.createElement('img');
-      image.src = badge.image;
-      image.alt = badge.name;
-      const name = document.createElement('strong');
-      name.textContent = badge.name;
-      const description = document.createElement('small');
-      description.textContent = badge.description || badgeRequirementsText(badge) || 'A collectible MHL badge.';
-      const state = document.createElement('div');
-      state.className = 'badge-state';
-      state.textContent = badge.unlocked ? 'Unlocked' : 'Locked';
-      card.append(image, name, description, state);
-      badgeCollectionGrid.append(card);
-    });
-  }
-
-  async function saveBadgeSlot(slot, badgeId) {
-    const slots = Array.isArray(currentSignup.badgeSlots) ? [...currentSignup.badgeSlots] : ['', '', ''];
-    slots[slot] = badgeId;
-    badgePickerPanel.querySelectorAll('button').forEach(button => { button.disabled = true; });
-    try {
-      const response = await fetch('/api/player/badges', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ badgeSlots: slots }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Could not update your badges.');
-      currentSignup.badgeSlots = result.badgeSlots;
-      renderPlayerBanner(currentSignup);
-      renderBadgePicker();
-      bannerEditorStatus.textContent = '';
-    } catch (error) {
-      bannerEditorStatus.textContent = error.message || 'Could not update your badges.';
-      badgePickerPanel.querySelectorAll('button').forEach(button => { button.disabled = false; });
-    }
-  }
-
-  function ensureBannerConfig(signup) {
-    const config = signup.bannerConfig && typeof signup.bannerConfig === 'object'
-      ? signup.bannerConfig : {};
-    if (!Array.isArray(config.equippedStats) || !config.equippedStats.length)
-      config.equippedStats = ['Goals', 'Assists', 'Saves'];
-    else config.equippedStats = [...new Set(config.equippedStats)].slice(0, 3);
-    signup.bannerConfig = config;
-    return config;
-  }
-
-  function categoryItems(category) {
-    if (category === 'helmet') return currentSignup.helmetSprites || [];
-    if (category === 'torso') return currentSignup.torsoSprites || [];
-    if (category === 'stick') return currentSignup.stickSprites || [];
-    if (category === 'puck') return currentSignup.puckSprites || [];
-    return [];
-  }
-
-  function categoryField(category) {
-    return `${category}SpriteId`;
-  }
-
-  function renderBadgePicker() {
-    if (!currentSignup) return;
-    const slots = Array.isArray(currentSignup.badgeSlots) ? currentSignup.badgeSlots : [];
-    const badges = Array.isArray(currentSignup.badges) ? currentSignup.badges : [];
-    badgePickerPanel.replaceChildren();
-    const addChoice = (label, image, active, onClick) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = `sprite-choice${active ? ' active' : ''}${image ? '' : ' sprite-choice-none'}`;
-      if (image) {
-        const thumb = document.createElement('img');
-        thumb.src = image;
-        thumb.alt = '';
-        button.append(thumb);
-      }
-      const text = document.createElement('span');
-      text.textContent = label;
-      button.append(text);
-      button.addEventListener('click', onClick);
-      badgePickerPanel.append(button);
-    };
-    addChoice(currentBadgeSlot === 0 ? 'Use default badge' : 'Remove badge', '', !slots[currentBadgeSlot],
-      () => saveBadgeSlot(currentBadgeSlot, ''));
-    badges.filter(item => item.unlocked).forEach(item => {
-      addChoice(item.name, item.image, slots[currentBadgeSlot] === item.id,
-        () => saveBadgeSlot(currentBadgeSlot, item.id));
-    });
-  }
-
-  function renderSpritePicker(category) {
-    currentSpriteCategory = category;
-    const config = ensureBannerConfig(currentSignup);
-    const field = categoryField(category);
-    const items = categoryItems(category);
-    const selectedId = config[field] || '';
-    spritePickerPanel.replaceChildren();
-    const addChoice = (label, image, active, id) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = `sprite-choice${active ? ' active' : ''}${image ? '' : ' sprite-choice-none'}`;
-      if (image) {
-        const thumb = document.createElement('img');
-        thumb.src = image;
-        thumb.alt = '';
-        button.append(thumb);
-      }
-      const text = document.createElement('span');
-      text.textContent = label;
-      button.append(text);
-      button.addEventListener('click', () => {
-        config[field] = id;
-        renderPlayerBanner(currentSignup);
-        renderSpritePicker(category);
-      });
-      spritePickerPanel.append(button);
-    };
-    addChoice('Use default', '', !selectedId, '');
-    items.filter(item => item.image).forEach(item => {
-      addChoice(item.name || 'Sprite', item.image, selectedId === item.id, item.id);
-    });
-  }
-
-  function renderBannerEditor(signup) {
-    if (!signup) {
-      playerCardSection.hidden = true;
-      return;
-    }
-    const config = ensureBannerConfig(signup);
-    const stats = [
-      'Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
-      'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
-      '3-Goal Games', '5-Goal Games', '10-Goal Games',
-      '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
-      'Skater Value', 'Goalie Value',
-    ];
-    const equipped = new Set(config.equippedStats);
-    bannerStats.replaceChildren(...stats.map(stat => {
-      const label = document.createElement('label');
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.value = stat;
-      checkbox.checked = equipped.has(stat);
-      checkbox.addEventListener('change', () => {
-        const checked = [...bannerStats.querySelectorAll('input:checked')];
-        if (checked.length > 3) {
-          checkbox.checked = false;
-          bannerEditorStatus.textContent = 'Choose up to three stats for the banner.';
-          return;
-        }
-        if (!checked.length) {
-          checkbox.checked = true;
-          bannerEditorStatus.textContent = 'Choose at least one stat for the banner.';
-          return;
-        }
-        config.equippedStats = checked.map(input => input.value);
-        bannerEditorStatus.textContent = '';
-        renderPlayerBanner(signup);
-      });
-      label.append(checkbox, document.createTextNode(stat));
-      return label;
-    }));
-    renderBadgePicker();
-  }
-
   function renderPlayerBanner(signup) {
-    playerBannerCanvas.replaceChildren();
-    if (!signup) return;
-    const config = ensureBannerConfig(signup);
-    const defaults = signup.bannerDefaults || {};
-    const clampScale = value => Math.max(0.1, Math.min(5, Number(value) || 1));
-    const transformAt = (values, index, fallback) => {
-      const transform = Array.isArray(values) && values[index] && typeof values[index] === 'object'
-        ? values[index] : fallback;
-      return {
-        x: Number.isFinite(Number(transform.x)) ? Number(transform.x) : fallback.x,
-        y: Number.isFinite(Number(transform.y)) ? Number(transform.y) : fallback.y,
-        scale: clampScale(transform.scale),
-      };
-    };
-    const applyPosition = (element, transform) => {
-      element.style.left = `${transform.x}px`;
-      element.style.top = `${transform.y}px`;
-      element.style.transform = `scale(${transform.scale})`;
-      element.style.transformOrigin = 'top left';
-    };
-    const addImage = (item, key, zIndex) => {
-      if (!item || !item.image) return;
-      const transform = item.transform && typeof item.transform === 'object'
-        ? item.transform : {};
-      const scale = clampScale(transform.scale);
-      const image = document.createElement('img');
-      image.className = 'player-banner-image';
-      image.src = item.image;
-      image.alt = '';
-      image.setAttribute('aria-hidden', 'true');
-      image.dataset.layerKey = key;
-      image.style.zIndex = String(zIndex);
-      image.style.left = `${Number(transform.x) || 0}px`;
-      image.style.top = `${Number(transform.y) || 0}px`;
-      const setDimensions = () => {
-        image.style.width = `${(Number(item.naturalWidth) || image.naturalWidth || 260) * scale}px`;
-        image.style.height = `${(Number(item.naturalHeight) || image.naturalHeight || 260) * scale}px`;
-      };
-      image.addEventListener('load', setDimensions);
-      setDimensions();
-      playerBannerCanvas.append(image);
-    };
-    const collections = {
-      background: { items: signup.backgroundSprites || [], configKey: 'backgroundSpriteId' },
-      helmet: { items: signup.helmetSprites || [], configKey: 'helmetSpriteId' },
-      torso: { items: signup.torsoSprites || [], configKey: 'torsoSpriteId' },
-      stick: { items: signup.stickSprites || [], configKey: 'stickSpriteId' },
-      puck: { items: signup.puckSprites || [], configKey: 'puckSpriteId' },
-    };
-    const customLayers = Array.isArray(signup.bannerLayers) ? signup.bannerLayers : [];
-    const defaultOrder = ['badges', 'stick', 'torso', 'puck', 'helmet', 'background'];
-    const validKeys = new Set([...Object.keys(collections), 'badges', ...customLayers.map(layer => `custom:${layer.id}`)]);
-    const layerOrder = Array.isArray(defaults.layerOrder)
-      ? defaults.layerOrder.filter((key, index, order) => validKeys.has(key) && order.indexOf(key) === index)
-      : [];
-    defaultOrder.forEach(key => { if (!layerOrder.includes(key)) layerOrder.push(key); });
-    customLayers.forEach(layer => {
-      const key = `custom:${layer.id}`;
-      if (!layerOrder.includes(key)) layerOrder.unshift(key);
-    });
-    layerOrder.forEach((key, index) => {
-      const zIndex = 10 + layerOrder.length - index;
-      if (key.startsWith('custom:')) {
-        const layer = customLayers.find(item => item.id === key.slice(7));
-        addImage(layer, key, zIndex);
-        return;
-      }
-      const collection = collections[key];
-      if (!collection) return;
-      const items = collection.items;
-      const selectedId = config[collection.configKey];
-      const item = items.find(entry => entry.id === selectedId && entry.image)
-        || items.find(entry => entry.id === defaults[key] && entry.image)
-        || items.find(entry => entry.image);
-      addImage(item, `sprite:${item && item.id || key}`, zIndex);
-    });
-
-    const badges = Array.isArray(signup.badges) ? signup.badges : [];
-    const badgeSlots = Array.isArray(signup.badgeSlots) ? signup.badgeSlots : [];
-    const defaultBadge = badges.find(item => item.id === defaults.badge && item.image);
-    for (let index = 0; index < 3; index++) {
-      const equipped = badges.find(item => item.id === badgeSlots[index] && item.unlocked && item.image);
-      const badge = equipped || (index === 0 ? defaultBadge : null);
-      if (!badge) continue;
-      const transform = transformAt(defaults.badgeTransforms, index, { x: [50, 332, 614][index], y: 180, scale: 1 });
-      const scale = clampScale((Number(badge.scale) || 1) * transform.scale);
-      const image = document.createElement('img');
-      image.className = 'player-banner-image';
-      image.src = badge.image;
-      image.alt = '';
-      image.setAttribute('aria-hidden', 'true');
-      image.dataset.layerKey = `badge-slot:${index}`;
-      image.style.zIndex = '200';
-      image.style.left = `${transform.x}px`;
-      image.style.top = `${transform.y}px`;
-      image.style.width = `${184 * scale}px`;
-      image.style.height = `${184 * scale}px`;
-      playerBannerCanvas.append(image);
-    }
-
-    const addText = (text, className, transform, zIndex) => {
-      if (!text) return;
-      const element = document.createElement('div');
-      element.className = `player-banner-text ${className}`;
-      element.textContent = text;
-      element.style.zIndex = String(zIndex);
-      applyPosition(element, transform);
-      playerBannerCanvas.append(element);
-    };
-    addText(signup.name || 'Player', 'player-banner-name',
-      transformAt([defaults.playerNameTransform], 0, { x: 50, y: 45, scale: 1 }), 100);
-    const value = Number(signup.value) || 0;
-    addText(value > 0 ? `€${value.toLocaleString('en-US')}` : '—', 'player-banner-value',
-      transformAt([defaults.playerValueTransform], 0, { x: 50, y: 120, scale: 1 }), 100);
-
-    const stats = signup.trackedStats || {};
-    const statValue = stat => {
-      const values = {
-        Goals: stats.goals, Assists: stats.assists, Saves: stats.saves,
-        Wins: stats.wins, Losses: stats.losses, 'Stick Saves': stats.stickSaves,
-        'Body Saves': stats.bodySaves, Passes: stats.passes, 'Games Played': stats.gamesPlayed,
-        'Games Scored In': stats.gamesScoredIn, '3-Goal Games': stats.gamesWith3Goals,
-        '5-Goal Games': stats.gamesWith5Goals, '10-Goal Games': stats.gamesWith10Goals,
-        '100% Save Percentage Games': stats.gamesWith100PercentSavePercentage,
-        '10-Save Games': stats.gamesWith10Saves, '20-Save Games': stats.gamesWith20Saves,
-        '30-Save Games': stats.gamesWith30Saves,
-      };
-      if (Object.prototype.hasOwnProperty.call(values, stat)) return String(Number(values[stat]) || 0);
-      if (stat === 'Skater Value' || stat === 'Goalie Value') {
-        const amount = Number(stat === 'Goalie Value' ? signup.goalieValue : signup.skaterValue) || 0;
-        return String(amount);
-      }
-      if (stat === 'Save Percentage') {
-        const games = Number(stats.savePercentageGames) || 0;
-        const basis = Number(stats.savePercentageTotalBasisPoints) || 0;
-        return games ? (basis / games / 100).toFixed(1) : '0.0';
-      }
-      return '0';
-    };
-    config.equippedStats.slice(0, 3).forEach((stat, index) => {
-      const labelTransform = transformAt(defaults.statTransforms, index, { x: 50, y: [760, 900, 1040][index], scale: 1 });
-      const valueTransform = transformAt(defaults.statValueTransforms, index, { x: 50, y: [803, 943, 1083][index], scale: 1 });
-      addText(stat, 'player-banner-stat-label', labelTransform, 300);
-      addText(statValue(stat), 'player-banner-stat-value', valueTransform, 301);
-    });
-    fitPlayerBanner();
-  }
-
-  function renderBannerEditor(signup) {
-    if (!signup) {
-      playerCardSection.hidden = true;
-      return;
-    }
-    playerCardSection.hidden = false;
-    const config = ensureBannerConfig(signup);
-    const stats = [
-      'Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
-      'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
-      '3-Goal Games', '5-Goal Games', '10-Goal Games',
-      '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
-      'Skater Value', 'Goalie Value',
-    ];
-    const equipped = new Set(config.equippedStats);
-    bannerStats.replaceChildren(...stats.map(stat => {
-      const label = document.createElement('label');
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.value = stat;
-      checkbox.checked = equipped.has(stat);
-      checkbox.addEventListener('change', () => {
-        const checked = [...bannerStats.querySelectorAll('input:checked')];
-        if (checked.length > 3) {
-          checkbox.checked = false;
-          bannerEditorStatus.textContent = 'Choose up to three stats for the banner.';
-          return;
-        }
-        config.equippedStats = checked.map(input => input.value);
-        bannerEditorStatus.textContent = '';
-        renderPlayerBanner(signup);
-      });
-      label.append(checkbox, document.createTextNode(stat));
-      return label;
-    }));
-    renderBadgePicker();
+    window.MHLPlayerBanner.render(playerBannerView, playerBannerCanvas, signup);
   }
 
   function fitPlayerBanner() {
-    const width = playerBannerView.clientWidth || 590;
-    playerBannerCanvas.style.transform = `scale(${width / 849})`;
+    window.MHLPlayerBanner.fit(playerBannerView, playerBannerCanvas);
   }
 
   function renderPlayerCard(signup) {
-    playerCardSection.hidden = !signup;
     renderPlayerBanner(signup);
-    renderBannerEditor(signup);
   }
 
   function showProfile(signup, session) {
@@ -756,8 +274,6 @@
       profileAvatarFallback.hidden = false;
     }
     renderPlayerCard(signup);
-    renderBadgeCollection();
-    renderBannerEditor(signup);
     profileSummary.hidden = false;
     fitPlayerBanner();
     requestAnimationFrame(fitPlayerBanner);
@@ -807,72 +323,6 @@
     profileTrackedStats.hidden = false;
   }
 
-  openBannerEditor.addEventListener('click', () => {
-    if (!currentSignup) return;
-    playerCardSection.hidden = false;
-    playerCardSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  closeBannerEditor.addEventListener('click', () => {
-    playerCardSection.hidden = true;
-  });
-  document.querySelectorAll('[data-banner-tab]').forEach(tab => {
-    tab.addEventListener('click', () => {
-      currentBannerTab = tab.dataset.bannerTab;
-      document.querySelectorAll('[data-banner-tab]').forEach(item =>
-        item.classList.toggle('active', item === tab));
-      document.querySelectorAll('[data-banner-panel]').forEach(panel => {
-        const isActive = currentBannerTab === 'stats'
-          ? panel.dataset.bannerPanel === 'stats'
-          : currentBannerTab === 'badges'
-            ? panel.dataset.bannerPanel === 'badges'
-            : panel.dataset.bannerPanel === 'sprite';
-        panel.hidden = !isActive;
-        panel.classList.toggle('active', isActive);
-      });
-      if (!['badges', 'stats'].includes(currentBannerTab)) {
-        currentSpriteCategory = currentBannerTab;
-        const title = currentBannerTab.charAt(0).toUpperCase() + currentBannerTab.slice(1);
-        bannerSpritePanelTitle.textContent = title;
-        renderSpritePicker(currentBannerTab);
-      }
-      if (currentBannerTab === 'badges') renderBadgePicker();
-    });
-  });
-  badgeSlotTabs.addEventListener('click', event => {
-    const tab = event.target.closest('[data-badge-slot]');
-    if (!tab) return;
-    currentBadgeSlot = Number(tab.dataset.badgeSlot);
-    badgeSlotTabs.querySelectorAll('[data-badge-slot]').forEach(item =>
-      item.classList.toggle('active', item === tab));
-    renderBadgePicker();
-  });
-  saveBannerConfig.addEventListener('click', async () => {
-    if (!currentSignup) return;
-    saveBannerConfig.disabled = true;
-    bannerEditorStatus.textContent = 'Saving banner...';
-    bannerEditorStatus.className = 'banner-editor-status';
-    try {
-      const config = ensureBannerConfig(currentSignup);
-      config.equippedStats = [...bannerStats.querySelectorAll('input:checked')]
-        .map(input => input.value);
-      const response = await fetch('/api/player/banner-config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Could not save your banner.');
-      currentSignup.bannerConfig = result.bannerConfig;
-      renderPlayerCard(currentSignup);
-      bannerEditorStatus.textContent = 'Banner saved.';
-      bannerEditorStatus.className = 'banner-editor-status';
-    } catch (error) {
-      bannerEditorStatus.textContent = error.message || 'Could not save your banner.';
-      bannerEditorStatus.className = 'banner-editor-status';
-    } finally {
-      saveBannerConfig.disabled = false;
-    }
-  });
   async function loadSignup() {
     try {
       const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
@@ -882,8 +332,6 @@
         form.hidden = true;
         editTitle.hidden = true;
         profileSummary.hidden = true;
-        playerCardSection.hidden = true;
-        badgeCollection.hidden = true;
         loginPanel.hidden = false;
         login.hidden = false;
         signupLink.hidden = true;
@@ -903,8 +351,6 @@
         editTitle.hidden = false;
         signupLink.hidden = false;
         profileStats.hidden = true;
-        playerCardSection.hidden = true;
-        badgeCollection.hidden = true;
         statsStatus.textContent = 'Complete your signup to add your Discord name and player stats here.';
         steamStatus.textContent = result.error || 'No signup was found for this Steam profile.';
         return;
