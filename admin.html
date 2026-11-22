@@ -1414,9 +1414,15 @@ const MHLA = (() => {
       });
     };
 
+    const normalizedLayerTransformItems = new WeakSet();
     const layerTransform = item => {
+      if (normalizedLayerTransformItems.has(item)) return item.transform;
       const fallback = { x: 334, y: 510, scale: 1 };
-      item.transform = normalizeTransform(item.transform, fallback, previousCanvasVersion < 2);
+      const transform = normalizeTransform(item.transform, fallback, previousCanvasVersion < 2);
+      if (item.transform && typeof item.transform === 'object')
+        Object.assign(item.transform, transform);
+      else item.transform = transform;
+      normalizedLayerTransformItems.add(item);
       return item.transform;
     };
     const renderLayerImage = (item, zIndex) => {

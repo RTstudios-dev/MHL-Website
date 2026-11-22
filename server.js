@@ -1874,6 +1874,7 @@ const server = http.createServer(async (req, res) => {
           stickSprites: (data.stickSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
           puckSprites: (data.puckSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
           bannerDefaults: data.bannerDefaults || {},
+          bannerLayers: data.bannerLayers || [],
           ...values,
         },
       });
