@@ -23,8 +23,8 @@
 .player-banner-value{color:#c9a35c;font:500 28px var(--disp);text-shadow:0 2px 3px #000}
 .player-banner-stat-label{color:var(--primary);font:500 15px var(--disp)}
 .player-banner-stat-value{color:#c9a35c;font:500 64px var(--disp)}
-.player-banner-target{z-index:500!important;cursor:pointer!important;pointer-events:auto!important;transition:transform .16s ease,filter .16s ease}
-.player-banner-target:hover,.player-banner-target:focus-visible{z-index:600!important;transform:scale(1.055);filter:drop-shadow(0 0 12px #e0bf80)}
+.player-banner-target{z-index:500!important;cursor:pointer!important;pointer-events:auto!important;transition:transform .16s ease}
+.player-banner-target:hover,.player-banner-target:focus-visible{z-index:600!important;transform:scale(1.055)}
 .player-banner-badge-target{position:absolute;display:block;padding:0;border:0;background:transparent;pointer-events:none}
 .player-banner-badge-target.player-banner-target{border:2px dashed #e0bf80;background:#c9a35c22}
 .player-banner-badge-target.player-banner-target:hover{background:#c9a35c55}
@@ -102,7 +102,7 @@
         <div class="player-banner-canvas" id="bannerCanvas"></div>
       </div>
       <div class="swap-notice" id="swapNotice" hidden>
-        <span>Choose the highlighted component to replace it.</span>
+        <span id="swapNoticeText">Choose the highlighted component to replace it.</span>
         <button type="button" id="cancelTarget">Cancel</button>
       </div>
     </div>
@@ -143,6 +143,7 @@
   const bannerViewport = document.getElementById('bannerViewport');
   const bannerCanvas = document.getElementById('bannerCanvas');
   const swapNotice = document.getElementById('swapNotice');
+  const swapNoticeText = document.getElementById('swapNoticeText');
   const swapBackdrop = document.getElementById('swapBackdrop');
   const inventoryTitle = document.getElementById('inventoryTitle');
   const inventoryHelp = document.getElementById('inventoryHelp');
@@ -194,6 +195,11 @@
   const setTargetMode = target => {
     pendingTarget = target;
     const targeting = !!target;
+    if (targeting) {
+      swapNoticeText.textContent = target.category === 'stats'
+        ? `Choose a stat on your banner to replace with ${target.stat}.`
+        : 'Choose the badge slot to replace.';
+    }
     document.body.classList.toggle('swap-mode', targeting);
     editorLayout.classList.toggle('is-targeting', targeting);
     bannerStage.classList.toggle('is-targeting', targeting);
@@ -211,6 +217,9 @@
           while (slots.length < 3) slots.push('');
           slots[target.slot] = pendingTarget.itemId;
           signup.badgeSlots = slots.slice(0, 3);
+        } else if (target.category === 'stats') {
+          const equippedStats = window.MHLPlayerBanner.ensureConfig(signup).equippedStats;
+          equippedStats[target.slot] = pendingTarget.stat;
         } else {
           const field = categories[target.category].field;
           window.MHLPlayerBanner.ensureConfig(signup)[field] = pendingTarget.itemId;
@@ -266,7 +275,7 @@
     inventoryGrid.replaceChildren();
     inventoryGrid.classList.toggle('banner-stat-grid', activeCategory === 'stats');
     if (activeCategory === 'stats') {
-      inventoryHelp.textContent = 'Select up to three stats. Click a selected box to remove it.';
+      inventoryHelp.textContent = 'Select up to three stats. Click a selected box to remove it; with three selected, choose one on the banner to replace.';
       const config = window.MHLPlayerBanner.ensureConfig(signup);
       stats.forEach(stat => {
         const selected = config.equippedStats.includes(stat);
@@ -276,8 +285,11 @@
         option.className = 'banner-stat-option';
         option.textContent = stat;
         option.setAttribute('aria-pressed', String(selected));
-        option.disabled = !selected && full;
         option.addEventListener('click', () => {
+          if (!selected && full) {
+            setTargetMode({ category: 'stats', stat });
+            return;
+          }
           config.equippedStats = selected
             ? config.equippedStats.filter(item => item !== stat)
             : [...config.equippedStats, stat];
@@ -328,7 +340,7 @@
       return;
     }
 
-    inventoryHelp.textContent = `Hover over a ${definition.title.toLowerCase()} sprite and choose Equip, then click the matching component on your banner.`;
+    inventoryHelp.textContent = `Choose a ${definition.title.toLowerCase()} sprite and click Equip to apply it to your banner.`;
     const config = window.MHLPlayerBanner.ensureConfig(signup);
     const selectedId = config[definition.field] || '';
     const items = definition.items(signup);
@@ -339,7 +351,16 @@
       image: defaultItem && defaultItem.image,
       description: 'Use the administrator’s default sprite.',
       selected: !selectedId,
-      action: { label: 'Equip', run: () => setTargetMode({ category: activeCategory, itemId: '' }) },
+      action: {
+        label: 'Equip',
+        run: () => {
+          config[definition.field] = '';
+          dirty = true;
+          renderBanner();
+          renderInventory();
+          status('Default component selected. Save your banner to keep the change.');
+        },
+      },
     });
     items.filter(item => item.image).forEach(item => {
       itemCard({
@@ -349,7 +370,13 @@
         description: selectedId === item.id ? 'Currently equipped.' : '',
         action: {
           label: 'Equip',
-          run: () => setTargetMode({ category: activeCategory, itemId: item.id }),
+          run: () => {
+            config[definition.field] = item.id;
+            dirty = true;
+            renderBanner();
+            renderInventory();
+            status('Component updated. Save your banner to keep the change.');
+          },
         },
       });
     });

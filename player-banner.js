@@ -36,7 +36,7 @@
 
     const config = ensureConfig(signup);
     const defaults = signup.bannerDefaults || {};
-    const targeting = options.targeting || '';
+    const targeting = ['badges', 'stats'].includes(options.targeting) ? options.targeting : '';
     const onTarget = typeof options.onTarget === 'function' ? options.onTarget : () => {};
     const clampScale = value => Math.max(0.1, Math.min(5, Number(value) || 1));
     const transformAt = (values, index, fallback) => {
@@ -53,17 +53,30 @@
       element.classList.add('player-banner-target');
       element.setAttribute('role', 'button');
       element.setAttribute('tabindex', '0');
-      element.setAttribute('aria-label', `Replace ${category} component`);
+      element.setAttribute('aria-label', category === 'badges'
+        ? `Badge slot ${target.slot + 1}`
+        : `Stat position ${target.slot + 1}`);
       element.removeAttribute('aria-hidden');
       const select = event => {
         event.preventDefault();
         event.stopPropagation();
         onTarget(target);
       };
+      const baseTransform = element.style.transform;
+      const scaleOnHover = () => {
+        if (baseTransform) element.style.transform = `${baseTransform} scale(1.055)`;
+      };
+      const resetHoverScale = () => {
+        if (baseTransform) element.style.transform = baseTransform;
+      };
       element.addEventListener('click', select);
       element.addEventListener('keydown', event => {
         if (event.key === 'Enter' || event.key === ' ') select(event);
       });
+      element.addEventListener('pointerenter', scaleOnHover);
+      element.addEventListener('pointerleave', resetHoverScale);
+      element.addEventListener('focus', scaleOnHover);
+      element.addEventListener('blur', resetHoverScale);
     };
     const applyPosition = (element, transform) => {
       element.style.left = `${transform.x}px`;
@@ -171,17 +184,27 @@
       }
     }
 
-    const addText = (text, className, transform, zIndex) => {
+    const addText = (text, className, transform, zIndex, target = null) => {
       if (!text) return;
       const element = document.createElement('div');
       element.className = `player-banner-text ${className}`;
       element.textContent = text;
       element.style.zIndex = String(zIndex);
-      applyPosition(element, transform);
+      if (className === 'player-banner-name') {
+        element.style.left = `${transform.x}px`;
+        element.style.top = `${transform.y}px`;
+        element.style.transform = `translateX(-50%) scale(${transform.scale})`;
+        element.style.transformOrigin = 'top center';
+      } else {
+        applyPosition(element, transform);
+      }
+      if (target) makeTarget(element, target.category, target);
       canvas.append(element);
     };
-    addText(signup.name || 'Player', 'player-banner-name',
-      transformAt([defaults.playerNameTransform], 0, { x: 50, y: 45, scale: 1 }), 100);
+    const playerNameTransform = transformAt(
+      [defaults.playerNameTransform], 0, { x: 424.5, y: 45, scale: 1 });
+    if ((Number(defaults.canvasVersion) || 0) < 5) playerNameTransform.x = 424.5;
+    addText(signup.name || 'Player', 'player-banner-name', playerNameTransform, 100);
     addText(formatValue(signup.value), 'player-banner-value',
       transformAt([defaults.playerValueTransform], 0, { x: 50, y: 120, scale: 1 }), 100);
 
@@ -212,8 +235,9 @@
     config.equippedStats.slice(0, 3).forEach((stat, index) => {
       const labelTransform = transformAt(defaults.statTransforms, index, { x: 50, y: [760, 900, 1040][index], scale: 1 });
       const valueTransform = transformAt(defaults.statValueTransforms, index, { x: 50, y: [803, 943, 1083][index], scale: 1 });
-      addText(stat, 'player-banner-stat-label', labelTransform, 300);
-      addText(statValue(stat), 'player-banner-stat-value', valueTransform, 301);
+      const target = targeting === 'stats' ? { category: 'stats', slot: index } : null;
+      addText(stat, 'player-banner-stat-label', labelTransform, 300, target);
+      addText(statValue(stat), 'player-banner-stat-value', valueTransform, 301, target);
     });
     fit(viewport, canvas);
   };

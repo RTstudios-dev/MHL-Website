@@ -172,6 +172,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-layer-canvas{position:relative;width:863px;height:1214px;overflow:hidden;border:7px solid var(--line);background:#151418;touch-action:none}
 .banner-layer-item{position:absolute;z-index:2;width:260px;height:260px;left:334px;top:510px;object-fit:contain;cursor:move;user-select:none}
 .banner-player-text-guide{position:absolute;z-index:100;color:#f2eee5;font:500 34px var(--disp);text-shadow:0 2px 3px #000;white-space:nowrap;cursor:move;user-select:none}
+.banner-player-name-guide{transform-origin:top center}
 .banner-player-value-guide{font-size:28px;color:var(--gold)}
 .banner-badge-guide{position:absolute;z-index:200;box-sizing:border-box;width:184px;height:184px;border:1px solid transparent;border-radius:0;pointer-events:auto;cursor:move}
 .banner-badge-guide:before{content:"";position:absolute;inset:0;border:1px solid rgba(201,163,92,.45);border-radius:50%;pointer-events:none}
@@ -1164,9 +1165,12 @@ const MHLA = (() => {
     normalizePositions('badgeTransforms', defaultBadgeTransforms);
     normalizePositions('statTransforms', defaultStatTransforms);
     normalizePositions('statValueTransforms', defaultStatValueTransforms);
-    D.bannerDefaults.playerNameTransform = previousCanvasVersion < 2
+    const playerNameTransform = previousCanvasVersion < 2
       ? { x: 50, y: 45, scale: 1 }
       : normalizeTransform(D.bannerDefaults.playerNameTransform, { x: 50, y: 45, scale: 1 }, false);
+    D.bannerDefaults.playerNameTransform = previousCanvasVersion < 5
+      ? { ...playerNameTransform, x: canvasWidth / 2 }
+      : playerNameTransform;
     D.bannerDefaults.playerValueTransform = previousCanvasVersion < 2
       ? { x: 50, y: 120, scale: 1 }
       : normalizeTransform(D.bannerDefaults.playerValueTransform, { x: 50, y: 120, scale: 1 }, false);
@@ -1355,6 +1359,13 @@ const MHLA = (() => {
       element.style.transform = `scale(${scale})`;
       element.style.transformOrigin = 'top left';
     };
+    const applyPlayerNameTransform = (element, transform) => {
+      const scale = Math.max(0.1, Math.min(5, Number(transform.scale) || 1));
+      element.style.left = `${Number(transform.x) || 0}px`;
+      element.style.top = `${Number(transform.y) || 0}px`;
+      element.style.transform = `translateX(-50%) scale(${scale})`;
+      element.style.transformOrigin = 'top center';
+    };
 
     const makeDraggable = (element, transform, key, name, scaleKey = key) => {
       let dragging = false;
@@ -1533,8 +1544,8 @@ const MHLA = (() => {
       }
 
       if (showEditorGuides) {
-        const playerName = h('div', { class: 'banner-player-text-guide' }, 'Player Name');
-        applyGuideTransform(playerName, D.bannerDefaults.playerNameTransform);
+        const playerName = h('div', { class: 'banner-player-text-guide banner-player-name-guide' }, 'Player Name');
+        applyPlayerNameTransform(playerName, D.bannerDefaults.playerNameTransform);
         addCanvasComponent(playerName, 'player-name', 'Player name', D.bannerDefaults.playerNameTransform);
 
         const playerValue = h('div', { class: 'banner-player-text-guide banner-player-value-guide' }, 'Player Value');
@@ -1847,8 +1858,9 @@ const MHLA = (() => {
       const items = D[collectionKey] = Array.isArray(D[collectionKey]) ? D[collectionKey] : [];
       items.forEach(item => layerTransform(item));
     }
-    if (previousCanvasVersion < 4) {
-      D.bannerDefaults.canvasVersion = 4;
+    if (previousCanvasVersion < 5) {
+      D.bannerDefaults.canvasVersion = 5;
+      touch();
     }
     D.bannerLayers.forEach(item => layerTransform(item));
     renderLayerButtons();

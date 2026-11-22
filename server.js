@@ -1044,7 +1044,7 @@ function sanitize(d) {
     statValueTransforms: Array.isArray(rawDefaults.statValueTransforms)
       ? rawDefaults.statValueTransforms.slice(0, 3).map(transform => sanitizeCanvasTransform(transform, { x: 50, y: 803, scale: 1 }))
       : [],
-    playerNameTransform: sanitizeCanvasTransform(rawDefaults.playerNameTransform, { x: 50, y: 45, scale: 1 }),
+    playerNameTransform: sanitizeCanvasTransform(rawDefaults.playerNameTransform, { x: 424.5, y: 45, scale: 1 }),
     playerValueTransform: sanitizeCanvasTransform(rawDefaults.playerValueTransform, { x: 50, y: 120, scale: 1 }),
     layerOrder,
     canvasVersion: Number.isSafeInteger(Number(rawDefaults.canvasVersion)) ? Number(rawDefaults.canvasVersion) : 0,
@@ -2303,6 +2303,7 @@ const server = http.createServer(async (req, res) => {
           (clean.torsoSprites || []).map(sprite => sprite.image),
           (clean.stickSprites || []).map(sprite => sprite.image),
           (clean.puckSprites || []).map(sprite => sprite.image),
+          (clean.bannerLayers || []).map(layer => layer.image),
         )
         .map(url => path.basename(url || '')));
       for (const f of fs.readdirSync(UPLOAD_DIR)) if (!used.has(f)) fs.unlink(path.join(UPLOAD_DIR, f), () => {});
