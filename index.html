@@ -25,10 +25,19 @@
     <h1>Miniature Hockey League</h1>
     <p id="season">Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.</p>
   </div>
-  <div class="facts" aria-label="League totals">
-    <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
-    <div><b id="fSeries" class="num">0</b><small>Series played</small></div>
-    <div><b id="fGoals" class="num">0</b><small>Goals</small></div>
+  <div class="mast-player-group">
+    <div class="facts" aria-label="League totals">
+      <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
+      <div><b id="fSeries" class="num">0</b><small>Series played</small></div>
+      <div><b id="fGoals" class="num">0</b><small>Goals</small></div>
+    </div>
+    <section class="mast-player-panel is-sign-in" id="homePlayerPanel" aria-label="Player banner">
+      <div class="mast-player-preview" id="homePlayerPreview" aria-label="Your player banner" hidden>
+        <div class="mast-player-canvas" id="homePlayerCanvas"></div>
+      </div>
+      <a class="btn mast-player-action" id="homePlayerAction" href="/player-login">Sign in to edit player banner</a>
+      <p class="mast-player-status" id="homePlayerStatus" role="status" hidden></p>
+    </section>
   </div>
 </div>
 <div class="ticker" id="ticker" aria-label="Latest results" hidden></div>
@@ -59,6 +68,7 @@
 </div>
 <nav class="tabbar" id="tabbar" aria-label="Main"></nav>
 <div class="more" id="more" hidden></div>
+<script src="/player-banner.js"></script>
 <script src="/standings.js"></script>
 <script src="/site.js"></script>
 <script>
@@ -106,6 +116,69 @@
   const top = [...D.players].sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name)).filter(p => p.g + p.a > 0).slice(0, 5);
   $('scorers').innerHTML = top.length ? `<div class="lead-mini">${top.map((p, i) => `<div class="lm"><span class="r">${i + 1}</span>${MHL.badge(D.T[p.team])}<span class="nm">${esc(p.name)}<small>${p.g} G, ${p.a} A</small></span><span class="v">${p.g + p.a}</span></div>`).join('')}</div>`
     : MHL.empty('No points yet', 'Goals and assists show here once they are entered.');
+})();
+</script>
+<script>
+(async () => {
+  const panel = document.getElementById('homePlayerPanel');
+  const preview = document.getElementById('homePlayerPreview');
+  const viewport = preview;
+  const canvas = document.getElementById('homePlayerCanvas');
+  const action = document.getElementById('homePlayerAction');
+  const status = document.getElementById('homePlayerStatus');
+  const showSignIn = () => {
+    panel.classList.add('is-sign-in');
+    preview.hidden = true;
+    status.hidden = true;
+    action.href = '/player-login';
+    action.textContent = 'Sign in to edit player banner';
+  };
+  const showError = message => {
+    panel.classList.remove('is-sign-in');
+    preview.hidden = true;
+    status.hidden = false;
+    status.textContent = message;
+    action.href = '/player-login';
+    action.textContent = 'Open Player Profile';
+  };
+
+  try {
+    const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
+    if (!sessionResponse.ok) throw new Error('Could not check player sign-in.');
+    const session = await sessionResponse.json();
+    if (!session.authenticated) {
+      showSignIn();
+      return;
+    }
+
+    const signupResponse = await fetch('/api/player/signup', { cache: 'no-store' });
+    const result = await signupResponse.json();
+    if (signupResponse.status === 401) {
+      showSignIn();
+      return;
+    }
+    if (signupResponse.status === 404) {
+      panel.classList.remove('is-sign-in');
+      status.hidden = false;
+      status.textContent = 'Link a player signup to display your banner.';
+      action.href = '/player-banner';
+      action.textContent = 'Edit Player Banner';
+      return;
+    }
+    if (!signupResponse.ok) throw new Error(result.error || 'Could not load your player banner.');
+
+    panel.classList.remove('is-sign-in');
+    preview.hidden = false;
+    status.hidden = true;
+    action.href = '/player-banner';
+    action.textContent = 'Edit Player Banner';
+    window.MHLPlayerBanner.render(viewport, canvas, result.signup);
+    const fitBanner = () => window.MHLPlayerBanner.fit(viewport, canvas);
+    window.addEventListener('resize', fitBanner);
+    if ('ResizeObserver' in window) new ResizeObserver(fitBanner).observe(viewport);
+  } catch (error) {
+    showError(error.message || 'Could not load your player banner.');
+  }
 })();
 </script>
 </body>
