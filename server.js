@@ -32,7 +32,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannerSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerDefaults: { badge: '', banner: '', helmet: '', torso: '', stick: '', puck: '' }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -345,6 +345,7 @@ const modRosterSnapshot = data => {
   const badgesById = new Map(data.badges.map(badge => [badge.id, badge]));
   const spriteCollections = {
     banner: data.bannerSprites || [],
+    background: data.backgroundSprites || [],
     helmet: data.helmetSprites || [],
     torso: data.torsoSprites || [],
     stick: data.stickSprites || [],
@@ -397,6 +398,7 @@ const modRosterSnapshot = data => {
       bannerConfig: sanitizeBannerConfig(signup.bannerConfig),
       badgeImages: selectedBadges,
       bannerImage: resolvedSprite('banner', config.bannerSpriteId, defaults.banner),
+      backgroundImage: resolvedSprite('background', config.backgroundSpriteId, defaults.background),
       helmetImage: resolvedSprite('helmet', config.helmetSpriteId, defaults.helmet),
       torsoImage: resolvedSprite('torso', config.torsoSpriteId, defaults.torso),
       stickImage: resolvedSprite('stick', config.stickSpriteId, defaults.stick),
@@ -418,6 +420,7 @@ const modRosterSnapshot = data => {
       torsoTransform: transformOrDefault(config.torsoTransform),
       stickTransform: transformOrDefault(config.stickTransform),
       puckTransform: transformOrDefault(config.puckTransform),
+      bannerTransform: transformOrDefault(config.bannerTransform),
       equippedStats: Array.isArray(config.equippedStats)
         ? config.equippedStats.slice(0, 20).map(value => str(value, 40)).filter(Boolean)
         : [],
@@ -683,6 +686,18 @@ const sanitizeTransform = value => {
     equipped: transform.equipped !== false,
   };
 };
+const sanitizeCanvasTransform = (value, fallback = {}) => {
+  const transform = value && typeof value === 'object' ? value : {};
+  const finite = (input, defaultValue, limit) => {
+    const number = Number(input);
+    return Number.isFinite(number) ? Math.max(-limit, Math.min(limit, number)) : defaultValue;
+  };
+  return {
+    x: finite(transform.x, Number(fallback.x) || 0, 1698),
+    y: finite(transform.y, Number(fallback.y) || 0, 2400),
+    scale: Math.max(0.1, Math.min(5, finite(transform.scale, Number(fallback.scale) || 1, 5))),
+  };
+};
 const sanitizeBannerConfig = value => {
   const config = value && typeof value === 'object' ? value : {};
   const badgeTransforms = Array.isArray(config.badgeTransforms)
@@ -691,6 +706,8 @@ const sanitizeBannerConfig = value => {
   while (badgeTransforms.length < 3) badgeTransforms.push(sanitizeTransform(null));
   return {
     bannerSpriteId: str(config.bannerSpriteId, 40),
+    bannerTransform: sanitizeTransform(config.bannerTransform),
+    backgroundSpriteId: str(config.backgroundSpriteId, 40),
     helmetSpriteId: str(config.helmetSpriteId, 40),
     torsoSpriteId: str(config.torsoSpriteId, 40),
     stickSpriteId: str(config.stickSpriteId, 40),
@@ -807,6 +824,7 @@ function sanitize(d) {
     hours: num(p.hours, 100000),
     position: ['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(p.position) ? p.position : '',
     captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
+    europeanLeagueAcknowledgement: p.europeanLeagueAcknowledgement === true,
     team: ids.has(p.team) ? p.team : '',
     photo: okImage(p.photo) ? p.photo : '',
     cardArtwork: okImage(p.cardArtwork) ? p.cardArtwork : '',
@@ -873,6 +891,7 @@ function sanitize(d) {
         name: str(source.name, 80) || 'Sprite',
         description: str(source.description, 240),
         image: okSpriteImage(source.image) ? source.image : '',
+        transform: sanitizeCanvasTransform(source.transform, { x: 334, y: 510, scale: 1 }),
         requirements: {
           goals: num(requirements.goals, Number.MAX_SAFE_INTEGER),
           assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
@@ -894,21 +913,64 @@ function sanitize(d) {
     }).filter(Boolean);
   };
   const bannerSprites = normalizeSpriteCollection('bannerSprites', signupIds);
+  const backgroundSprites = normalizeSpriteCollection('backgroundSprites', signupIds);
   const helmetSprites = normalizeSpriteCollection('helmetSprites', signupIds);
   const torsoSprites = normalizeSpriteCollection('torsoSprites', signupIds);
   const stickSprites = normalizeSpriteCollection('stickSprites', signupIds);
   const puckSprites = normalizeSpriteCollection('puckSprites', signupIds);
+  const bannerLayerIds = new Set();
+  const bannerLayers = (Array.isArray(d.bannerLayers) ? d.bannerLayers : []).slice(0, 50).map(source => {
+    if (!source || typeof source !== 'object') return null;
+    const id = str(source.id, 40) || crypto.randomUUID();
+    if (bannerLayerIds.has(id)) return null;
+    bannerLayerIds.add(id);
+    const dimension = value => {
+      const number = Number(value);
+      return Number.isSafeInteger(number) && number > 0 && number <= 10000 ? number : 0;
+    };
+    return {
+      id,
+      name: str(source.name, 80) || 'New layer',
+      image: okSpriteImage(source.image) ? source.image : '',
+      naturalWidth: dimension(source.naturalWidth),
+      naturalHeight: dimension(source.naturalHeight),
+      transform: sanitizeCanvasTransform(source.transform, { x: 334, y: 510, scale: 1 }),
+    };
+  }).filter(Boolean);
   const validBadgeIds = new Set(badges.map(badge => badge.id));
   const rawDefaults = d.bannerDefaults && typeof d.bannerDefaults === 'object'
     ? d.bannerDefaults : {};
   const findSpriteId = (items, id) => items.some(item => item.id === id) ? str(id, 40) : '';
+  const validLayerKeys = new Set([
+    'background', 'badges', 'stick', 'torso', 'puck', 'helmet',
+    ...bannerLayers.map(layer => 'custom:' + layer.id),
+  ]);
+  const layerOrderIds = new Set();
+  const layerOrder = (Array.isArray(rawDefaults.layerOrder) ? rawDefaults.layerOrder : [])
+    .slice(0, 56)
+    .map(value => str(value, 60))
+    .filter(value => validLayerKeys.has(value) && !layerOrderIds.has(value) && layerOrderIds.add(value));
   const bannerDefaults = {
     badge: validBadgeIds.has(rawDefaults.badge) ? str(rawDefaults.badge, 40) : '',
     banner: findSpriteId(bannerSprites, rawDefaults.banner),
+    background: findSpriteId(backgroundSprites, rawDefaults.background),
     helmet: findSpriteId(helmetSprites, rawDefaults.helmet),
     torso: findSpriteId(torsoSprites, rawDefaults.torso),
     stick: findSpriteId(stickSprites, rawDefaults.stick),
     puck: findSpriteId(puckSprites, rawDefaults.puck),
+    badgeTransforms: Array.isArray(rawDefaults.badgeTransforms)
+      ? rawDefaults.badgeTransforms.slice(0, 3).map(transform => sanitizeCanvasTransform(transform, { x: 50, y: 180, scale: 1 }))
+      : [],
+    statTransforms: Array.isArray(rawDefaults.statTransforms)
+      ? rawDefaults.statTransforms.slice(0, 3).map(transform => sanitizeCanvasTransform(transform, { x: 50, y: 760, scale: 1 }))
+      : [],
+    statValueTransforms: Array.isArray(rawDefaults.statValueTransforms)
+      ? rawDefaults.statValueTransforms.slice(0, 3).map(transform => sanitizeCanvasTransform(transform, { x: 50, y: 803, scale: 1 }))
+      : [],
+    playerNameTransform: sanitizeCanvasTransform(rawDefaults.playerNameTransform, { x: 50, y: 45, scale: 1 }),
+    playerValueTransform: sanitizeCanvasTransform(rawDefaults.playerValueTransform, { x: 50, y: 120, scale: 1 }),
+    layerOrder,
+    canvasVersion: Number.isSafeInteger(Number(rawDefaults.canvasVersion)) ? Number(rawDefaults.canvasVersion) : 0,
   };
   signups.forEach(signup => {
     const used = new Set();
@@ -935,8 +997,8 @@ function sanitize(d) {
   syncSignupPlayers({ players, signups });
   return {
     site, teams, rounds, matches, players, news, rules, signups, badges, draft,
-    bannerSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
-    bannerDefaults,
+    bannerSprites, backgroundSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
+    bannerLayers, bannerDefaults,
   };
 }
 
@@ -1794,17 +1856,19 @@ const server = http.createServer(async (req, res) => {
         signup: {
           id: signup.id, discord: signup.discord, name: signup.name, steam: signup.steam,
           hours: signup.hours, position: signup.position, captain: signup.captain,
+          europeanLeagueAcknowledgement: signup.europeanLeagueAcknowledgement === true,
           photo: signup.photo, cardArtwork: signup.cardArtwork || '', team: signup.team, teamName: team ? team.name : '',
           value: signup.position === 'Goalie' ? values.goalieValue : values.skaterValue,
           points: configuredPointsFor(data, signup, stats), trackedStats: stats,
           badgeSlots: equippedBadgeSlotsFor(data, signup),
           badges: badgeCollectionFor(data, signup),
           bannerConfig: signup.bannerConfig,
-          bannerSprites: data.bannerSprites || [],
-          helmetSprites: data.helmetSprites || [],
-          torsoSprites: data.torsoSprites || [],
-          stickSprites: data.stickSprites || [],
-          puckSprites: data.puckSprites || [],
+          bannerSprites: (data.bannerSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
+          backgroundSprites: (data.backgroundSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
+          helmetSprites: (data.helmetSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
+          torsoSprites: (data.torsoSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
+          stickSprites: (data.stickSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
+          puckSprites: (data.puckSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
           bannerDefaults: data.bannerDefaults || {},
           ...values,
         },
@@ -2136,6 +2200,7 @@ const server = http.createServer(async (req, res) => {
           clean.signups.flatMap(signup => [signup.photo, signup.cardArtwork]),
           clean.badges.map(badge => badge.image),
           (clean.bannerSprites || []).map(sprite => sprite.image),
+          (clean.backgroundSprites || []).map(sprite => sprite.image),
           (clean.helmetSprites || []).map(sprite => sprite.image),
           (clean.torsoSprites || []).map(sprite => sprite.image),
           (clean.stickSprites || []).map(sprite => sprite.image),
@@ -2165,7 +2230,8 @@ const server = http.createServer(async (req, res) => {
       const hours = Number(signup.hours);
       if (!discord || !name || !steam || !Number.isSafeInteger(hours) || hours < 0 || hours > 100000 ||
           !['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(signup.position) ||
-          !['Yes', 'No', 'Maybe'].includes(signup.captain)) {
+          !['Yes', 'No', 'Maybe'].includes(signup.captain) ||
+          signup.europeanLeagueAcknowledgement !== true) {
         return send(res, 400, { error: 'Complete all fields with valid answers before submitting.' });
       }
       if (!submittedSteamId) {
@@ -2194,6 +2260,7 @@ const server = http.createServer(async (req, res) => {
         hours,
         position: signup.position,
         captain: signup.captain,
+        europeanLeagueAcknowledgement: true,
         team: '',
         photo: okImage(signup.photo) ? signup.photo : '',
         cardArtwork: okImage(signup.cardArtwork) ? signup.cardArtwork : '',

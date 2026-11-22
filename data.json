@@ -1,7 +1,14 @@
 {
   "site": {
     "season": "Season 1",
-    "discord": "https://discord.gg/HUABf9zJSy"
+    "discord": "https://discord.gg/HUABf9zJSy",
+    "iceCap": 0,
+    "teamCap": 0,
+    "statsPointRequirements": {
+      "goals": 1,
+      "assists": 1,
+      "saves": 2
+    }
   },
   "teams": [
     {
@@ -11,6 +18,7 @@
       "color": "#c8102e",
       "logo": "",
       "photo": "",
+      "captainSignupId": "",
       "slug": "new-team"
     },
     {
@@ -20,6 +28,7 @@
       "color": "#9a797f",
       "logo": "/uploads/437ccb6d2193d369.png",
       "photo": "",
+      "captainSignupId": "",
       "slug": "kokoti"
     },
     {
@@ -29,6 +38,7 @@
       "color": "#c8102e",
       "logo": "",
       "photo": "",
+      "captainSignupId": "",
       "slug": "hc-great-victoria"
     }
   ],
@@ -77,10 +87,19 @@
   "players": [
     {
       "id": "16e8b48b-0eba-44a4-8183-9ae200473cfb",
+      "signupId": "",
       "name": "curak",
       "team": "8fc2367e-941a-4a63-8661-7e68653a1910",
       "role": "skater",
-      "number": "88"
+      "number": "88",
+      "discord": "",
+      "steam": "",
+      "hours": 0,
+      "signupPosition": "",
+      "captain": "",
+      "photo": "",
+      "skaterValue": 0,
+      "goalieValue": 0
     }
   ],
   "news": [
@@ -111,5 +130,98 @@
       "body": ""
     }
   ],
-  "signups": []
+  "signups": [],
+  "badges": [],
+  "draft": {
+    "active": false,
+    "manualOrder": false,
+    "order": [
+      "",
+      "",
+      ""
+    ],
+    "nextIndex": 0,
+    "picks": []
+  },
+  "bannerSprites": [],
+  "backgroundSprites": [],
+  "helmetSprites": [],
+  "torsoSprites": [],
+  "stickSprites": [],
+  "puckSprites": [],
+  "bannerLayers": [],
+  "bannerDefaults": {
+    "badge": "",
+    "banner": "",
+    "background": "",
+    "helmet": "",
+    "torso": "",
+    "stick": "",
+    "puck": "",
+    "badgeTransforms": [
+      {
+        "x": 50,
+        "y": 180,
+        "scale": 1
+      },
+      {
+        "x": 332,
+        "y": 180,
+        "scale": 1
+      },
+      {
+        "x": 614,
+        "y": 180,
+        "scale": 1
+      }
+    ],
+    "statTransforms": [
+      {
+        "x": 50,
+        "y": 760,
+        "scale": 1
+      },
+      {
+        "x": 50,
+        "y": 900,
+        "scale": 1
+      },
+      {
+        "x": 50,
+        "y": 1040,
+        "scale": 1
+      }
+    ],
+    "statValueTransforms": [
+      {
+        "x": 50,
+        "y": 803,
+        "scale": 1
+      },
+      {
+        "x": 50,
+        "y": 943,
+        "scale": 1
+      },
+      {
+        "x": 50,
+        "y": 1083,
+        "scale": 1
+      }
+    ],
+    "playerNameTransform": {
+      "x": 50,
+      "y": 45,
+      "scale": 1
+    },
+    "playerValueTransform": {
+      "x": 50,
+      "y": 120,
+      "scale": 1
+    },
+    "canvasVersion": 4
+  },
+  "playerStats": {},
+  "modStatEventIds": [],
+  "statsImportLogs": []
 }

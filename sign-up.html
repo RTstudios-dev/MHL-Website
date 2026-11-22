@@ -28,6 +28,25 @@
 .signup-status{min-height:1.6em;color:var(--muted)}
 .signup-status.success{color:var(--gold)}
 .signup-status.error{color:#e08474}
+.european-league-check{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  min-height:46px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  background:var(--paper);
+  font-weight:500;
+}
+.european-league-check input{
+  width:18px;
+  height:18px;
+  min-height:18px;
+  margin:2px 0 0;
+  padding:0;
+  accent-color:var(--gold);
+  flex:none;
+}
 @media(max-width:560px){.steam-options{grid-template-columns:1fr}}
 </style>
 </head>
@@ -84,6 +103,10 @@
         <option value="No">No</option>
         <option value="Maybe">Maybe</option>
       </select>
+    </label>
+    <label class="european-league-check">
+      <input name="europeanLeagueAcknowledgement" type="checkbox" required>
+      <span>I understand this is a European League and I will be assigned a team.</span>
     </label>
     <label>Profile picture
       <div class="picrow">
@@ -221,6 +244,7 @@
           hours: Number(values.get('hours')),
           position: values.get('position'),
           captain: values.get('captain'),
+          europeanLeagueAcknowledgement: values.get('europeanLeagueAcknowledgement') === 'on',
           photo,
         }),
       });

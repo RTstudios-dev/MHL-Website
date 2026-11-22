@@ -139,6 +139,24 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .manual-badge-awards{border-top:1px solid var(--line);padding-top:10px}
 .manual-badge-awards summary{cursor:pointer;color:var(--gold);font-weight:600}
 .manual-badge-awards>div{max-height:240px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;padding:12px 0}
+.banner-layer-editor{display:grid;grid-template-columns:220px 863px;gap:18px;align-items:start;margin:18px 0;overflow-x:auto}
+.banner-layer-list{display:grid;gap:6px}
+.banner-layer-button{min-height:44px;padding:8px 10px;border:1px solid var(--line);background:var(--paper);color:var(--ink);text-align:left;font:600 13px var(--body);cursor:grab}
+.banner-layer-button.active{border-color:var(--gold);box-shadow:inset 3px 0 0 var(--gold)}
+.banner-layer-button.dragging{opacity:.55}
+.banner-layer-button.drop-target{outline:2px solid var(--gold)}
+.banner-layer-assets{display:grid;gap:6px;margin-top:10px}
+.banner-layer-asset{width:100%;min-height:48px;padding:5px 6px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;grid-template-columns:40px 1fr;align-items:center;gap:8px;text-align:left;cursor:pointer}
+.banner-layer-asset img{width:40px;height:40px;object-fit:contain}
+.banner-layer-asset.active{border-color:var(--gold)}
+.banner-layer-canvas{position:relative;width:863px;height:1214px;overflow:hidden;border:7px solid var(--line);background:#151418;touch-action:none}
+.banner-layer-item{position:absolute;z-index:2;width:260px;height:260px;left:334px;top:510px;object-fit:contain;cursor:move;user-select:none}
+.banner-player-text-guide{position:absolute;z-index:100;color:#f2eee5;font:700 34px "Segoe UI",sans-serif;text-shadow:0 2px 3px #000;white-space:nowrap;cursor:move;user-select:none}
+.banner-player-value-guide{font-size:28px;color:var(--gold)}
+.banner-badge-guide{position:absolute;z-index:200;width:184px;height:184px;border:0;border-radius:50%;pointer-events:auto;cursor:move}
+.banner-badge-guide:before{content:"";position:absolute;inset:-20px;border:1px dashed rgba(201,163,92,.18);border-radius:50%}
+.banner-stat-guide{position:absolute;z-index:300;color:var(--primary);font:400 15px "Courier New",monospace;white-space:nowrap;cursor:move;user-select:none}
+.banner-stat-guide-value{position:absolute;z-index:301;color:var(--gold);font:400 64px "Segoe UI",sans-serif;cursor:move}
 
 @media (max-width:820px){
   .teams-row{grid-template-columns:1fr 1fr}
@@ -256,6 +274,7 @@ const MHLA = (() => {
     D.torsoSprites = Array.isArray(D.torsoSprites) ? D.torsoSprites : [];
     D.stickSprites = Array.isArray(D.stickSprites) ? D.stickSprites : [];
     D.puckSprites = Array.isArray(D.puckSprites) ? D.puckSprites : [];
+    D.backgroundSprites = Array.isArray(D.backgroundSprites) ? D.backgroundSprites : [];
     D.bannerDefaults = D.bannerDefaults && typeof D.bannerDefaults === 'object'
       ? D.bannerDefaults : {};
     trackedStatsEdits = {};
@@ -1023,6 +1042,533 @@ const MHLA = (() => {
   }
 
   // player-banner sprites
+  function bannerLayerEditor() {
+    D.bannerDefaults = D.bannerDefaults && typeof D.bannerDefaults === 'object'
+      ? D.bannerDefaults : {};
+    D.bannerLayers = Array.isArray(D.bannerLayers) ? D.bannerLayers : [];
+    const canvasWidth = 849;
+    const canvasHeight = 1200;
+    const previousCanvasVersion = Number(D.bannerDefaults.canvasVersion) || 0;
+    const defaultBadgeTransforms = [50, 332, 614].map(x => ({ x, y: 180, scale: 1 }));
+    const defaultStatTransforms = [760, 900, 1040].map(y => ({ x: 50, y, scale: 1 }));
+    const defaultStatValueTransforms = [803, 943, 1083].map(y => ({ x: 50, y, scale: 1 }));
+    const normalizeTransform = (value, fallback, migrateLegacy) => {
+      const transform = value && typeof value === 'object' ? value : {};
+      let x = Number(transform.x);
+      let y = Number(transform.y);
+      const scale = Math.max(0.1, Math.min(5, Number(transform.scale) || 1));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return { ...fallback, scale };
+      if (migrateLegacy && Math.abs(x) <= 2 && Math.abs(y) <= 2)
+        return { ...fallback, scale };
+      if (migrateLegacy && !(x === 334 && y === 510)) {
+        x *= canvasWidth / 590;
+        y *= canvasHeight / 939;
+      }
+      return {
+        x: Math.max(-canvasWidth, Math.min(canvasWidth * 2, x)),
+        y: Math.max(-canvasHeight, Math.min(canvasHeight * 2, y)),
+        scale,
+      };
+    };
+    const normalizePositions = (key, defaults) => {
+      const values = Array.isArray(D.bannerDefaults[key]) ? D.bannerDefaults[key].slice(0, 3) : [];
+      D.bannerDefaults[key] = defaults.map((fallback, index) =>
+        normalizeTransform(values[index], fallback, previousCanvasVersion < 2));
+    };
+    normalizePositions('badgeTransforms', defaultBadgeTransforms);
+    normalizePositions('statTransforms', defaultStatTransforms);
+    normalizePositions('statValueTransforms', defaultStatValueTransforms);
+    D.bannerDefaults.playerNameTransform = previousCanvasVersion < 2
+      ? { x: 50, y: 45, scale: 1 }
+      : normalizeTransform(D.bannerDefaults.playerNameTransform, { x: 50, y: 45, scale: 1 }, false);
+    D.bannerDefaults.playerValueTransform = previousCanvasVersion < 2
+      ? { x: 50, y: 120, scale: 1 }
+      : normalizeTransform(D.bannerDefaults.playerValueTransform, { x: 50, y: 120, scale: 1 }, false);
+    let activeLayer = 'background';
+    let draggedLayerKey = '';
+    let pointerLayerDrag = null;
+    let suppressLayerClick = false;
+    const categoryMap = {
+      background: ['backgroundSprites', 'Background'],
+      badges: ['badges', 'Badges'],
+      stick: ['stickSprites', 'Stick'],
+      torso: ['torsoSprites', 'Torso'],
+      puck: ['puckSprites', 'Puck'],
+      helmet: ['helmetSprites', 'Helmets'],
+    };
+    const wrapper = h('div', { class: 'banner-layer-editor' });
+    const left = h('div', {});
+    const canvas = h('div', { class: 'banner-layer-canvas' });
+    const layerButtons = h('div', { class: 'banner-layer-list' });
+    const assets = h('div', { class: 'banner-layer-assets' });
+    const defaultLayerOrder = ['badges', 'stick', 'torso', 'puck', 'helmet', 'background'];
+    const getLayerOrder = () => {
+      const validKeys = new Set([
+        ...Object.keys(categoryMap),
+        ...D.bannerLayers.map(item => 'custom:' + item.id),
+      ]);
+      const order = Array.isArray(D.bannerDefaults.layerOrder)
+        ? D.bannerDefaults.layerOrder.filter((key, index, values) => validKeys.has(key) && values.indexOf(key) === index)
+        : [];
+      for (const key of defaultLayerOrder)
+        if (!order.includes(key)) order.push(key);
+      for (const item of D.bannerLayers) {
+        const key = 'custom:' + item.id;
+        if (!order.includes(key)) order.unshift(key);
+      }
+      D.bannerDefaults.layerOrder = order;
+      return order;
+    };
+    const reorderLayers = (sourceKey, targetKey) => {
+      const order = getLayerOrder();
+      const sourceIndex = order.indexOf(sourceKey);
+      const targetIndex = order.indexOf(targetKey);
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return;
+      order.splice(sourceIndex, 1);
+      order.splice(targetIndex, 0, sourceKey);
+      D.bannerDefaults.layerOrder = order;
+      touch();
+      renderLayerButtons();
+      renderCanvasAssets();
+    };
+    const setActiveLayer = layer => {
+      activeLayer = layer;
+      renderLayerButtons();
+      renderAssets();
+    };
+
+    const applyTransform = (element, transform) => {
+      const scale = Math.max(0.25, Math.min(3, Number(transform.scale) || 1));
+      const x = Number(transform.x) || 0;
+      const y = Number(transform.y) || 0;
+      element.style.width = `${Math.round(260 * scale)}px`;
+      element.style.height = `${Math.round(260 * scale)}px`;
+      element.style.left = `${Math.round(x)}px`;
+      element.style.top = `${Math.round(y)}px`;
+    };
+
+    const makeDraggable = (element, transform) => {
+      let dragging = false;
+      element.addEventListener('pointerdown', event => {
+        dragging = true;
+        element.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+      element.addEventListener('pointermove', event => {
+        if (!dragging) return;
+        const rect = canvas.getBoundingClientRect();
+        transform.x = Math.max(-canvasWidth, Math.min(canvasWidth * 2,
+          event.clientX - rect.left - canvas.clientLeft - element.offsetWidth / 2));
+        transform.y = Math.max(-canvasHeight, Math.min(canvasHeight * 2,
+          event.clientY - rect.top - canvas.clientTop - element.offsetHeight / 2));
+        element.style.left = `${Math.round(transform.x)}px`;
+        element.style.top = `${Math.round(transform.y)}px`;
+        touch();
+      });
+      element.addEventListener('pointerup', event => {
+        dragging = false;
+        if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
+      });
+    };
+
+    const layerTransform = item => {
+      const fallback = { x: 334, y: 510, scale: 1 };
+      item.transform = normalizeTransform(item.transform, fallback, previousCanvasVersion < 2);
+      return item.transform;
+    };
+    const renderLayerImage = (item, zIndex) => {
+      if (!item.image) return;
+      const image = h('img', {
+        src: item.image,
+        alt: '',
+        class: 'banner-layer-item',
+        style: `z-index:${zIndex}`,
+      });
+      applyTransform(image, layerTransform(item));
+      makeDraggable(image, item.transform);
+      canvas.append(image);
+    };
+    const renderCustomLayerImage = (item, zIndex) => {
+      if (!item.image) return;
+      const image = h('img', {
+        src: item.image,
+        alt: '',
+        class: 'banner-layer-item',
+        style: `z-index:${zIndex}`,
+      });
+      const sizeImage = () => {
+        const width = Number(item.naturalWidth) || image.naturalWidth || 260;
+        const height = Number(item.naturalHeight) || image.naturalHeight || 260;
+        let migratedDimensions = false;
+        if (!item.naturalWidth || !item.naturalHeight) {
+          item.naturalWidth = width;
+          item.naturalHeight = height;
+          item.transform.x = (canvasWidth - width) / 2;
+          item.transform.y = (canvasHeight - height) / 2;
+          migratedDimensions = true;
+        }
+        const scale = Math.max(0.1, Math.min(5, Number(item.transform.scale) || 1));
+        image.style.width = `${width * scale}px`;
+        image.style.height = `${height * scale}px`;
+        image.style.left = `${Math.round(Number(item.transform.x) || 0)}px`;
+        image.style.top = `${Math.round(Number(item.transform.y) || 0)}px`;
+        if (migratedDimensions) touch();
+      };
+      image.addEventListener('load', sizeImage);
+      applyTransform(image, layerTransform(item));
+      makeDraggable(image, item.transform);
+      canvas.append(image);
+      if (image.complete && image.naturalWidth) sizeImage();
+    };
+    const renderCanvasAssets = () => {
+      canvas.querySelectorAll('.banner-layer-item').forEach(item => item.remove());
+      const layerOrder = getLayerOrder();
+      layerOrder.forEach((layerKey, index) => {
+        const zIndex = 10 + layerOrder.length - index;
+        if (layerKey.startsWith('custom:')) {
+          const item = D.bannerLayers.find(layer => layer.id === layerKey.slice(7));
+          if (item) renderCustomLayerImage(item, zIndex);
+          return;
+        }
+        if (layerKey === 'badges') return;
+        const [key] = categoryMap[layerKey];
+        const items = D[key] = Array.isArray(D[key]) ? D[key] : [];
+        const defaultId = D.bannerDefaults[
+          layerKey === 'background' ? 'background'
+          : layerKey === 'helmet' ? 'helmet'
+          : layerKey === 'torso' ? 'torso'
+          : layerKey === 'stick' ? 'stick'
+          : 'puck'
+        ];
+        const selected = items.find(item => item.id === defaultId && item.image)
+          || items.find(item => item.image);
+        if (selected) renderLayerImage(selected, zIndex);
+      });
+
+      canvas.querySelectorAll('.banner-badge-guide,.banner-stat-guide,.banner-stat-guide-value,.banner-player-text-guide').forEach(item => item.remove());
+      const playerName = h('div', { class: 'banner-player-text-guide' }, 'Player Name');
+      playerName.style.left = `${D.bannerDefaults.playerNameTransform.x}px`;
+      playerName.style.top = `${D.bannerDefaults.playerNameTransform.y}px`;
+      makeDraggable(playerName, D.bannerDefaults.playerNameTransform);
+      canvas.append(playerName);
+
+      const playerValue = h('div', { class: 'banner-player-text-guide banner-player-value-guide' }, 'Player Value');
+      playerValue.style.left = `${D.bannerDefaults.playerValueTransform.x}px`;
+      playerValue.style.top = `${D.bannerDefaults.playerValueTransform.y}px`;
+      makeDraggable(playerValue, D.bannerDefaults.playerValueTransform);
+      canvas.append(playerValue);
+
+      for (let index = 0; index < 3; index++) {
+        const badgeTransform = D.bannerDefaults.badgeTransforms[index];
+        const badgeGuide = h('div', {
+          class: 'banner-badge-guide',
+          title: `Badge slot ${index + 1}`,
+        });
+        badgeGuide.style.left = `${badgeTransform.x}px`;
+        badgeGuide.style.top = `${badgeTransform.y}px`;
+        badgeGuide.style.width = '184px';
+        badgeGuide.style.height = '184px';
+        makeDraggable(badgeGuide, badgeTransform);
+        canvas.append(badgeGuide);
+
+        const statTransform = D.bannerDefaults.statTransforms[index];
+        const label = h('div', { class: 'banner-stat-guide' }, ['Goals', 'Assists', 'Saves'][index]);
+        label.style.left = `${statTransform.x}px`;
+        label.style.top = `${statTransform.y}px`;
+        makeDraggable(label, statTransform);
+        canvas.append(label);
+
+        const value = h('div', { class: 'banner-stat-guide-value' }, '0');
+        const valueTransform = D.bannerDefaults.statValueTransforms[index];
+        value.style.left = `${valueTransform.x}px`;
+        value.style.top = `${valueTransform.y}px`;
+        makeDraggable(value, valueTransform);
+        canvas.append(value);
+      }
+    };
+
+    const renderLayerButtons = () => {
+      layerButtons.replaceChildren();
+      for (const layerKey of getLayerOrder()) {
+        const custom = layerKey.startsWith('custom:');
+        const layer = custom
+          ? D.bannerLayers.find(item => item.id === layerKey.slice(7))
+          : null;
+        const title = custom
+          ? (layer && layer.name || 'New layer')
+          : categoryMap[layerKey][1];
+        const button = h('button', {
+          type: 'button',
+          draggable: 'true',
+          'data-layer-key': layerKey,
+          class: `banner-layer-button${activeLayer === layerKey ? ' active' : ''}`,
+          onclick: () => {
+            if (suppressLayerClick) return;
+            setActiveLayer(layerKey);
+          },
+        }, title);
+        button.addEventListener('pointerdown', event => {
+          if (event.button !== 0) return;
+          pointerLayerDrag = { key: layerKey, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
+          button.setPointerCapture(event.pointerId);
+        });
+        button.addEventListener('pointermove', event => {
+          if (!pointerLayerDrag || pointerLayerDrag.pointerId !== event.pointerId) return;
+          if (!pointerLayerDrag.moved && Math.hypot(event.clientX - pointerLayerDrag.startX, event.clientY - pointerLayerDrag.startY) < 5) return;
+          pointerLayerDrag.moved = true;
+          button.classList.add('dragging');
+          layerButtons.querySelectorAll('.drop-target').forEach(item => item.classList.remove('drop-target'));
+          const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.banner-layer-button');
+          if (target && layerButtons.contains(target)) target.classList.add('drop-target');
+        });
+        button.addEventListener('pointerup', event => {
+          if (!pointerLayerDrag || pointerLayerDrag.pointerId !== event.pointerId) return;
+          const drag = pointerLayerDrag;
+          const target = drag.moved ? document.elementFromPoint(event.clientX, event.clientY)?.closest('.banner-layer-button') : null;
+          pointerLayerDrag = null;
+          layerButtons.querySelectorAll('.dragging, .drop-target').forEach(item => item.classList.remove('dragging', 'drop-target'));
+          if (drag.moved) {
+            suppressLayerClick = true;
+            if (target && layerButtons.contains(target)) reorderLayers(drag.key, target.dataset.layerKey);
+            setTimeout(() => { suppressLayerClick = false; }, 0);
+          }
+        });
+        button.addEventListener('pointercancel', () => {
+          pointerLayerDrag = null;
+          layerButtons.querySelectorAll('.dragging, .drop-target').forEach(item => item.classList.remove('dragging', 'drop-target'));
+        });
+        button.addEventListener('dragstart', event => {
+          event.preventDefault();
+          draggedLayerKey = layerKey;
+          event.dataTransfer.setData('text/plain', layerKey);
+          event.dataTransfer.effectAllowed = 'move';
+          button.classList.add('dragging');
+        });
+        button.addEventListener('dragend', () => {
+          draggedLayerKey = '';
+          button.classList.remove('dragging');
+          layerButtons.querySelectorAll('.drop-target').forEach(item => item.classList.remove('drop-target'));
+        });
+        button.addEventListener('dragover', event => {
+          event.preventDefault();
+          button.classList.add('drop-target');
+        });
+        button.addEventListener('dragleave', () => button.classList.remove('drop-target'));
+        button.addEventListener('drop', event => {
+          event.preventDefault();
+          button.classList.remove('drop-target');
+          const draggedKey = draggedLayerKey || event.dataTransfer.getData('text/plain');
+          if (draggedKey) reorderLayers(draggedKey, layerKey);
+        });
+        layerButtons.append(button);
+      }
+    };
+
+    const renderAssets = () => {
+      assets.replaceChildren();
+      if (activeLayer.startsWith('custom:')) {
+        const item = D.bannerLayers.find(layer => layer.id === activeLayer.slice(7));
+        if (!item) {
+          activeLayer = 'background';
+          renderLayerButtons();
+          return renderAssets();
+        }
+        const name = h('input', {
+          type: 'text',
+          maxlength: 80,
+          value: item.name,
+          'aria-label': 'Card layer name',
+          oninput: event => {
+            item.name = event.target.value;
+            const activeButton = [...layerButtons.children].find(button => button.dataset.layerKey === 'custom:' + item.id);
+            if (activeButton) activeButton.textContent = item.name || 'New layer';
+            touch();
+          },
+        });
+        assets.append(h('label', { class: 'f' }, h('span', {}, 'Layer name'), name));
+        if (item.image) assets.append(h('img', { src: item.image, alt: '', style: 'max-width:100%;max-height:120px;object-fit:contain' }));
+
+        const uploadInput = h('input', { type: 'file', accept: 'image/png', style: 'display:none' });
+        uploadInput.addEventListener('change', async event => {
+          const file = event.target.files[0];
+          if (!file) return;
+          if (file.size > 8_000_000) { alert('Layer PNG too large (max 8 MB)'); return; }
+          const url = await upload(file);
+          if (!url) return;
+          const dimensions = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+            image.onerror = () => reject(new Error('The uploaded PNG could not be decoded.'));
+            image.src = url;
+          }).catch(error => {
+            alert(error.message);
+            return null;
+          });
+          if (!dimensions) return;
+          item.image = url;
+          item.naturalWidth = dimensions.width;
+          item.naturalHeight = dimensions.height;
+          item.transform.scale = 1;
+          item.transform.x = (canvasWidth - dimensions.width) / 2;
+          item.transform.y = (canvasHeight - dimensions.height) / 2;
+          touch();
+          renderAssets();
+          renderCanvasAssets();
+        });
+        assets.append(
+          h('button', { type: 'button', class: 'btn sm', onclick: () => uploadInput.click() }, item.image ? 'Replace PNG' : 'Add PNG'),
+          uploadInput,
+        );
+        const scaleRow = h('label', { class: 'f' },
+          h('span', {}, 'Layer scale'),
+          h('input', {
+            type: 'range', min: 10, max: 500,
+            value: Math.round((Number(item.transform && item.transform.scale) || 1) * 100),
+            oninput: event => {
+              layerTransform(item).scale = Number(event.target.value) / 100;
+              touch();
+              renderCanvasAssets();
+            },
+          }));
+        const removeButton = h('button', {
+          type: 'button',
+          class: 'btn sm danger',
+          onclick: () => {
+            if (!confirm(`Remove the ${item.name || 'new layer'} card layer?`)) return;
+            D.bannerLayers = D.bannerLayers.filter(layer => layer.id !== item.id);
+            D.bannerDefaults.layerOrder = getLayerOrder().filter(key => key !== 'custom:' + item.id);
+            activeLayer = 'background';
+            touch();
+            renderLayerButtons();
+            renderAssets();
+            renderCanvasAssets();
+          },
+        }, 'Remove layer');
+        assets.append(scaleRow, removeButton);
+        return;
+      }
+
+      const [key, title] = categoryMap[activeLayer];
+      if (activeLayer === 'badges') {
+        const addBadgeHint = h('p', { class: 'help' }, 'Badge PNGs are managed below. Use the three guides on the canvas to position the badge slots.');
+        assets.append(addBadgeHint);
+        return;
+      }
+      const items = D[key] = Array.isArray(D[key]) ? D[key] : [];
+      const defaultKey = activeLayer === 'background' ? 'background'
+        : activeLayer === 'helmet' ? 'helmet'
+        : activeLayer === 'torso' ? 'torso'
+        : activeLayer === 'stick' ? 'stick'
+        : 'puck';
+      items.forEach(item => {
+        layerTransform(item);
+        const button = h('button', {
+          type: 'button',
+          class: `banner-layer-asset${D.bannerDefaults[defaultKey] === item.id ? ' active' : ''}`,
+        });
+        if (item.image) button.append(h('img', { src: item.image, alt: '' }));
+        button.append(h('span', {}, item.name || title));
+        button.addEventListener('click', () => {
+          D.bannerDefaults[defaultKey] = item.id;
+          touch();
+          renderAssets();
+          renderCanvasAssets();
+        });
+        assets.append(button);
+        if (D.bannerDefaults[defaultKey] === item.id) {
+          const scaleRow = h('label', { class: 'f' },
+            h('span', {}, 'Layer scale'),
+            h('input', {
+              type: 'range',
+              min: 25,
+              max: 300,
+              value: Math.round((Number(item.transform.scale) || 1) * 100),
+              oninput: event => {
+                item.transform.scale = Number(event.target.value) / 100;
+                touch();
+                renderCanvasAssets();
+              },
+            }));
+          assets.append(scaleRow);
+        }
+      });
+      const uploadInput = h('input', {
+        type: 'file',
+        accept: 'image/png',
+        style: 'display:none',
+      });
+      uploadInput.addEventListener('change', async event => {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (file.size > 8_000_000) { alert(`${title} PNG too large (max 8 MB)`); return; }
+        const url = await upload(file);
+        if (!url) return;
+        const item = {
+          id: uid(), name: `New ${title}`, description: '', image: url,
+          transform: { x: 334, y: 510, scale: 1 },
+          requirements: {},
+          allPlayers: false, season2Players: false, manualPlayerIds: [],
+        };
+        items.push(item);
+        D.bannerDefaults[defaultKey] = item.id;
+        touch();
+        renderAssets();
+        renderCanvasAssets();
+      });
+      const addButton = h('button', {
+        type: 'button',
+        class: 'btn sm',
+        onclick: () => uploadInput.click(),
+      }, `Add ${title} PNG`);
+      assets.append(addButton, uploadInput);
+    };
+
+    const addLayerButton = h('button', {
+      type: 'button',
+      class: 'btn sm',
+      onclick: () => {
+        if (D.bannerLayers.length >= 50) { alert('You can add up to 50 custom card layers.'); return; }
+        const item = {
+          id: uid(),
+          name: `Layer ${D.bannerLayers.length + 1}`,
+          image: '',
+          naturalWidth: 0,
+          naturalHeight: 0,
+          transform: { x: 334, y: 510, scale: 1 },
+        };
+        D.bannerLayers.push(item);
+        D.bannerDefaults.layerOrder = getLayerOrder();
+        activeLayer = 'custom:' + item.id;
+        touch();
+        renderLayerButtons();
+        renderAssets();
+        renderCanvasAssets();
+      },
+    }, 'Add card layer');
+
+    for (const key of Object.keys(categoryMap)) {
+      const [collectionKey] = categoryMap[key];
+      const items = D[collectionKey] = Array.isArray(D[collectionKey]) ? D[collectionKey] : [];
+      items.forEach(item => layerTransform(item));
+    }
+    if (previousCanvasVersion < 4) {
+      D.bannerDefaults.canvasVersion = 4;
+    }
+    D.bannerLayers.forEach(item => layerTransform(item));
+    renderLayerButtons();
+    left.append(
+      layerButtons,
+      addLayerButton,
+      h('hr'),
+      h('strong', {}, 'Imported PNGs'),
+      assets,
+    );
+    wrapper.append(left, canvas);
+    renderAssets();
+    renderCanvasAssets();
+    return wrapper;
+  }
+
   function playerBannerSpriteSection(key, title, defaultKey) {
     const items = D[key] = Array.isArray(D[key]) ? D[key] : [];
     const requirementDefaults = {
@@ -1268,11 +1814,14 @@ const MHLA = (() => {
     return [
       head('Player Banners', add),
       h('p', { class: 'help' }, 'Players can equip unlocked badges and banner sprites in the in-game player card. One global default can be set for each sprite type.'),
+      h('h3', { style: 'margin-top:18px' }, 'Banner Layer Editor'),
+      h('p', { class: 'help' }, 'Drag PNGs on the 849 × 1200 canvas to position them, and drag layer rows to reorder the stack. Add custom card layers and position the player name and value separately. Badge circles and stat placeholders are editor guides only.'),
+      bannerLayerEditor(),
       h('div', { class: 'ed' }, field('Default Badge', defaultBadgeSelect,
         'Used in the first badge slot for every player until the player equips a badge.')),
       h('h3', { style: 'margin-top:18px' }, 'Badges'),
       cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.'),
-      ...playerBannerSpriteSection('bannerSprites', 'Banner', 'banner'),
+      ...playerBannerSpriteSection('backgroundSprites', 'Background', 'background'),
       ...playerBannerSpriteSection('helmetSprites', 'Helmet', 'helmet'),
       ...playerBannerSpriteSection('torsoSprites', 'Torso', 'torso'),
       ...playerBannerSpriteSection('stickSprites', 'Stick', 'stick'),
