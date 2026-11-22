@@ -36,16 +36,19 @@
 
     const config = ensureConfig(signup);
     const defaults = signup.bannerDefaults || {};
+    const badgeFrameSize = 500;
+    const badgeImageSize = 400;
+    const badgeScaleRatio = 184 / badgeImageSize;
     const targeting = ['badges', 'stats'].includes(options.targeting) ? options.targeting : '';
     const onTarget = typeof options.onTarget === 'function' ? options.onTarget : () => {};
     const clampScale = value => Math.max(0.1, Math.min(5, Number(value) || 1));
-    const transformAt = (values, index, fallback) => {
+    const transformAt = (values, index, fallback, minScale = 0.1) => {
       const transform = Array.isArray(values) && values[index] && typeof values[index] === 'object'
         ? values[index] : fallback;
       return {
         x: Number.isFinite(Number(transform.x)) ? Number(transform.x) : fallback.x,
         y: Number.isFinite(Number(transform.y)) ? Number(transform.y) : fallback.y,
-        scale: clampScale(transform.scale),
+        scale: Math.max(minScale, Math.min(5, Number(transform.scale) || 1)),
       };
     };
     const makeTarget = (element, category, target) => {
@@ -153,8 +156,20 @@
     for (let index = 0; index < 3; index++) {
       const equipped = badges.find(item => item.id === badgeSlots[index] && item.unlocked && item.image);
       const badge = equipped || (index === 0 ? defaultBadge : null);
-      const transform = transformAt(defaults.badgeTransforms, index, { x: [50, 332, 614][index], y: 180, scale: 1 });
-      const scale = clampScale((Number(badge && badge.scale) || 1) * transform.scale);
+      let transform = transformAt(defaults.badgeTransforms, index,
+        { x: [50, 332, 614][index], y: 180, scale: 1 }, 0.02);
+      if ((Number(defaults.canvasVersion) || 0) < 6) {
+        const migratedScale = transform.scale * badgeScaleRatio;
+        const inset = (badgeFrameSize - badgeImageSize) * migratedScale / 2;
+        transform = {
+          x: transform.x - inset,
+          y: transform.y - inset,
+          scale: migratedScale,
+        };
+      }
+      const badgeScale = badge
+        ? badgeScaleRatio * clampScale((Number(badge.scale) || 1) * (transform.scale / badgeScaleRatio))
+        : 0;
       if (badge) {
         const image = document.createElement('img');
         image.className = 'player-banner-image';
@@ -163,10 +178,12 @@
         image.setAttribute('aria-hidden', 'true');
         image.dataset.layerKey = `badge-slot:${index}`;
         image.style.zIndex = '200';
-        image.style.left = `${transform.x}px`;
-        image.style.top = `${transform.y}px`;
-        image.style.width = `${184 * scale}px`;
-        image.style.height = `${184 * scale}px`;
+        const frameSize = badgeFrameSize * transform.scale;
+        const imageSize = badgeImageSize * badgeScale;
+        image.style.left = `${transform.x + (frameSize - imageSize) / 2}px`;
+        image.style.top = `${transform.y + (frameSize - imageSize) / 2}px`;
+        image.style.width = `${imageSize}px`;
+        image.style.height = `${imageSize}px`;
         canvas.append(image);
       }
       if (targeting === 'badges') {
@@ -177,8 +194,8 @@
         target.style.zIndex = '201';
         target.style.left = `${transform.x}px`;
         target.style.top = `${transform.y}px`;
-        target.style.width = `${184 * scale}px`;
-        target.style.height = `${184 * scale}px`;
+        target.style.width = `${badgeFrameSize * transform.scale}px`;
+        target.style.height = `${badgeFrameSize * transform.scale}px`;
         makeTarget(target, 'badges', { category: 'badges', slot: index });
         canvas.append(target);
       }

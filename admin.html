@@ -174,8 +174,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-player-text-guide{position:absolute;z-index:100;color:#f2eee5;font:500 34px var(--disp);text-shadow:0 2px 3px #000;white-space:nowrap;cursor:move;user-select:none}
 .banner-player-name-guide{transform-origin:top center}
 .banner-player-value-guide{font-size:28px;color:var(--gold)}
-.banner-badge-guide{position:absolute;z-index:200;box-sizing:border-box;width:184px;height:184px;border:1px solid transparent;border-radius:0;pointer-events:auto;cursor:move}
-.banner-badge-guide:before{content:"";position:absolute;inset:0;border:1px solid rgba(201,163,92,.45);border-radius:50%;pointer-events:none}
+.banner-badge-guide{position:absolute;z-index:200;box-sizing:border-box;width:500px;height:500px;border:1px dashed rgba(201,163,92,.45);border-radius:0;pointer-events:auto;cursor:move}
+.banner-badge-guide:before{content:"";position:absolute;inset:10%;border:1px dashed rgba(201,163,92,.65);border-radius:50%;pointer-events:none}
 .banner-stat-guide{position:absolute;z-index:300;color:var(--primary);font:500 15px var(--disp);white-space:nowrap;cursor:move;user-select:none}
 .banner-stat-guide-value{position:absolute;z-index:301;color:var(--gold);font:500 64px var(--disp);cursor:move}
 
@@ -1136,14 +1136,15 @@ const MHLA = (() => {
     const canvasWidth = 849;
     const canvasHeight = 1200;
     const previousCanvasVersion = Number(D.bannerDefaults.canvasVersion) || 0;
+    const badgeScaleRatio = 184 / 400;
     const defaultBadgeTransforms = [50, 332, 614].map(x => ({ x, y: 180, scale: 1 }));
     const defaultStatTransforms = [760, 900, 1040].map(y => ({ x: 50, y, scale: 1 }));
     const defaultStatValueTransforms = [803, 943, 1083].map(y => ({ x: 50, y, scale: 1 }));
-    const normalizeTransform = (value, fallback, migrateLegacy) => {
+    const normalizeTransform = (value, fallback, migrateLegacy, minScale = 0.1) => {
       const transform = value && typeof value === 'object' ? value : {};
       let x = Number(transform.x);
       let y = Number(transform.y);
-      const scale = Math.max(0.1, Math.min(5, Number(transform.scale) || 1));
+      const scale = Math.max(minScale, Math.min(5, Number(transform.scale) || 1));
       if (!Number.isFinite(x) || !Number.isFinite(y)) return { ...fallback, scale };
       if (migrateLegacy && Math.abs(x) <= 2 && Math.abs(y) <= 2)
         return { ...fallback, scale };
@@ -1157,12 +1158,19 @@ const MHLA = (() => {
         scale,
       };
     };
-    const normalizePositions = (key, defaults) => {
+    const normalizePositions = (key, defaults, minScale = 0.1) => {
       const values = Array.isArray(D.bannerDefaults[key]) ? D.bannerDefaults[key].slice(0, 3) : [];
       D.bannerDefaults[key] = defaults.map((fallback, index) =>
-        normalizeTransform(values[index], fallback, previousCanvasVersion < 2));
+        normalizeTransform(values[index], fallback, previousCanvasVersion < 2, minScale));
     };
-    normalizePositions('badgeTransforms', defaultBadgeTransforms);
+    normalizePositions('badgeTransforms', defaultBadgeTransforms, 0.02);
+    if (previousCanvasVersion < 6) {
+      D.bannerDefaults.badgeTransforms = D.bannerDefaults.badgeTransforms.map(transform => {
+        const scale = transform.scale * badgeScaleRatio;
+        const inset = (500 - 400) * scale / 2;
+        return { x: transform.x - inset, y: transform.y - inset, scale };
+      });
+    }
     normalizePositions('statTransforms', defaultStatTransforms);
     normalizePositions('statValueTransforms', defaultStatValueTransforms);
     const playerNameTransform = previousCanvasVersion < 2
@@ -1212,11 +1220,13 @@ const MHLA = (() => {
       const component = selectedComponent;
       const update = (property, input) => {
         const value = Number(input.value);
-        const min = property === 'scale' ? 0.1 : property === 'x' ? -canvasWidth : -canvasHeight;
+        const min = property === 'scale'
+          ? component.key.startsWith('badge-slot:') ? 0.02 : 0.1
+          : property === 'x' ? -canvasWidth : -canvasHeight;
         const max = property === 'scale' ? 5 : property === 'x' ? canvasWidth * 2 : canvasHeight * 2;
         if (!input.value || !Number.isFinite(value) || value < min || value > max) {
           input.setCustomValidity(property === 'scale'
-            ? 'Enter a scale factor from 0.1 to 5.'
+            ? `Enter a scale factor from ${min} to 5.`
             : `Enter a position from ${min} to ${max} pixels.`);
           input.reportValidity();
           input.value = scaleString(component.transform[property]);
@@ -1242,7 +1252,7 @@ const MHLA = (() => {
       });
       const scaleInput = h('input', {
         type: 'number',
-        min: 0.1,
+        min: component.key.startsWith('badge-slot:') ? 0.02 : 0.1,
         max: 5,
         step: 0.01,
         value: scaleString(component.transform.scale),
@@ -1352,8 +1362,8 @@ const MHLA = (() => {
       element.style.left = `${Math.round(x)}px`;
       element.style.top = `${Math.round(y)}px`;
     };
-    const applyGuideTransform = (element, transform) => {
-      const scale = Math.max(0.1, Math.min(5, Number(transform.scale) || 1));
+    const applyGuideTransform = (element, transform, minScale = 0.1) => {
+      const scale = Math.max(minScale, Math.min(5, Number(transform.scale) || 1));
       element.style.left = `${Number(transform.x) || 0}px`;
       element.style.top = `${Number(transform.y) || 0}px`;
       element.style.transform = `scale(${scale})`;
@@ -1523,24 +1533,24 @@ const MHLA = (() => {
           || items.find(item => item.image);
         if (selected) renderLayerImage(selected, zIndex);
       });
-      if (!showEditorGuides) {
-        const defaultBadge = D.badges.find(item => item.id === D.bannerDefaults.badge && item.image);
-        if (defaultBadge) {
-          const transform = D.bannerDefaults.badgeTransforms[0];
-          const scale = Math.max(0.1, Math.min(5,
-            (Number(defaultBadge.scale) || 1) * (Number(transform.scale) || 1)));
-          const badge = h('img', {
-            src: defaultBadge.image,
-            alt: '',
-            class: 'banner-layer-item',
-            style: 'z-index:200',
-          });
-          badge.style.width = `${184 * scale}px`;
-          badge.style.height = `${184 * scale}px`;
-          badge.style.left = `${transform.x}px`;
-          badge.style.top = `${transform.y}px`;
-          addCanvasComponent(badge, 'badge-art', 'Badge artwork', transform, 'badge-art');
-        }
+      const defaultBadge = D.badges.find(item => item.id === D.bannerDefaults.badge && item.image);
+      if (defaultBadge && (!showEditorGuides || !hiddenEditorLayers.has('badges'))) {
+        const transform = D.bannerDefaults.badgeTransforms[0];
+        const scale = badgeScaleRatio * Math.max(0.1, Math.min(5,
+          (Number(defaultBadge.scale) || 1) * (transform.scale / badgeScaleRatio)));
+        const frameSize = 500 * transform.scale;
+        const imageSize = 400 * scale;
+        const badge = h('img', {
+          src: defaultBadge.image,
+          alt: '',
+          class: 'banner-layer-item',
+          style: `z-index:${showEditorGuides ? 199 : 200}`,
+        });
+        badge.style.width = `${imageSize}px`;
+        badge.style.height = `${imageSize}px`;
+        badge.style.left = `${transform.x + (frameSize - imageSize) / 2}px`;
+        badge.style.top = `${transform.y + (frameSize - imageSize) / 2}px`;
+        canvas.append(badge);
       }
 
       if (showEditorGuides) {
@@ -1559,9 +1569,9 @@ const MHLA = (() => {
               class: 'banner-badge-guide',
               title: `Badge slot ${index + 1}`,
             });
-            badgeGuide.style.width = '184px';
-            badgeGuide.style.height = '184px';
-            applyGuideTransform(badgeGuide, badgeTransform);
+            badgeGuide.style.width = '500px';
+            badgeGuide.style.height = '500px';
+            applyGuideTransform(badgeGuide, badgeTransform, 0.02);
             addCanvasComponent(badgeGuide, `badge-slot:${index}`, `Badge slot ${index + 1}`, badgeTransform);
           }
 
@@ -1858,8 +1868,8 @@ const MHLA = (() => {
       const items = D[collectionKey] = Array.isArray(D[collectionKey]) ? D[collectionKey] : [];
       items.forEach(item => layerTransform(item));
     }
-    if (previousCanvasVersion < 5) {
-      D.bannerDefaults.canvasVersion = 5;
+    if (previousCanvasVersion < 6) {
+      D.bannerDefaults.canvasVersion = 6;
       touch();
     }
     D.bannerLayers.forEach(item => layerTransform(item));
