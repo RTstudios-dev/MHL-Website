@@ -447,13 +447,20 @@ const modRosterSnapshot = data => {
       if (selected && selected.image) return selected.image;
       return resolvedDefaultSprite(type, defaultId);
     };
-    const selectedBadges = equippedBadgeSlotsFor(data, signup).map(id => {
+    const selectedBadgeIds = equippedBadgeSlotsFor(data, signup);
+    const selectedBadges = selectedBadgeIds.map(id => {
       const badge = badgesById.get(id);
       return badge ? badge.image : '';
     });
+    const selectedBadgeScales = selectedBadgeIds.map(id => {
+      const badge = badgesById.get(id);
+      return badge ? badge.scale : 1;
+    });
     const defaultBadge = data.badges.find(badge => badge.id === defaults.badge);
-    if (!selectedBadges[0] && defaultBadge && defaultBadge.image)
+    if (!selectedBadges[0] && defaultBadge && defaultBadge.image) {
       selectedBadges[0] = defaultBadge.image;
+      selectedBadgeScales[0] = defaultBadge.scale;
+    }
     const transformOrDefault = value => ({
       x: Number.isFinite(Number(value && value.x)) ? Number(value.x) : 0,
       y: Number.isFinite(Number(value && value.y)) ? Number(value.y) : 0,
@@ -461,6 +468,49 @@ const modRosterSnapshot = data => {
       rotation: Number.isFinite(Number(value && value.rotation)) ? Number(value.rotation) : 0,
       equipped: !(value && value.equipped === false),
     });
+    const canvasTransforms = (values, fallback) => [0, 1, 2].map(index =>
+      transformOrDefault(values && values[index] || fallback(index)));
+    const canvasSprite = (type, selectedId, defaultId) => {
+      const available = spriteCollections[type].filter(sprite => badgeIsUnlocked(data, signup, sprite));
+      const selected = selectedId ? spriteByTypeAndId[type].get(selectedId) : null;
+      const fallback = defaultId ? spriteByTypeAndId[type].get(defaultId) : null;
+      const item = [selected, fallback, ...available].find(sprite =>
+        sprite && sprite.image && available.includes(sprite));
+      return item ? {
+        image: item.image,
+        naturalWidth: item.naturalWidth,
+        naturalHeight: item.naturalHeight,
+        transform: transformOrDefault(item.transform),
+      } : null;
+    };
+    const bannerCanvas = {
+      background: canvasSprite('background', config.backgroundSpriteId, defaults.background),
+      helmet: canvasSprite('helmet', config.helmetSpriteId, defaults.helmet),
+      torso: canvasSprite('torso', config.torsoSpriteId, defaults.torso),
+      stick: canvasSprite('stick', config.stickSpriteId, defaults.stick),
+      puck: canvasSprite('puck', config.puckSpriteId, defaults.puck),
+      customLayers: (data.bannerLayers || []).map(layer => ({
+        id: layer.id,
+        image: layer.image,
+        naturalWidth: layer.naturalWidth,
+        naturalHeight: layer.naturalHeight,
+        transform: transformOrDefault(layer.transform),
+      })),
+      layerOrder: defaults.layerOrder || [],
+      canvasVersion: defaults.canvasVersion || 0,
+      badgeTransforms: canvasTransforms(defaults.badgeTransforms, index => ({
+        x: [50, 332, 614][index], y: 180, scale: 1,
+      })),
+      badgeScales: selectedBadgeScales,
+      statTransforms: canvasTransforms(defaults.statTransforms, index => ({
+        x: 50, y: [760, 900, 1040][index], scale: 1,
+      })),
+      statValueTransforms: canvasTransforms(defaults.statValueTransforms, index => ({
+        x: 50, y: [803, 943, 1083][index], scale: 1,
+      })),
+      playerNameTransform: transformOrDefault(defaults.playerNameTransform),
+      playerValueTransform: transformOrDefault(defaults.playerValueTransform),
+    };
     players.push({
       steamId,
       name: signup.name,
@@ -469,6 +519,7 @@ const modRosterSnapshot = data => {
       photo: okImage(signup.photo) ? signup.photo : '',
       cardArtwork: okImage(signup.cardArtwork) ? signup.cardArtwork : '',
       bannerConfig: sanitizeBannerConfig(signup.bannerConfig),
+      bannerCanvas,
       badgeImages: selectedBadges,
       bannerImage: resolvedSprite('banner', config.bannerSpriteId, defaults.banner),
       backgroundImage: resolvedSprite('background', config.backgroundSpriteId, defaults.background),
