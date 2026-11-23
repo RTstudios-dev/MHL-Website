@@ -33,7 +33,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -907,6 +907,12 @@ function sanitize(d) {
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
   const signupIds = new Set(signups.map(signup => signup.id));
+  const bannedSteamIds = [...new Set((Array.isArray(d.bannedSteamIds) ? d.bannedSteamIds : [])
+    .map(value => String(value || '').trim())
+    .filter(value => /^\d{17}$/.test(value)))];
+  const playerListExclusions = [...new Set((Array.isArray(d.playerListExclusions) ? d.playerListExclusions : [])
+    .map(value => str(value, 40))
+    .filter(value => signupIds.has(value)))];
   const badgeIds = new Set();
   const badges = (Array.isArray(d.badges) ? d.badges : []).slice(0, 500).map(badge => {
     const source = badge && typeof badge === 'object' ? badge : {};
@@ -1074,6 +1080,7 @@ function sanitize(d) {
   syncSignupPlayers({ players, signups });
   return {
     site, teams, rounds, matches, players, news, rules, signups, badges, draft,
+    bannedSteamIds, playerListExclusions,
     bannerSprites, backgroundSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
     bannerLayers, bannerDefaults,
   };
@@ -2163,10 +2170,14 @@ const server = http.createServer(async (req, res) => {
       if (syncSignupPlayers(data)) writeData(data);
       attachTrackedStats(data);
       if (!isAdmin(req)) {
+        const hiddenSignupIds = new Set(data.playerListExclusions || []);
+        data.players = data.players.filter(player => !hiddenSignupIds.has(player.signupId));
         data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
         data.players = data.players.map(({ steam, ...player }) => player);
         data.badges = data.badges.map(({ manualPlayerIds, ...badge }) => badge);
+        delete data.bannedSteamIds;
+        delete data.playerListExclusions;
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
       const { playerStats, modStatEventIds, statsImportLogs, ...responseData } = data;
@@ -2221,8 +2232,25 @@ const server = http.createServer(async (req, res) => {
         }
         playoffCounts[stage]++;
       }
-      const clean = sanitize(incoming);
       const current = readData();
+      const currentExclusions = new Set(Array.isArray(current.playerListExclusions) ? current.playerListExclusions : []);
+      const requestedSignups = Array.isArray(incoming.signups) ? incoming.signups : current.signups;
+      const incomingSignupIds = new Set(requestedSignups
+        .filter(signup => signup && typeof signup === 'object')
+        .map(signup => signup.id));
+      const removedExcludedSignupIds = new Set([...currentExclusions]
+        .filter(signupId => !incomingSignupIds.has(signupId)));
+      const incomingPlayers = Array.isArray(incoming.players) ? incoming.players : [];
+      const clean = sanitize({
+        ...incoming,
+        signups: requestedSignups,
+        players: incomingPlayers.filter(player =>
+          !(player && removedExcludedSignupIds.has(player.signupId))),
+      });
+      const existingBans = Array.isArray(current.bannedSteamIds)
+        ? current.bannedSteamIds.filter(value => /^\d{17}$/.test(String(value)))
+        : [];
+      clean.bannedSteamIds = [...new Set([...existingBans, ...clean.bannedSteamIds])];
       if (!Array.isArray(incoming.badges)) clean.badges = current.badges;
       clean.playerStats = current.playerStats && typeof current.playerStats === 'object' ? { ...current.playerStats } : {};
       clean.modStatEventIds = Array.isArray(current.modStatEventIds) ? current.modStatEventIds : [];
@@ -2244,7 +2272,7 @@ const server = http.createServer(async (req, res) => {
         clean.playerStats[signupId] = { ...trackedStatsFor(current, signupId), ...stats };
       }
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
-      const incomingSignups = new Map((Array.isArray(incoming.signups) ? incoming.signups : [])
+      const incomingSignups = new Map(requestedSignups
         .filter(signup => signup && typeof signup === 'object')
         .map(signup => [signup.id, signup]));
       clean.signups.forEach(signup => {
@@ -2256,9 +2284,11 @@ const server = http.createServer(async (req, res) => {
           signup.cardArtwork = previous.cardArtwork || '';
         if (previous && (!rawSignup || !Object.prototype.hasOwnProperty.call(rawSignup, 'bannerConfig')))
           signup.bannerConfig = previous.bannerConfig || sanitizeBannerConfig(null);
-        byId.set(signup.id, signup);
       });
-      clean.signups = [...byId.values()].slice(0, 5000);
+      clean.signups = clean.signups.slice(0, 5000);
+      const remainingSignupIds = new Set(clean.signups.map(signup => signup.id));
+      for (const signupId of Object.keys(clean.playerStats))
+        if (!remainingSignupIds.has(signupId)) delete clean.playerStats[signupId];
       const badgeIds = new Set(clean.badges.map(badge => badge.id));
       for (const signup of clean.signups) {
         const usedBadges = new Set();
@@ -2340,6 +2370,9 @@ const server = http.createServer(async (req, res) => {
         return send(res, 400, { error: 'The Steam ID must match the Steam account you are signed in with.' });
       }
       const data = readData();
+      if (data.bannedSteamIds.includes(submittedSteamId)) {
+        return send(res, 403, { error: 'This Steam account is banned from signing up. Contact league staff if you believe this is a mistake.' });
+      }
       const discordKey = discord.toLowerCase(), profileKey = steamKey(steam);
       if (player && player.lookupFailed && profileKey === steamKey(player.profileUrl)) {
         return send(res, 503, { error: 'Steam could not resolve your profile link right now. Please try Steam sign-in again or enter your profile URL manually.' });

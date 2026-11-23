@@ -142,6 +142,13 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-component-properties{margin-top:12px}
 .banner-component-properties[hidden]{display:none}
 .banner-component-properties strong{font-family:var(--disp);font-size:20px;font-weight:500}
+.banner-admin-section{margin-top:18px}
+.banner-admin-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.banner-admin-section-toggle{display:flex;align-items:center;gap:10px;flex:1;padding:0;border:0;background:none;color:var(--gold);cursor:pointer;text-align:left;font:inherit}
+.banner-admin-section-toggle strong{font-family:var(--disp);font-size:22px;font-weight:500}
+.banner-admin-section-toggle span:last-child{font-size:20px}
+.banner-admin-section-content{margin-top:12px}
+.banner-admin-section-content[hidden]{display:none}
 .banner-component-coordinate-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .banner-component-selected{outline:2px solid var(--gold)!important;outline-offset:1px!important}
 .badge-requirements{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
@@ -204,6 +211,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 const MHLA = (() => {
   const root = document.getElementById('root');
   let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '';
+  const bannerSectionOpen = { editor: true, badges: true, background: true, helmet: true, torso: true, stick: true, puck: true };
   let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
   const playoffMatchLimits = { quarterfinals: 4, semifinals: 2, finals: 1 };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -287,6 +295,7 @@ const MHLA = (() => {
     const match = String(value || '').trim().match(/^https:\/\/(?:www\.)?steamcommunity\.com\/profiles\/(\d{17})\/?$/i);
     return match ? match[1] : '';
   };
+  const signupSteamId = signup => steamIdInUrl(signup.steam) || (/^\d{17}$/.test(signup.steamId || '') ? signup.steamId : '');
   const manualSteamIdInput = signup => h('input', {
     type: 'text', inputmode: 'numeric', maxlength: 17,
     'aria-label': `Steam ID for ${signup.name}`,
@@ -343,6 +352,8 @@ const MHLA = (() => {
     const r = await fetch('/api/data', { cache: 'no-store' });
     D = await r.json();
     D.signups = Array.isArray(D.signups) ? D.signups : [];
+    D.bannedSteamIds = Array.isArray(D.bannedSteamIds) ? D.bannedSteamIds : [];
+    D.playerListExclusions = Array.isArray(D.playerListExclusions) ? D.playerListExclusions : [];
     D.badges = Array.isArray(D.badges) ? D.badges : [];
     D.bannerSprites = Array.isArray(D.bannerSprites) ? D.bannerSprites : [];
     D.helmetSprites = Array.isArray(D.helmetSprites) ? D.helmetSprites : [];
@@ -835,7 +846,8 @@ const MHLA = (() => {
 
   // players
   function players() {
-    const list = D.players.filter(p => !playerFilter || p.team === playerFilter);
+    const list = D.players.filter(p =>
+      !D.playerListExclusions.includes(p.signupId) && (!playerFilter || p.team === playerFilter));
     const tot = MHL.playerTotals(D);
     const signupForPlayer = player => player.signupId && D.signups.find(signup => signup.id === player.signupId);
     const editablePlayerData = player => signupForPlayer(player) || player;
@@ -934,7 +946,7 @@ const MHLA = (() => {
           h('p', {}, 'Select the pending stats file from the game server. The file is read automatically; review the preview, then import.'),
           fileInput, ' ', importButton, status);
       })(),
-      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Edit their team, position, name, Discord username, number, values, goals, assists, saves, stick saves, body saves, passes, wins and losses here. Game mod events continue adding to the tracked stats. Point requirements are set independently under Settings.'),
+      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Remove hides a signup-linked player from the Players list without deleting the signup; remove the signup separately in Season 2 Player Sign Ups. Edit team, position, name, Discord username, number, values, and tracked stats here. Game mod events continue adding to tracked stats. Point requirements are set independently under Settings.'),
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
@@ -958,13 +970,19 @@ const MHLA = (() => {
             playerStatCell(p, 'passes', 'Passes'),
             playerStatCell(p, 'wins', 'Wins'),
             playerStatCell(p, 'losses', 'Losses'),
-          h('td', {}, h('button', { class: 'btn del sm', type: 'button', disabled: !!p.signupId, title: p.signupId ? 'Manage this player through the Season 2 Player Sign Ups tab.' : '', onclick: () => {
+          h('td', {}, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
+            if (p.signupId) {
+              if (!confirm(`Remove ${p.name || 'this player'} from the Players list? Their Season 2 signup will remain. To remove the signup too, use its separate action in Season 2 Player Sign Ups. Press Save changes to apply.`)) return;
+              if (!D.playerListExclusions.includes(p.signupId)) D.playerListExclusions.push(p.signupId);
+              touch(); draw();
+              return;
+            }
             const t = tot[p.id] || { g: 0, a: 0 };
             if (!confirm(`Delete ${p.name || 'this player'}?` + (t.g || t.a ? ` Their ${t.g} goals and ${t.a} assists are removed from the matches too.` : ''))) return;
             D.players = D.players.filter(x => x !== p);
             D.matches.forEach(m => (m.goals || []).forEach(x => ['s', 'a1', 'a2'].forEach(k => { if (x[k] === p.id) x[k] = ''; })));
             touch(); draw();
-          } }, 'Delete'))))))) : h('div', { class: 'empty' }, h('b', {}, 'No players'), 'Press Add player to add one.'),
+          } }, p.signupId ? 'Remove' : 'Delete'))))))) : h('div', { class: 'empty' }, h('b', {}, 'No players'), 'Press Add player to add one.'),
     ];
   }
 
@@ -1035,6 +1053,39 @@ const MHLA = (() => {
         touch();
       },
     });
+    const removeSignup = signup => {
+      if (!confirm(`Remove ${signup.name || 'this signup'} from Season 2 Player Sign Ups? This is separate from removing a player in the Players tab. Press Save changes to apply.`)) return;
+      const wasExcluded = D.playerListExclusions.includes(signup.id);
+      if (wasExcluded) {
+        D.players = D.players.filter(player => player.signupId !== signup.id);
+        D.playerListExclusions = D.playerListExclusions.filter(id => id !== signup.id);
+      } else {
+        D.players.filter(player => player.signupId === signup.id).forEach(player => {
+          player.signupId = '';
+          player.steam = '';
+          player.signupPosition = '';
+          player.captain = '';
+        });
+      }
+      D.signups = D.signups.filter(item => item.id !== signup.id);
+      D.teams.forEach(team => {
+        if (team.captainSignupId === signup.id) team.captainSignupId = '';
+      });
+      D.draft.picks = D.draft.picks.filter(pick => pick.signupId !== signup.id);
+      delete trackedStatsEdits[signup.id];
+      touch(); draw();
+    };
+    const banSteamId = signup => {
+      const steamId = signupSteamId(signup);
+      if (!steamId) {
+        alert('Enter a valid 17-digit Steam ID before banning this signup.');
+        return;
+      }
+      if (D.bannedSteamIds.includes(steamId)) return;
+      if (!confirm(`Permanently ban Steam ID ${steamId} from submitting future signups? This will not remove the existing signup. Press Save changes to apply.`)) return;
+      D.bannedSteamIds.push(steamId);
+      touch(); draw();
+    };
     const clearTeams = h('button', {
       class: 'btn del sm',
       type: 'button',
@@ -1052,7 +1103,7 @@ const MHLA = (() => {
     }, 'Clear all team assignments');
     return [
       head('Season 2 Player Sign Ups', clearTeams),
-      h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Skater and Goalie Values in euros here. Steam profile links are only shown in admin."),
+      h('p', { class: 'help' }, "Edit signup answers, assign a team, and set each player's Skater and Goalie Values in euros here. Remove a signup independently, or permanently ban its Steam ID from future signup submissions. Steam profile links are only shown in admin."),
       h('div', { class: 'caps-edit ed' },
         field('Ice Cap €', capInput('iceCap', 'Ice Cap €')),
         field('Team Cap €', capInput('teamCap', 'Team Cap €'))),
@@ -1091,7 +1142,7 @@ const MHLA = (() => {
             h('option', { value: 'value-asc', selected: signupSort === 'value-asc' }, 'Lowest Value')))),
       allSignups.length ? h('p', { id: 'signupNoResults', class: 'help', hidden: visibleSignupCount > 0 }, 'No Season 2 players match your search.') : null,
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable signup-table', hidden: visibleSignupCount === 0 },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Manual Steam ID', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Skater Value (€)', 'Goalie Value (€)', 'Profile picture'].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Steam profile link', 'Manual Steam ID', 'Hours on Puck', 'Position', 'Captain?', 'Team', 'Skater Value (€)', 'Goalie Value (€)', 'Profile picture', 'Actions'].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(signup => h('tr', { hidden: !matchesSearch(signup), 'data-signup-id': signup.id },
           h('td', {}, text(signup, 'name', { maxlength: 40, 'aria-label': `In-game name for ${signup.name}`, required: true })),
           h('td', {}, text(signup, 'discord', { maxlength: 80, 'aria-label': `Discord username for ${signup.name}`, required: true })),
@@ -1124,6 +1175,29 @@ const MHLA = (() => {
           h('td', {}, valueInput(signup, 'skaterValue', 'Skater Value')),
           h('td', {}, valueInput(signup, 'goalieValue', 'Goalie Value')),
           h('td', {}, imgPicker(signup, 'photo', '')),
+          h('td', {}, h('div', { class: 'row' },
+            h('button', {
+              class: 'btn del sm', type: 'button',
+              'aria-label': `Remove ${signup.name} from Season 2 signups`,
+              onclick: () => removeSignup(signup),
+            }, 'Remove signup'),
+            D.playerListExclusions.includes(signup.id) ? h('button', {
+              class: 'btn sm', type: 'button',
+              'aria-label': `Restore ${signup.name} to the Players list`,
+              onclick: () => {
+                D.playerListExclusions = D.playerListExclusions.filter(id => id !== signup.id);
+                touch(); draw();
+              },
+            }, 'Restore player') : null,
+            (() => {
+              const steamId = signupSteamId(signup);
+              const banned = !!steamId && D.bannedSteamIds.includes(steamId);
+              return h('button', {
+                class: 'btn del sm', type: 'button',
+                title: !steamId ? 'Add a valid 17-digit Steam ID before banning.' : banned ? 'This Steam ID is permanently banned.' : '',
+                onclick: () => banSteamId(signup),
+              }, banned ? 'Banned' : 'Ban Steam ID');
+            })()))),
         ))))) : h('div', { class: 'empty' }, h('b', {}, 'No Season 2 signups yet'), 'New entries from the public signup form will appear here.'),
     ];
   }
@@ -1889,6 +1963,29 @@ const MHLA = (() => {
     return wrapper;
   }
 
+  function bannerComponentSection(key, title, action, ...content) {
+    const expanded = bannerSectionOpen[key] !== false;
+    const indicator = h('span', { 'aria-hidden': 'true' }, expanded ? '−' : '+');
+    const body = h('div', { class: 'banner-admin-section-content', hidden: !expanded }, ...content);
+    const toggle = h('button', {
+      type: 'button',
+      class: 'banner-admin-section-toggle',
+      'aria-expanded': String(expanded),
+      'aria-label': `${expanded ? 'Minimise' : 'Expand'} ${title} section`,
+      onclick: event => {
+        bannerSectionOpen[key] = !bannerSectionOpen[key];
+        const isOpen = bannerSectionOpen[key];
+        body.hidden = !isOpen;
+        indicator.textContent = isOpen ? '−' : '+';
+        event.currentTarget.setAttribute('aria-expanded', String(isOpen));
+        event.currentTarget.setAttribute('aria-label', `${isOpen ? 'Minimise' : 'Expand'} ${title} section`);
+      },
+    }, h('strong', {}, title), indicator);
+    return h('section', { class: 'banner-admin-section' },
+      h('div', { class: 'banner-admin-section-heading' }, toggle, action),
+      body);
+  }
+
   function playerBannerSpriteSection(key, title, defaultKey) {
     const items = D[key] = Array.isArray(D[key]) ? D[key] : [];
     const requirementDefaults = {
@@ -2018,11 +2115,7 @@ const MHLA = (() => {
           }), 'Season 2 players')),
         manualAwards);
     });
-    return [
-      h('h3', { style: 'margin-top:18px' }, title),
-      defaultsRow,
-      h('div', { class: 'acts', style: 'margin:12px 0' },
-        h('button', { class: 'btn sm', type: 'button', onclick: () => {
+    const addButton = h('button', { class: 'btn sm', type: 'button', onclick: () => {
           items.push({
             id: uid(), name: `New ${title}`, description: '', image: '',
             transform: { x: 334, y: 510, scale: 1 },
@@ -2031,9 +2124,10 @@ const MHLA = (() => {
           });
           touch();
           draw();
-        } }, `Add ${title}`)),
-      cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, `No ${title.toLowerCase()} yet`), `Press Add ${title} to create one.`),
-    ];
+        } }, `Add ${title}`);
+    return bannerComponentSection(key, title, addButton,
+      defaultsRow,
+      cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, `No ${title.toLowerCase()} yet`), `Press Add ${title} to create one.`));
   }
 
   // collectible badges
@@ -2164,20 +2258,20 @@ const MHLA = (() => {
         selected: D.bannerDefaults.badge === badge.id,
       }, badge.name || 'Badge')));
     return [
-      head('Player Banners', add),
+      head('Player Banners'),
       h('p', { class: 'help' }, 'Players can equip unlocked badges and banner sprites in the in-game player card. One global default can be set for each sprite type.'),
-      h('h3', { style: 'margin-top:18px' }, 'Banner Layer Editor'),
-      h('p', { class: 'help' }, 'Uploaded sprite and card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. Only the selected component shows a box and X/Y coordinates at its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
-      bannerLayerEditor(),
-      h('div', { class: 'ed' }, field('Default Badge', defaultBadgeSelect,
-        'Shown in slot 1 for every player until they equip a different badge in that slot.')),
-      h('h3', { style: 'margin-top:18px' }, 'Badges'),
-      cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.'),
-      ...playerBannerSpriteSection('backgroundSprites', 'Background', 'background'),
-      ...playerBannerSpriteSection('helmetSprites', 'Helmet', 'helmet'),
-      ...playerBannerSpriteSection('torsoSprites', 'Torso', 'torso'),
-      ...playerBannerSpriteSection('stickSprites', 'Stick', 'stick'),
-      ...playerBannerSpriteSection('puckSprites', 'Puck', 'puck'),
+      bannerComponentSection('editor', 'Banner Layer Editor', null,
+        h('p', { class: 'help' }, 'Uploaded sprite and card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. Only the selected component shows a box and X/Y coordinates at its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
+        bannerLayerEditor()),
+      bannerComponentSection('badges', 'Badges', add,
+        h('div', { class: 'ed' }, field('Default Badge', defaultBadgeSelect,
+          'Shown in slot 1 for every player until they equip a different badge in that slot.')),
+        cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.')),
+      playerBannerSpriteSection('backgroundSprites', 'Background', 'background'),
+      playerBannerSpriteSection('helmetSprites', 'Helmet', 'helmet'),
+      playerBannerSpriteSection('torsoSprites', 'Torso', 'torso'),
+      playerBannerSpriteSection('stickSprites', 'Stick', 'stick'),
+      playerBannerSpriteSection('puckSprites', 'Puck', 'puck'),
     ];
   }
 
