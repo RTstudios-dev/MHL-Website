@@ -153,15 +153,23 @@
       const collection = collections[key];
       if (!collection) return;
       const items = collection.items;
-      const selectedId = config[collection.configKey];
-      const item = items.find(entry => entry.id === selectedId && entry.image)
-        || items.find(entry => entry.id === defaults[key] && entry.image)
-        || items.find(entry => entry.image);
-      if (key === 'torso' && item && String(item.name || '').trim()) {
-        const torsoName = String(item.name || '').trim().toLowerCase();
-        const background = collections.background.items.find(entry =>
+      const pairedBackgroundFor = torso => {
+        const name = String(torso && torso.name || '').trim().toLowerCase();
+        return name ? collections.background.items.find(entry =>
           entry.poseId === activePoseId && entry.image
-          && String(entry.name || '').trim().toLowerCase() === torsoName);
+          && String(entry.name || '').trim().toLowerCase() === name) : null;
+      };
+      const availableItems = items.filter(entry => {
+        if (entry.unlocked === false) return false;
+        const pairedBackground = key === 'torso' ? pairedBackgroundFor(entry) : null;
+        return !pairedBackground || pairedBackground.unlocked !== false;
+      });
+      const selectedId = config[collection.configKey];
+      const item = availableItems.find(entry => entry.id === selectedId && entry.image)
+        || availableItems.find(entry => entry.id === defaults[key] && entry.image)
+        || availableItems.find(entry => entry.image);
+      if (key === 'torso' && item) {
+        const background = pairedBackgroundFor(item);
         addImage(background, `sprite:${background && background.id || 'background'}`, zIndex);
       }
       addImage(item, `sprite:${item && item.id || key}`, zIndex,
@@ -170,7 +178,7 @@
 
     const badges = Array.isArray(signup.badges) ? signup.badges : [];
     const badgeSlots = Array.isArray(signup.badgeSlots) ? signup.badgeSlots : [];
-    const defaultBadge = badges.find(item => item.id === defaults.badge && item.image);
+    const defaultBadge = badges.find(item => item.id === defaults.badge && item.image && item.unlocked !== false);
     for (let index = 0; index < 3; index++) {
       const equipped = badges.find(item => item.id === badgeSlots[index] && item.unlocked && item.image);
       const badge = equipped || (index === 0 && !config.defaultBadgeCleared ? defaultBadge : null);

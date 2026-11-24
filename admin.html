@@ -466,9 +466,11 @@ const MHLA = (() => {
       }
       const cards = [...reskins].map(([name, representative]) => {
         representative.requirements = { ...requirementDefaults, ...(representative.requirements || {}) };
+        representative.requireAllStats = representative.requireAllStats !== false;
         const matchingItems = items.filter(item => String(item.name || '').trim() === name);
         const sync = () => matchingItems.forEach(item => {
           item.requirements = { ...representative.requirements };
+          item.requireAllStats = representative.requireAllStats;
           item.allPlayers = representative.allPlayers;
           item.season1Players = representative.season1Players;
           item.season2Players = representative.season2Players;
@@ -485,10 +487,19 @@ const MHLA = (() => {
               touch();
             },
           })));
+        const requireAllStats = h('label', { class: 'checkline' }, h('input', {
+          type: 'checkbox',
+          checked: representative.requireAllStats,
+          onchange: event => {
+            representative.requireAllStats = event.target.checked;
+            sync();
+            touch();
+          },
+        }), 'Require all stat requirements (otherwise any one)');
         return h('section', { class: 'ed badge-admin-card' },
           h('strong', {}, name),
           h('div', { class: 'badge-requirements' }, fields),
-          h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
+          requireAllStats,
           h('div', { class: 'badge-audiences' },
             h('label', { class: 'checkline' }, h('input', {
               type: 'checkbox', checked: representative.allPlayers,
@@ -1803,15 +1814,6 @@ const MHLA = (() => {
     const renderCanvasAssets = () => {
       canvas.classList.toggle('preview-mode', !showEditorGuides);
       canvas.querySelectorAll('.banner-layer-item,.banner-badge-guide,.banner-stat-guide,.banner-stat-guide-value,.banner-player-text-guide,.banner-component-position').forEach(item => item.remove());
-      const activePose = (D.bannerPoses || []).find(pose => pose.id === defaultPoseId());
-      if (activePose && activePose.backgroundImage) {
-        canvas.append(h('img', {
-          src: activePose.backgroundImage,
-          alt: '',
-          class: 'banner-layer-item',
-          style: 'z-index:1;width:849px;height:1200px;left:0;top:0;object-fit:contain;',
-        }));
-      }
       const layerOrder = getLayerOrder();
       layerOrder.forEach((layerKey, index) => {
         const zIndex = 10 + layerOrder.length - index;
@@ -2218,6 +2220,7 @@ const MHLA = (() => {
 
     const cards = items.map(item => {
       item.requirements = { ...requirementDefaults, ...(item.requirements || {}) };
+      item.requireAllStats = item.requireAllStats !== false;
       item.manualPlayerIds = Array.isArray(item.manualPlayerIds) ? item.manualPlayerIds : [];
       item.transform = item.transform && typeof item.transform === 'object'
         ? item.transform : { x: 334, y: 510, scale: 1 };
@@ -2266,6 +2269,11 @@ const MHLA = (() => {
             touch();
           },
         })));
+      const requireAllStats = h('label', { class: 'checkline' }, h('input', {
+        type: 'checkbox',
+        checked: item.requireAllStats,
+        onchange: event => { item.requireAllStats = event.target.checked; touch(); },
+      }), 'Require all stat requirements (otherwise any one)');
       const scaleControl = bannerScaleControl(item.image, item.transform.scale, value => {
           item.transform.scale = value;
           touch();
@@ -2306,7 +2314,7 @@ const MHLA = (() => {
             uploadInput)),
         scaleControl,
         h('div', { class: 'badge-requirements' }, requirementFields),
-        h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
+        requireAllStats,
         h('div', { class: 'badge-audiences' },
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: item.allPlayers,
@@ -2327,6 +2335,7 @@ const MHLA = (() => {
             id: uid(), name: `New ${title}`, description: '', image: '',
             transform: { x: 334, y: 510, scale: 1 },
             requirements: { ...requirementDefaults },
+            requireAllStats: true,
             allPlayers: false, season1Players: false, season2Players: false, manualPlayerIds: [],
           });
           touch();
@@ -2423,6 +2432,7 @@ const MHLA = (() => {
               scale: 1,
             },
             requirements: { ...requirementDefaults },
+            requireAllStats: true,
             allPlayers: false,
             season1Players: false, season2Players: false,
             manualPlayerIds: [],
@@ -2476,7 +2486,13 @@ const MHLA = (() => {
       })));
     const poses = D.bannerPoses.map(pose => {
       pose.requirements = { ...requirementDefaults, ...(pose.requirements || {}) };
+      pose.requireAllStats = pose.requireAllStats !== false;
       pose.manualPlayerIds = Array.isArray(pose.manualPlayerIds) ? pose.manualPlayerIds : [];
+      const requireAllStats = h('label', { class: 'checkline' }, h('input', {
+        type: 'checkbox',
+        checked: pose.requireAllStats,
+        onchange: event => { pose.requireAllStats = event.target.checked; touch(); },
+      }), 'Require all stat requirements (otherwise any one)');
       const previewInput = h('input', {
         type: 'file', accept: 'image/png', style: 'display:none',
         onchange: async event => {
@@ -2564,7 +2580,7 @@ const MHLA = (() => {
               pose.previewImage ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { pose.previewImage = ''; touch(); draw(); } }, 'Remove') : null),
             previewInput)),
         h('div', { class: 'badge-requirements' }, poseRequirementFields(pose)),
-        h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
+        requireAllStats,
         h('div', { class: 'badge-audiences' },
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: pose.allPlayers,
@@ -2589,6 +2605,7 @@ const MHLA = (() => {
         name: 'New Pose',
         previewImage: '',
         requirements: { ...requirementDefaults },
+        requireAllStats: true,
         allPlayers: false,
         season1Players: false, season2Players: false,
         manualPlayerIds: [],
@@ -2620,12 +2637,14 @@ const MHLA = (() => {
         id: uid(), name: 'New badge', description: '', image: '',
         scale: 1,
         requirements: { ...badgeRequirementDefaults },
+        requireAllStats: true,
         allPlayers: false, season1Players: false, season2Players: false, manualPlayerIds: [],
       });
       touch(); draw();
     } }, 'Add badge');
     const cards = D.badges.map(badge => {
       badge.requirements = { ...badgeRequirementDefaults, ...(badge.requirements || {}) };
+      badge.requireAllStats = badge.requireAllStats !== false;
       badge.manualPlayerIds = Array.isArray(badge.manualPlayerIds) ? badge.manualPlayerIds : [];
       badge.scale = Math.max(0.1, Math.min(5, Number(badge.scale) || 1));
       const uploadInput = h('input', {
@@ -2669,6 +2688,11 @@ const MHLA = (() => {
             touch();
           },
         })));
+      const requireAllStats = h('label', { class: 'checkline' }, h('input', {
+        type: 'checkbox',
+        checked: badge.requireAllStats,
+        onchange: event => { badge.requireAllStats = event.target.checked; touch(); },
+      }), 'Require all stat requirements (otherwise any one)');
       const scaleControl = bannerScaleControl(badge.image, badge.scale, value => {
           badge.scale = value;
           touch();
@@ -2711,7 +2735,8 @@ const MHLA = (() => {
             uploadInput)),
         scaleControl,
         h('div', { class: 'badge-requirements' }, requirementFields),
-        h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together. Points use the website’s configured points formula.'),
+        requireAllStats,
+        h('p', { class: 'help', style: 'margin:0' }, 'Points use the website’s configured points formula.'),
         h('div', { class: 'badge-audiences' },
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: badge.allPlayers,

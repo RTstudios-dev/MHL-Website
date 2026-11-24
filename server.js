@@ -714,6 +714,30 @@ const isSeason1Player = (data, signup) => {
   const linkedPlayer = (data.players || []).find(player => player.signupId === signup.id);
   return !!linkedPlayer && ids.has(linkedPlayer.id);
 };
+const statRequirementsMet = (data, signup, requirements, requireAllStats) => {
+  const stats = trackedStatsFor(data, signup.id);
+  const available = {
+    goals: stats.goals,
+    assists: stats.assists,
+    saves: stats.saves,
+    gamesScoredIn: stats.gamesScoredIn,
+    gamesWith3Goals: stats.gamesWith3Goals,
+    gamesWith5Goals: stats.gamesWith5Goals,
+    gamesWith10Goals: stats.gamesWith10Goals,
+    gamesWith100PercentSavePercentage: stats.gamesWith100PercentSavePercentage,
+    gamesWith10Saves: stats.gamesWith10Saves,
+    gamesWith20Saves: stats.gamesWith20Saves,
+    gamesWith30Saves: stats.gamesWith30Saves,
+    points: configuredPointsFor(data, signup, stats),
+  };
+  const required = Object.entries(available)
+    .map(([key, value]) => [num(requirements && requirements[key], Number.MAX_SAFE_INTEGER), value])
+    .filter(([threshold]) => threshold > 0);
+  if (!required.length) return true;
+  return requireAllStats === false
+    ? required.some(([threshold, value]) => value >= threshold)
+    : required.every(([threshold, value]) => value >= threshold);
+};
 const badgeIsUnlocked = (data, signup, badge) => {
   if (!badge || !badge.image) return false;
   if (badge.manualPlayerIds.includes(signup.id)) return true;
@@ -721,21 +745,7 @@ const badgeIsUnlocked = (data, signup, badge) => {
   if (!badge.allPlayers
       && !(badge.season2Players)
       && !(badge.season1Players && season1)) return false;
-  const stats = trackedStatsFor(data, signup.id);
-  const requirements = badge.requirements || {};
-  const required = key => num(requirements[key], Number.MAX_SAFE_INTEGER);
-  return stats.goals >= required('goals')
-    && stats.assists >= required('assists')
-    && stats.saves >= required('saves')
-    && stats.gamesScoredIn >= required('gamesScoredIn')
-    && stats.gamesWith3Goals >= required('gamesWith3Goals')
-    && stats.gamesWith5Goals >= required('gamesWith5Goals')
-    && stats.gamesWith10Goals >= required('gamesWith10Goals')
-    && stats.gamesWith100PercentSavePercentage >= required('gamesWith100PercentSavePercentage')
-    && stats.gamesWith10Saves >= required('gamesWith10Saves')
-    && stats.gamesWith20Saves >= required('gamesWith20Saves')
-    && stats.gamesWith30Saves >= required('gamesWith30Saves')
-    && configuredPointsFor(data, signup, stats) >= required('points');
+  return statRequirementsMet(data, signup, badge.requirements, badge.requireAllStats);
 };
 const poseIsUnlocked = (data, signup, pose) => {
   if (!pose) return false;
@@ -744,21 +754,7 @@ const poseIsUnlocked = (data, signup, pose) => {
   if (!pose.allPlayers
       && !(pose.season2Players)
       && !(pose.season1Players && season1)) return false;
-  const stats = trackedStatsFor(data, signup.id);
-  const requirements = pose.requirements || {};
-  const required = key => num(requirements[key], Number.MAX_SAFE_INTEGER);
-  return stats.goals >= required('goals')
-    && stats.assists >= required('assists')
-    && stats.saves >= required('saves')
-    && stats.gamesScoredIn >= required('gamesScoredIn')
-    && stats.gamesWith3Goals >= required('gamesWith3Goals')
-    && stats.gamesWith5Goals >= required('gamesWith5Goals')
-    && stats.gamesWith10Goals >= required('gamesWith10Goals')
-    && stats.gamesWith100PercentSavePercentage >= required('gamesWith100PercentSavePercentage')
-    && stats.gamesWith10Saves >= required('gamesWith10Saves')
-    && stats.gamesWith20Saves >= required('gamesWith20Saves')
-    && stats.gamesWith30Saves >= required('gamesWith30Saves')
-    && configuredPointsFor(data, signup, stats) >= required('points');
+  return statRequirementsMet(data, signup, pose.requirements, pose.requireAllStats);
 };
 const bannerStatRankings = (data, currentSignup) => {
   const statValue = (signup, stat) => {
@@ -827,7 +823,30 @@ const badgeCollectionFor = (data, signup) => data.badges
     scale: badge.scale,
     unlocked: badgeIsUnlocked(data, signup, badge),
     requirements: badge.requirements,
+    requireAllStats: badge.requireAllStats !== false,
+    allPlayers: badge.allPlayers,
+    season1Players: badge.season1Players,
+    season2Players: badge.season2Players,
   }));
+const playerBannerSpriteFor = (data, signup, sprite) => ({
+  id: sprite.id,
+  name: sprite.name,
+  description: sprite.description,
+  image: sprite.image,
+  poseId: sprite.poseId,
+  naturalWidth: sprite.naturalWidth,
+  naturalHeight: sprite.naturalHeight,
+  transform: sprite.transform,
+  requirements: sprite.requirements,
+  requireAllStats: sprite.requireAllStats !== false,
+  allPlayers: sprite.allPlayers,
+  season1Players: sprite.season1Players,
+  season2Players: sprite.season2Players,
+  unlocked: badgeIsUnlocked(data, signup, sprite),
+});
+const playerBannerSpritesFor = (data, signup, collection) =>
+  (data[collection] || []).filter(sprite => sprite.image)
+    .map(sprite => playerBannerSpriteFor(data, signup, sprite));
 const equippedBadgeSlotsFor = (data, signup) => {
   const unlocked = new Set(badgeCollectionFor(data, signup).filter(badge => badge.unlocked).map(badge => badge.id));
   const slots = Array.isArray(signup.badgeSlots) ? signup.badgeSlots : [];
@@ -1060,6 +1079,7 @@ function sanitize(d) {
         gamesWith20Saves: num(requirements.gamesWith20Saves, Number.MAX_SAFE_INTEGER),
         gamesWith30Saves: num(requirements.gamesWith30Saves, Number.MAX_SAFE_INTEGER),
       },
+      requireAllStats: source.requireAllStats !== false,
       allPlayers: !!source.allPlayers,
       season1Players: !!source.season1Players,
       season2Players: !!source.season2Players,
@@ -1091,6 +1111,7 @@ function sanitize(d) {
       previewImage: okSpriteImage(source.previewImage) ? source.previewImage : '',
       requirements: Object.fromEntries(poseRequirementKeys.map(key =>
         [key, num(requirements[key], Number.MAX_SAFE_INTEGER)])),
+      requireAllStats: source.requireAllStats !== false,
       allPlayers: !!source.allPlayers,
       season1Players: !!source.season1Players,
       season2Players: !!source.season2Players,
@@ -1106,6 +1127,7 @@ function sanitize(d) {
       name: 'Default',
       previewImage: '',
       requirements: Object.fromEntries(poseRequirementKeys.map(key => [key, 0])),
+      requireAllStats: true,
       allPlayers: true,
       season1Players: false,
       season2Players: false,
@@ -1155,6 +1177,7 @@ function sanitize(d) {
           gamesWith20Saves: num(requirements.gamesWith20Saves, Number.MAX_SAFE_INTEGER),
           gamesWith30Saves: num(requirements.gamesWith30Saves, Number.MAX_SAFE_INTEGER),
         },
+        requireAllStats: source.requireAllStats !== false,
         allPlayers: !!source.allPlayers,
         season1Players: !!source.season1Players,
         season2Players: !!source.season2Players,
@@ -2108,6 +2131,7 @@ const server = http.createServer(async (req, res) => {
         || unlockedPoses[0];
       const bannerConfig = {
         ...sanitizeBannerConfig(signup.bannerConfig),
+        backgroundSpriteId: '',
         poseId: unlockedPoses.some(pose => pose.id === signup.bannerConfig.poseId)
           ? signup.bannerConfig.poseId : defaultPose && defaultPose.id || '',
       };
@@ -2124,15 +2148,23 @@ const server = http.createServer(async (req, res) => {
           badges: badgeCollectionFor(data, signup),
           bannerConfig,
           statRanks: bannerStatRankings(data, signup),
-          bannerPoses: unlockedPoses.map(pose => ({
-            id: pose.id, name: pose.name, previewImage: pose.previewImage,
+          bannerPoses: (data.bannerPoses || []).map(pose => ({
+            id: pose.id,
+            name: pose.name,
+            previewImage: pose.previewImage,
+            requirements: pose.requirements,
+            requireAllStats: pose.requireAllStats !== false,
+            allPlayers: pose.allPlayers,
+            season1Players: pose.season1Players,
+            season2Players: pose.season2Players,
+            unlocked: poseIsUnlocked(data, signup, pose),
           })),
-          bannerSprites: (data.bannerSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
-          backgroundSprites: (data.backgroundSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
-          helmetSprites: (data.helmetSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
-          torsoSprites: (data.torsoSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
-          stickSprites: (data.stickSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
-          puckSprites: (data.puckSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
+          bannerSprites: playerBannerSpritesFor(data, signup, 'bannerSprites'),
+          backgroundSprites: playerBannerSpritesFor(data, signup, 'backgroundSprites'),
+          helmetSprites: playerBannerSpritesFor(data, signup, 'helmetSprites'),
+          torsoSprites: playerBannerSpritesFor(data, signup, 'torsoSprites'),
+          stickSprites: playerBannerSpritesFor(data, signup, 'stickSprites'),
+          puckSprites: playerBannerSpritesFor(data, signup, 'puckSprites'),
           bannerDefaults: data.bannerDefaults || {},
           bannerLayers: data.bannerLayers || [],
           ...values,
@@ -2209,6 +2241,14 @@ const server = http.createServer(async (req, res) => {
         if (!sprite || sprite.poseId !== pose.id || !sprite.image || !badgeIsUnlocked(data, signup, sprite))
           return send(res, 400, { error: 'One or more selected player-banner sprites are unavailable.' });
       }
+      const torsoId = typeof changes.torsoSpriteId === 'string' ? changes.torsoSpriteId.trim() : '';
+      const torso = (data.torsoSprites || []).find(item => item.id === torsoId);
+      const torsoName = String(torso && torso.name || '').trim().toLowerCase();
+      const pairedBackground = torsoName && (data.backgroundSprites || []).find(item =>
+        item.poseId === pose.id && item.image
+        && String(item.name || '').trim().toLowerCase() === torsoName);
+      if (pairedBackground && !badgeIsUnlocked(data, signup, pairedBackground))
+        return send(res, 400, { error: 'The background paired with this torso is unavailable.' });
       if (changes.badgeSlots !== undefined) {
         if (!Array.isArray(changes.badgeSlots) || changes.badgeSlots.length > 3)
           return send(res, 400, { error: 'Choose up to three badge slots.' });

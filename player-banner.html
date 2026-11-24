@@ -46,8 +46,10 @@
 .banner-pose-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .banner-pose-option{display:flex;min-width:0;min-height:180px;flex-direction:column;align-items:stretch;padding:10px;border:1px solid var(--line);background:var(--paper);color:var(--ink);text-align:left}
 .banner-pose-option[aria-pressed=true]{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.banner-pose-option:disabled{opacity:.55;cursor:not-allowed}
 .banner-pose-option img,.banner-pose-placeholder{display:grid;width:100%;height:125px;object-fit:contain;place-items:center;background:#111013;color:var(--gold);font:500 24px var(--disp)}
 .banner-pose-option strong{padding-top:8px;font-size:13px}
+.banner-pose-requirements{margin-top:4px;color:var(--muted);font-size:11px;line-height:1.35}
 .banner-inventory-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin-bottom:18px}
 .banner-inventory-tab{min-height:42px;padding:6px;border:1px solid var(--line);background:var(--paper);color:var(--muted);font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase}
 .banner-inventory-tab[aria-selected=true]{border-color:var(--gold);background:var(--gold);color:var(--on-gold)}
@@ -55,6 +57,7 @@
 .banner-inventory-help{min-height:3em;margin-bottom:14px;color:var(--muted);font-size:13px;line-height:1.45}
 .banner-item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;max-height:min(65vh,720px);overflow:auto;padding:2px 4px 4px 2px}
 .banner-inventory-card{position:relative;display:flex;min-width:0;min-height:220px;flex-direction:column;align-items:flex-start;padding:12px;border:1px solid var(--line);background:var(--paper);transition:border-color .16s ease,transform .16s ease}
+.banner-inventory-card.locked{opacity:.7}
 .banner-inventory-card:hover,.banner-inventory-card:focus-within{border-color:var(--gold);transform:translateY(-2px)}
 .banner-inventory-card.selected{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
 .banner-item-image{width:100%;height:100px;margin-bottom:10px;object-fit:contain;background:#111013}
@@ -193,9 +196,9 @@
     editorStatus.textContent = message;
     editorStatus.className = `banner-editor-status${kind ? ` ${kind}` : ''}`;
   };
-  const badgeRequirementsText = badge => {
-    const requirements = badge.requirements || {};
-    return [
+  const itemRequirementsText = item => {
+    const requirements = item.requirements || {};
+    const stats = [
       Number(requirements.goals) > 0 ? `${requirements.goals} goals` : '',
       Number(requirements.assists) > 0 ? `${requirements.assists} assists` : '',
       Number(requirements.saves) > 0 ? `${requirements.saves} saves` : '',
@@ -209,7 +212,18 @@
       Number(requirements.gamesWith20Saves) > 0 ? `${requirements.gamesWith20Saves} games with 20+ saves` : '',
       Number(requirements.gamesWith30Saves) > 0 ? `${requirements.gamesWith30Saves} games with 30+ saves` : '',
       Number(requirements.points) > 0 ? `${requirements.points} points` : '',
-    ].filter(Boolean).join(' · ');
+    ].filter(Boolean);
+    const values = stats.length ? [
+      item.requireAllStats === false
+        ? `Any one: ${stats.join(' or ')}`
+        : `All required: ${stats.join(' and ')}`,
+    ] : [];
+    if (!item.allPlayers) {
+      if (item.season1Players) values.push('Season 1 players');
+      if (item.season2Players) values.push('Season 2 players');
+      if (!item.season1Players && !item.season2Players) values.push('Staff award');
+    }
+    return values.join(' · ');
   };
   const setTargetMode = target => {
     pendingTarget = target;
@@ -267,7 +281,8 @@
       const poseName = String(pose.name || 'Pose');
       const option = document.createElement('button');
       option.type = 'button';
-      option.className = 'banner-pose-option';
+      option.className = `banner-pose-option${pose.unlocked === false ? ' locked' : ''}`;
+      option.disabled = pose.unlocked === false;
       option.setAttribute('aria-pressed', String(pose.id === selectedPoseId()));
       if (pose.previewImage) {
         const image = document.createElement('img');
@@ -282,9 +297,16 @@
         option.append(placeholder);
       }
       const name = document.createElement('strong');
-      name.textContent = poseName;
+      name.textContent = pose.unlocked === false ? `${poseName} — Locked` : poseName;
       option.append(name);
+      if (pose.unlocked === false) {
+        const requirements = document.createElement('small');
+        requirements.className = 'banner-pose-requirements';
+        requirements.textContent = `Requirements: ${itemRequirementsText(pose) || 'Contact league staff.'}`;
+        option.append(requirements);
+      }
       option.addEventListener('click', () => {
+        if (pose.unlocked === false) return;
         const config = window.MHLPlayerBanner.ensureConfig(signup);
         if (config.poseId === pose.id) return;
         config.poseId = pose.id;
@@ -321,9 +343,9 @@
       button.setAttribute('aria-selected', String(key === activeCategory));
     });
   };
-  const itemCard = ({ title, image, description, selected, order, action, disabled = false }) => {
+  const itemCard = ({ title, image, description, selected, order, action, disabled = false, locked = false }) => {
     const card = document.createElement('article');
-    card.className = `banner-inventory-card${selected ? ' selected' : ''}`;
+    card.className = `banner-inventory-card${selected ? ' selected' : ''}${locked ? ' locked' : ''}`;
     if (image) {
       const thumbnail = document.createElement('img');
       thumbnail.className = 'banner-item-image';
@@ -416,10 +438,13 @@
       badges.forEach(badge => {
         const isEquipped = slots.includes(badge.id);
         itemCard({
-          title: badge.name || 'Badge',
+          title: badge.unlocked ? badge.name || 'Badge' : `${badge.name || 'Badge'} — Locked`,
           image: badge.image,
-          description: badge.description || badgeRequirementsText(badge) || (badge.unlocked ? 'Unlocked badge.' : 'Complete its requirements to unlock.'),
+          description: badge.unlocked
+            ? badge.description || itemRequirementsText(badge) || 'Unlocked badge.'
+            : `Requirements: ${itemRequirementsText(badge) || 'Contact league staff.'}`,
           selected: isEquipped,
+          locked: badge.unlocked === false,
           action: {
             label: badge.unlocked ? 'Equip' : 'Locked',
             run: () => setTargetMode({ category: 'badges', itemId: badge.id }),
@@ -433,9 +458,28 @@
     inventoryHelp.textContent = `Choose a ${definition.title.toLowerCase()} sprite and click Equip to apply it to your banner.`;
     const config = window.MHLPlayerBanner.ensureConfig(signup);
     const selectedId = config[definition.field] || '';
-    const items = definition.items(signup).filter(item => item.poseId === selectedPoseId());
+    const items = definition.items(signup)
+      .filter(item => item.poseId === selectedPoseId())
+      .map(item => {
+        if (activeCategory !== 'torso') return item;
+        const itemName = String(item.name || '').trim().toLowerCase();
+        const pairedBackground = itemName && (signup.backgroundSprites || []).find(background =>
+          background.poseId === item.poseId
+          && String(background.name || '').trim().toLowerCase() === itemName);
+        const locked = item.unlocked === false || (pairedBackground && pairedBackground.unlocked === false);
+        const requirements = [...new Set([
+          itemRequirementsText(item),
+          pairedBackground && itemRequirementsText(pairedBackground),
+        ].filter(Boolean))].join(' · ');
+        return {
+          ...item,
+          unlocked: !locked,
+          lockedRequirements: requirements,
+        };
+      });
     const defaultId = (signup.bannerDefaults || {})[activeCategory];
-    const defaultItem = items.find(item => item.id === defaultId) || items.find(item => item.image);
+    const unlockedItems = items.filter(item => item.unlocked !== false && item.image);
+    const defaultItem = unlockedItems.find(item => item.id === defaultId) || unlockedItems[0];
     const selectDefault = () => {
       config[definition.field] = '';
       dirty = true;
@@ -454,16 +498,22 @@
       },
     });
     items
-      .filter(item => item.image && item.id !== defaultId && item.id !== (defaultItem && defaultItem.id))
+      .filter(item => item.image && (item.unlocked === false
+        || (item.id !== defaultId && item.id !== (defaultItem && defaultItem.id))))
       .forEach(item => {
       const selected = selectedId === item.id;
       itemCard({
-        title: item.name || `${definition.title} sprite`,
+        title: item.unlocked === false
+          ? `${item.name || `${definition.title} sprite`} — Locked`
+          : item.name || `${definition.title} sprite`,
         image: item.image,
         selected,
-        description: selected ? 'Currently equipped.' : '',
+        locked: item.unlocked === false,
+        description: item.unlocked === false
+          ? `Requirements: ${item.lockedRequirements || itemRequirementsText(item) || 'Contact league staff.'}`
+          : selected ? 'Currently equipped.' : '',
         action: {
-          label: 'Equip',
+          label: item.unlocked === false ? 'Locked' : 'Equip',
           run: () => {
             config[definition.field] = item.id;
             dirty = true;
@@ -472,6 +522,7 @@
             status('Component updated. Save your banner to keep the change.');
           },
         },
+        disabled: item.unlocked === false,
       });
     });
   };
