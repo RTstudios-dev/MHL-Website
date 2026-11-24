@@ -386,6 +386,7 @@ const MHLA = (() => {
       });
     };
     addSprite('bannerSprites', 'Banner');
+    addSprite('backgroundSprites', 'Background');
     addSprite('helmetSprites', 'Helmet');
     addSprite('torsoSprites', 'Torso');
     addSprite('stickSprites', 'Stick');
@@ -405,10 +406,6 @@ const MHLA = (() => {
       if (pose.previewImage) entries.push({
         label: `${pose.name || 'Pose'} — Pose preview`,
         remove: () => { pose.previewImage = ''; touch(); },
-      });
-      if (pose.backgroundImage) entries.push({
-        label: `${pose.name || 'Pose'} — Pose background`,
-        remove: () => { pose.backgroundImage = ''; touch(); },
       });
     });
     entries.sort((a, b) =>
@@ -453,6 +450,7 @@ const MHLA = (() => {
     };
     const componentSections = [];
     for (const [key, componentName] of [
+      ['backgroundSprites', 'Background'],
       ['helmetSprites', 'Helmet'],
       ['torsoSprites', 'Torso'],
       ['stickSprites', 'Stick'],
@@ -1485,6 +1483,7 @@ const MHLA = (() => {
     let showEditorGuides = true;
     const hiddenEditorLayers = new Set();
     const categoryMap = {
+      background: ['backgroundSprites', 'Background'],
       badges: ['badges', 'Badges'],
       stick: ['stickSprites', 'Stick'],
       torso: ['torsoSprites', 'Torso'],
@@ -1580,7 +1579,7 @@ const MHLA = (() => {
       canvas.append(element);
       if (showEditorGuides) makeDraggable(element, transform, key, name, scaleKey);
     };
-    const defaultLayerOrder = ['badges', 'stick', 'torso', 'helmet'];
+    const defaultLayerOrder = ['badges', 'stick', 'torso', 'background', 'helmet'];
     const getLayerOrder = () => {
       const validKeys = new Set([
         ...Object.keys(categoryMap),
@@ -2379,13 +2378,14 @@ const MHLA = (() => {
     const componentMap = {
       torso: ['torsoSprites', 'Torso'],
       stick: ['stickSprites', 'Stick'],
+      background: ['backgroundSprites', 'Background'],
       helmet: ['helmetSprites', 'Helmet'],
     };
     const importPngs = async files => {
       let imported = 0;
       const errors = [];
       for (const file of Array.from(files || [])) {
-        const match = file.name.match(/^(.+)_([^_]+)_(torso|stick|helmet)\.png$/i);
+        const match = file.name.match(/^(.+)_([^_]+)_(background|torso|stick|helmet)\.png$/i);
         if (!match) {
           errors.push(`${file.name}: expected Reskin_Pose_Component.png`);
           continue;
@@ -2510,28 +2510,6 @@ const MHLA = (() => {
           draw();
         },
       });
-      const backgroundInput = h('input', {
-        type: 'file', accept: 'image/png', style: 'display:none',
-        onchange: async event => {
-          const file = event.target.files[0];
-          event.target.value = '';
-          if (!file) return;
-          if (!/\.png$/i.test(file.name) || file.size > 8_000_000) {
-            alert('Pose background must be a PNG no larger than 8 MB.');
-            return;
-          }
-          try {
-            const url = await upload(file);
-            if (!url) return;
-            await imageDimensions(url);
-            pose.backgroundImage = url;
-            touch();
-            draw();
-          } catch (error) {
-            alert(error.message || 'Pose background upload failed.');
-          }
-        },
-      });
       const manualAwards = h('details', { class: 'manual-badge-awards' },
         h('summary', {}, `Manual awards (${pose.manualPlayerIds.length})`),
         D.signups.length ? h('div', {}, D.signups.map(signup => h('label', { class: 'checkline' },
@@ -2585,17 +2563,6 @@ const MHLA = (() => {
                 pose.previewImage ? 'Replace preview' : 'Upload preview'),
               pose.previewImage ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { pose.previewImage = ''; touch(); draw(); } }, 'Remove') : null),
             previewInput)),
-        h('div', { class: 'img badge-image-picker' },
-          h('span', { class: 'thumb' }, pose.backgroundImage
-            ? h('img', { class: 'pose-preview-image', src: pose.backgroundImage, alt: `${pose.name} pose background` })
-            : 'No background'),
-          h('div', {},
-            h('div', { class: 'f' }, 'Pose background', h('small', {}, 'PNG only; maximum 8 MB. One fixed background for this pose.')),
-            h('div', { class: 'acts', style: 'justify-content:flex-start' },
-              h('button', { class: 'btn line sm', type: 'button', onclick: () => backgroundInput.click() },
-                pose.backgroundImage ? 'Replace background' : 'Upload background'),
-              pose.backgroundImage ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { pose.backgroundImage = ''; touch(); draw(); } }, 'Remove') : null),
-            backgroundInput)),
         h('div', { class: 'badge-requirements' }, poseRequirementFields(pose)),
         h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
         h('div', { class: 'badge-audiences' },
@@ -2621,7 +2588,6 @@ const MHLA = (() => {
         id: uid(),
         name: 'New Pose',
         previewImage: '',
-        backgroundImage: '',
         requirements: { ...requirementDefaults },
         allPlayers: false,
         season1Players: false, season2Players: false,
@@ -2633,7 +2599,7 @@ const MHLA = (() => {
     return [
       importSection,
       head('Poses', addPose),
-      h('p', { class: 'help' }, 'Each pose has its own Torso, Stick, Background, and Helmet reskins. The Default pose contains all legacy PNGs.'),
+      h('p', { class: 'help' }, 'Each pose has its own Torso, Stick, Background, and Helmet reskins. Use matching Torso and Background reskin names to display them together on player banners. The Default pose contains all legacy PNGs.'),
       poses.length ? poses : h('div', { class: 'empty' }, h('b', {}, 'No poses'), 'Add a pose to begin.'),
     ];
   }

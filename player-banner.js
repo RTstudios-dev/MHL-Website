@@ -18,6 +18,7 @@
     if (typeof config.poseId !== 'string')
       config.poseId = signup.bannerDefaults && typeof signup.bannerDefaults.poseId === 'string'
         ? signup.bannerDefaults.poseId : '';
+    config.defaultBadgeCleared = config.defaultBadgeCleared === true;
     signup.bannerConfig = config;
     return config;
   };
@@ -121,6 +122,7 @@
     };
 
     const collections = {
+      background: { items: signup.backgroundSprites || [], configKey: 'backgroundSpriteId' },
       helmet: { items: signup.helmetSprites || [], configKey: 'helmetSpriteId' },
       torso: { items: signup.torsoSprites || [], configKey: 'torsoSpriteId' },
       stick: { items: signup.stickSprites || [], configKey: 'stickSpriteId' },
@@ -141,14 +143,6 @@
       const key = `custom:${layer.id}`;
       if (!layerOrder.includes(key)) layerOrder.unshift(key);
     });
-    const activePose = (signup.bannerPoses || []).find(pose => pose.id === activePoseId);
-    if (activePose && activePose.backgroundImage) {
-      addImage({
-        id: `pose-background:${activePose.id}`,
-        image: activePose.backgroundImage,
-        transform: { x: 0, y: 0, scale: 1 },
-      }, `pose-background:${activePose.id}`, 1);
-    }
     layerOrder.forEach((key, index) => {
       const zIndex = 10 + layerOrder.length - index;
       if (key.startsWith('custom:')) {
@@ -163,6 +157,13 @@
       const item = items.find(entry => entry.id === selectedId && entry.image)
         || items.find(entry => entry.id === defaults[key] && entry.image)
         || items.find(entry => entry.image);
+      if (key === 'torso' && item && String(item.name || '').trim()) {
+        const torsoName = String(item.name || '').trim().toLowerCase();
+        const background = collections.background.items.find(entry =>
+          entry.poseId === activePoseId && entry.image
+          && String(entry.name || '').trim().toLowerCase() === torsoName);
+        addImage(background, `sprite:${background && background.id || 'background'}`, zIndex);
+      }
       addImage(item, `sprite:${item && item.id || key}`, zIndex,
         ['helmet', 'torso', 'stick', 'puck'].includes(key) ? key : '');
     });
@@ -172,7 +173,7 @@
     const defaultBadge = badges.find(item => item.id === defaults.badge && item.image);
     for (let index = 0; index < 3; index++) {
       const equipped = badges.find(item => item.id === badgeSlots[index] && item.unlocked && item.image);
-      const badge = equipped || (index === 0 ? defaultBadge : null);
+      const badge = equipped || (index === 0 && !config.defaultBadgeCleared ? defaultBadge : null);
       let transform = transformAt(defaults.badgeTransforms, index,
         { x: [50, 332, 614][index], y: 180, scale: 1 }, 0.02);
       if ((Number(defaults.canvasVersion) || 0) < 6) {

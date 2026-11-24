@@ -477,7 +477,7 @@ const modRosterSnapshot = data => {
       bannerConfig: sanitizeBannerConfig(signup.bannerConfig),
       badgeImages: selectedBadges,
       bannerImage: resolvedSprite('banner', config.bannerSpriteId, defaults.banner),
-      backgroundImage: ((data.bannerPoses || []).find(pose => pose.id === poseId) || {}).backgroundImage || '',
+      backgroundImage: resolvedSprite('background', config.backgroundSpriteId, defaults.background),
       helmetImage: resolvedSprite('helmet', config.helmetSpriteId, defaults.helmet),
       torsoImage: resolvedSprite('torso', config.torsoSpriteId, defaults.torso),
       stickImage: resolvedSprite('stick', config.stickSpriteId, defaults.stick),
@@ -890,6 +890,7 @@ const sanitizeBannerConfig = value => {
     torsoTransform: sanitizeTransform(config.torsoTransform),
     stickTransform: sanitizeTransform(config.stickTransform),
     puckTransform: sanitizeTransform(config.puckTransform),
+    defaultBadgeCleared: config.defaultBadgeCleared === true,
     equippedStats: Array.isArray(config.equippedStats)
       ? config.equippedStats.slice(0, 20).map(item => str(item, 40)).filter(Boolean)
       : ['Goals', 'Assists', 'Saves'],
@@ -1088,7 +1089,6 @@ function sanitize(d) {
       id,
       name: str(source.name, 80) || 'Pose',
       previewImage: okSpriteImage(source.previewImage) ? source.previewImage : '',
-      backgroundImage: okSpriteImage(source.backgroundImage) ? source.backgroundImage : '',
       requirements: Object.fromEntries(poseRequirementKeys.map(key =>
         [key, num(requirements[key], Number.MAX_SAFE_INTEGER)])),
       allPlayers: !!source.allPlayers,
@@ -1105,7 +1105,6 @@ function sanitize(d) {
       id: poseIds.has('default') ? crypto.randomUUID() : 'default',
       name: 'Default',
       previewImage: '',
-      backgroundImage: '',
       requirements: Object.fromEntries(poseRequirementKeys.map(key => [key, 0])),
       allPlayers: true,
       season1Players: false,
@@ -2126,7 +2125,7 @@ const server = http.createServer(async (req, res) => {
           bannerConfig,
           statRanks: bannerStatRankings(data, signup),
           bannerPoses: unlockedPoses.map(pose => ({
-            id: pose.id, name: pose.name, previewImage: pose.previewImage, backgroundImage: pose.backgroundImage || '',
+            id: pose.id, name: pose.name, previewImage: pose.previewImage,
           })),
           bannerSprites: (data.bannerSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
           backgroundSprites: (data.backgroundSprites || []).filter(sprite => badgeIsUnlocked(data, signup, sprite)),
@@ -2513,7 +2512,7 @@ const server = http.createServer(async (req, res) => {
         .concat(
           clean.signups.flatMap(signup => [signup.photo, signup.cardArtwork]),
           clean.badges.map(badge => badge.image),
-          (clean.bannerPoses || []).flatMap(pose => [pose.previewImage, pose.backgroundImage]),
+          (clean.bannerPoses || []).map(pose => pose.previewImage),
           (clean.bannerSprites || []).map(sprite => sprite.image),
           (clean.backgroundSprites || []).map(sprite => sprite.image),
           (clean.helmetSprites || []).map(sprite => sprite.image),

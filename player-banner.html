@@ -217,7 +217,9 @@
     if (targeting) {
       swapNoticeText.textContent = target.category === 'stats'
         ? `Choose a stat on your banner to replace with ${target.stat}.`
-        : 'Choose the badge slot to replace.';
+        : target.itemId
+          ? 'Choose the badge slot to replace.'
+          : 'Choose a badge on your banner to clear it.';
     }
     document.body.classList.toggle('swap-mode', targeting);
     editorLayout.classList.toggle('is-targeting', targeting);
@@ -236,6 +238,9 @@
           while (slots.length < 3) slots.push('');
           slots[target.slot] = pendingTarget.itemId;
           signup.badgeSlots = slots.slice(0, 3);
+          if (target.slot === 0) {
+            window.MHLPlayerBanner.ensureConfig(signup).defaultBadgeCleared = !pendingTarget.itemId;
+          }
         } else if (target.category === 'stats') {
           const equippedStats = window.MHLPlayerBanner.ensureConfig(signup).equippedStats;
           equippedStats[target.slot] = pendingTarget.stat;
