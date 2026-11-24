@@ -226,7 +226,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 const MHLA = (() => {
   const root = document.getElementById('root');
   let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
-  const bannerSectionOpen = { editor: true, badges: true, poses: true, puck: true };
+  const bannerSectionOpen = { editor: true, badges: true, poses: true };
   let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
   const playoffMatchLimits = { quarterfinals: 4, semifinals: 2, finals: 1 };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -386,11 +386,9 @@ const MHLA = (() => {
       });
     };
     addSprite('bannerSprites', 'Banner');
-    addSprite('backgroundSprites', 'Background');
     addSprite('helmetSprites', 'Helmet');
     addSprite('torsoSprites', 'Torso');
     addSprite('stickSprites', 'Stick');
-    addSprite('puckSprites', 'Puck');
     D.badges.forEach(badge => {
       if (badge.image) entries.push({
         label: `${badge.name || 'Badge'} — Badge`,
@@ -407,6 +405,10 @@ const MHLA = (() => {
       if (pose.previewImage) entries.push({
         label: `${pose.name || 'Pose'} — Pose preview`,
         remove: () => { pose.previewImage = ''; touch(); },
+      });
+      if (pose.backgroundImage) entries.push({
+        label: `${pose.name || 'Pose'} — Pose background`,
+        remove: () => { pose.backgroundImage = ''; touch(); },
       });
     });
     entries.sort((a, b) =>
@@ -451,7 +453,6 @@ const MHLA = (() => {
     };
     const componentSections = [];
     for (const [key, componentName] of [
-      ['backgroundSprites', 'Background'],
       ['helmetSprites', 'Helmet'],
       ['torsoSprites', 'Torso'],
       ['stickSprites', 'Stick'],
@@ -1477,18 +1478,16 @@ const MHLA = (() => {
     D.bannerDefaults.playerValueTransform = previousCanvasVersion < 2
       ? { x: 50, y: 120, scale: 1 }
       : normalizeTransform(D.bannerDefaults.playerValueTransform, { x: 50, y: 120, scale: 1 }, false);
-    let activeLayer = 'background';
+    let activeLayer = 'helmet';
     let draggedLayerKey = '';
     let pointerLayerDrag = null;
     let suppressLayerClick = false;
     let showEditorGuides = true;
     const hiddenEditorLayers = new Set();
     const categoryMap = {
-      background: ['backgroundSprites', 'Background'],
       badges: ['badges', 'Badges'],
       stick: ['stickSprites', 'Stick'],
       torso: ['torsoSprites', 'Torso'],
-      puck: ['puckSprites', 'Puck'],
       helmet: ['helmetSprites', 'Helmets'],
     };
     const wrapper = h('div', { class: 'banner-layer-editor' });
@@ -1581,7 +1580,7 @@ const MHLA = (() => {
       canvas.append(element);
       if (showEditorGuides) makeDraggable(element, transform, key, name, scaleKey);
     };
-    const defaultLayerOrder = ['badges', 'stick', 'torso', 'puck', 'helmet', 'background'];
+    const defaultLayerOrder = ['badges', 'stick', 'torso', 'helmet'];
     const getLayerOrder = () => {
       const validKeys = new Set([
         ...Object.keys(categoryMap),
@@ -1631,8 +1630,7 @@ const MHLA = (() => {
       const defaultKey = layer === 'background' ? 'background'
         : layer === 'helmet' ? 'helmet'
         : layer === 'torso' ? 'torso'
-        : layer === 'stick' ? 'stick'
-        : 'puck';
+        : 'stick';
       const defaultPoseItems = items.filter(item => item.poseId === defaultPoseId());
       const selected = defaultPoseItems.find(item => item.id === D.bannerDefaults[defaultKey] && item.image)
         || defaultPoseItems.find(item => item.image)
@@ -1806,6 +1804,15 @@ const MHLA = (() => {
     const renderCanvasAssets = () => {
       canvas.classList.toggle('preview-mode', !showEditorGuides);
       canvas.querySelectorAll('.banner-layer-item,.banner-badge-guide,.banner-stat-guide,.banner-stat-guide-value,.banner-player-text-guide,.banner-component-position').forEach(item => item.remove());
+      const activePose = (D.bannerPoses || []).find(pose => pose.id === defaultPoseId());
+      if (activePose && activePose.backgroundImage) {
+        canvas.append(h('img', {
+          src: activePose.backgroundImage,
+          alt: '',
+          class: 'banner-layer-item',
+          style: 'z-index:1;width:849px;height:1200px;left:0;top:0;object-fit:contain;',
+        }));
+      }
       const layerOrder = getLayerOrder();
       layerOrder.forEach((layerKey, index) => {
         const zIndex = 10 + layerOrder.length - index;
@@ -1983,7 +1990,7 @@ const MHLA = (() => {
       if (activeLayer.startsWith('custom:')) {
         const item = D.bannerLayers.find(layer => layer.id === activeLayer.slice(7));
         if (!item) {
-          activeLayer = 'background';
+          activeLayer = 'helmet';
           renderLayerButtons();
           return renderAssets();
         }
@@ -2047,7 +2054,7 @@ const MHLA = (() => {
               selectedComponent = null;
               renderComponentProperties();
             }
-            activeLayer = 'background';
+            activeLayer = 'helmet';
             touch();
             renderLayerButtons();
             renderAssets();
@@ -2069,8 +2076,7 @@ const MHLA = (() => {
       const defaultKey = activeLayer === 'background' ? 'background'
         : activeLayer === 'helmet' ? 'helmet'
         : activeLayer === 'torso' ? 'torso'
-        : activeLayer === 'stick' ? 'stick'
-        : 'puck';
+        : 'stick';
       items.forEach(item => {
         layerTransform(item);
         const button = h('button', {
@@ -2373,14 +2379,13 @@ const MHLA = (() => {
     const componentMap = {
       torso: ['torsoSprites', 'Torso'],
       stick: ['stickSprites', 'Stick'],
-      background: ['backgroundSprites', 'Background'],
       helmet: ['helmetSprites', 'Helmet'],
     };
     const importPngs = async files => {
       let imported = 0;
       const errors = [];
       for (const file of Array.from(files || [])) {
-        const match = file.name.match(/^(.+)_([^_]+)_(background|torso|stick|helmet)\.png$/i);
+        const match = file.name.match(/^(.+)_([^_]+)_(torso|stick|helmet)\.png$/i);
         if (!match) {
           errors.push(`${file.name}: expected Reskin_Pose_Component.png`);
           continue;
@@ -2505,6 +2510,28 @@ const MHLA = (() => {
           draw();
         },
       });
+      const backgroundInput = h('input', {
+        type: 'file', accept: 'image/png', style: 'display:none',
+        onchange: async event => {
+          const file = event.target.files[0];
+          event.target.value = '';
+          if (!file) return;
+          if (!/\.png$/i.test(file.name) || file.size > 8_000_000) {
+            alert('Pose background must be a PNG no larger than 8 MB.');
+            return;
+          }
+          try {
+            const url = await upload(file);
+            if (!url) return;
+            await imageDimensions(url);
+            pose.backgroundImage = url;
+            touch();
+            draw();
+          } catch (error) {
+            alert(error.message || 'Pose background upload failed.');
+          }
+        },
+      });
       const manualAwards = h('details', { class: 'manual-badge-awards' },
         h('summary', {}, `Manual awards (${pose.manualPlayerIds.length})`),
         D.signups.length ? h('div', {}, D.signups.map(signup => h('label', { class: 'checkline' },
@@ -2558,6 +2585,17 @@ const MHLA = (() => {
                 pose.previewImage ? 'Replace preview' : 'Upload preview'),
               pose.previewImage ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { pose.previewImage = ''; touch(); draw(); } }, 'Remove') : null),
             previewInput)),
+        h('div', { class: 'img badge-image-picker' },
+          h('span', { class: 'thumb' }, pose.backgroundImage
+            ? h('img', { class: 'pose-preview-image', src: pose.backgroundImage, alt: `${pose.name} pose background` })
+            : 'No background'),
+          h('div', {},
+            h('div', { class: 'f' }, 'Pose background', h('small', {}, 'PNG only; maximum 8 MB. One fixed background for this pose.')),
+            h('div', { class: 'acts', style: 'justify-content:flex-start' },
+              h('button', { class: 'btn line sm', type: 'button', onclick: () => backgroundInput.click() },
+                pose.backgroundImage ? 'Replace background' : 'Upload background'),
+              pose.backgroundImage ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { pose.backgroundImage = ''; touch(); draw(); } }, 'Remove') : null),
+            backgroundInput)),
         h('div', { class: 'badge-requirements' }, poseRequirementFields(pose)),
         h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
         h('div', { class: 'badge-audiences' },
@@ -2583,6 +2621,7 @@ const MHLA = (() => {
         id: uid(),
         name: 'New Pose',
         previewImage: '',
+        backgroundImage: '',
         requirements: { ...requirementDefaults },
         allPlayers: false,
         season1Players: false, season2Players: false,

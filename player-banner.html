@@ -124,11 +124,9 @@
     <section class="banner-inventory" aria-label="Banner components">
       <div class="banner-inventory-tabs" role="tablist" aria-label="Component types">
         <button type="button" class="banner-inventory-tab" data-category="badges" aria-selected="true">Badges</button>
-        <button type="button" class="banner-inventory-tab" data-category="background" aria-selected="false">Background</button>
         <button type="button" class="banner-inventory-tab" data-category="helmet" aria-selected="false">Helmets</button>
         <button type="button" class="banner-inventory-tab" data-category="torso" aria-selected="false">Torso</button>
         <button type="button" class="banner-inventory-tab" data-category="stick" aria-selected="false">Stick</button>
-        <button type="button" class="banner-inventory-tab" data-category="puck" aria-selected="false">Puck</button>
         <button type="button" class="banner-inventory-tab" data-category="stats" aria-selected="false">Stats</button>
       </div>
       <h2 id="inventoryTitle">Collectible Badges</h2>
@@ -170,11 +168,13 @@
   const saveButton = document.getElementById('saveBanner');
   const categories = {
     badges: { title: 'Collectible Badges', field: '', items: signup => signup.badges || [] },
-    background: { title: 'Background', field: 'backgroundSpriteId', items: signup => signup.backgroundSprites || [] },
     helmet: { title: 'Helmets', field: 'helmetSpriteId', items: signup => signup.helmetSprites || [] },
-    torso: { title: 'Torso', field: 'torsoSpriteId', items: signup => signup.torsoSprites || [] },
+    torso: {
+      title: 'Torso',
+      field: 'torsoSpriteId',
+      items: signup => signup.torsoSprites || [],
+    },
     stick: { title: 'Stick', field: 'stickSpriteId', items: signup => signup.stickSprites || [] },
-    puck: { title: 'Puck', field: 'puckSpriteId', items: signup => signup.puckSprites || [] },
     stats: { title: 'Stats', field: '', items: () => [] },
   };
   const stats = [
@@ -284,13 +284,11 @@
         if (config.poseId === pose.id) return;
         config.poseId = pose.id;
         for (const field of [
-          'backgroundSpriteId', 'helmetSpriteId', 'torsoSpriteId',
-          'stickSpriteId', 'puckSpriteId', 'bannerSpriteId',
+          'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'bannerSpriteId',
         ]) {
           const items = [
-            ...(signup.backgroundSprites || []), ...(signup.helmetSprites || []),
-            ...(signup.torsoSprites || []), ...(signup.stickSprites || []),
-            ...(signup.puckSprites || []), ...(signup.bannerSprites || []),
+            ...(signup.helmetSprites || []), ...(signup.torsoSprites || []),
+            ...(signup.stickSprites || []), ...(signup.bannerSprites || []),
           ];
           if (!items.some(item => item.id === config[field] && item.poseId === pose.id))
             config[field] = '';
@@ -394,15 +392,14 @@
     }
 
     if (activeCategory === 'badges') {
-      inventoryHelp.textContent = 'Hover over an unlocked badge and choose Equip, then select one of the three highlighted badge slots. You can equip the same badge in multiple slots.';
+      inventoryHelp.textContent = 'Hover over an unlocked badge and choose Equip, then select one of the three highlighted badge slots. Use Clear slot to remove a badge.';
       const slots = Array.isArray(signup.badgeSlots) ? signup.badgeSlots : [];
-      const defaultBadge = (signup.badges || []).find(item => item.id === (signup.bannerDefaults || {}).badge);
       itemCard({
-        title: 'Use default / clear slot',
-        image: defaultBadge && defaultBadge.image,
-        description: 'Restore the admin default in slot 1, or clear slots 2–3.',
+        title: 'Clear badge slot',
+        image: '',
+        description: 'Remove the badge from a selected slot.',
         selected: !slots.some(Boolean),
-        action: { label: 'Equip', run: () => setTargetMode({ category: 'badges', itemId: '' }) },
+        action: { label: 'Clear', run: () => setTargetMode({ category: 'badges', itemId: '' }) },
       });
       const badges = signup.badges || [];
       if (!badges.length) {
@@ -451,12 +448,15 @@
         run: selectDefault,
       },
     });
-    items.filter(item => item.image).forEach(item => {
+    items
+      .filter(item => item.image && item.id !== defaultId && item.id !== (defaultItem && defaultItem.id))
+      .forEach(item => {
+      const selected = selectedId === item.id;
       itemCard({
         title: item.name || `${definition.title} sprite`,
         image: item.image,
-        selected: selectedId === item.id,
-        description: selectedId === item.id ? 'Currently equipped.' : '',
+        selected,
+        description: selected ? 'Currently equipped.' : '',
         action: {
           label: 'Equip',
           run: () => {

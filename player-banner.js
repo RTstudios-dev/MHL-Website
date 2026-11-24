@@ -121,11 +121,9 @@
     };
 
     const collections = {
-      background: { items: signup.backgroundSprites || [], configKey: 'backgroundSpriteId' },
       helmet: { items: signup.helmetSprites || [], configKey: 'helmetSpriteId' },
       torso: { items: signup.torsoSprites || [], configKey: 'torsoSpriteId' },
       stick: { items: signup.stickSprites || [], configKey: 'stickSpriteId' },
-      puck: { items: signup.puckSprites || [], configKey: 'puckSpriteId' },
     };
     if (activePoseId) {
       Object.values(collections).forEach(collection => {
@@ -133,8 +131,8 @@
       });
     }
     const customLayers = Array.isArray(signup.bannerLayers) ? signup.bannerLayers : [];
-    const defaultOrder = ['badges', 'stick', 'torso', 'puck', 'helmet', 'background'];
-    const validKeys = new Set([...Object.keys(collections), 'badges', ...customLayers.map(layer => `custom:${layer.id}`)]);
+    const defaultOrder = ['badges', 'stick', 'torso', 'helmet'];
+    const validKeys = new Set(['helmet', 'torso', 'stick', 'badges', ...customLayers.map(layer => `custom:${layer.id}`)]);
     const layerOrder = Array.isArray(defaults.layerOrder)
       ? defaults.layerOrder.filter((key, index, order) => validKeys.has(key) && order.indexOf(key) === index)
       : [];
@@ -143,6 +141,14 @@
       const key = `custom:${layer.id}`;
       if (!layerOrder.includes(key)) layerOrder.unshift(key);
     });
+    const activePose = (signup.bannerPoses || []).find(pose => pose.id === activePoseId);
+    if (activePose && activePose.backgroundImage) {
+      addImage({
+        id: `pose-background:${activePose.id}`,
+        image: activePose.backgroundImage,
+        transform: { x: 0, y: 0, scale: 1 },
+      }, `pose-background:${activePose.id}`, 1);
+    }
     layerOrder.forEach((key, index) => {
       const zIndex = 10 + layerOrder.length - index;
       if (key.startsWith('custom:')) {
