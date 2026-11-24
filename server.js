@@ -738,23 +738,23 @@ const statRequirementsMet = (data, signup, requirements, requireAllStats) => {
     ? required.some(([threshold, value]) => value >= threshold)
     : required.every(([threshold, value]) => value >= threshold);
 };
+const automaticallyGranted = (data, signup, item) => {
+  if (item.allPlayers) return true;
+  const season1 = isSeason1Player(data, signup);
+  return (item.season1Players && season1)
+    || (item.season2Players && !season1);
+};
 const badgeIsUnlocked = (data, signup, badge) => {
   if (!badge || !badge.image) return false;
   if (badge.manualPlayerIds.includes(signup.id)) return true;
-  const season1 = isSeason1Player(data, signup);
-  if (!badge.allPlayers
-      && !(badge.season2Players)
-      && !(badge.season1Players && season1)) return false;
-  return statRequirementsMet(data, signup, badge.requirements, badge.requireAllStats);
+  return automaticallyGranted(data, signup, badge)
+    || statRequirementsMet(data, signup, badge.requirements, badge.requireAllStats);
 };
 const poseIsUnlocked = (data, signup, pose) => {
   if (!pose) return false;
   if (pose.manualPlayerIds.includes(signup.id)) return true;
-  const season1 = isSeason1Player(data, signup);
-  if (!pose.allPlayers
-      && !(pose.season2Players)
-      && !(pose.season1Players && season1)) return false;
-  return statRequirementsMet(data, signup, pose.requirements, pose.requireAllStats);
+  return automaticallyGranted(data, signup, pose)
+    || statRequirementsMet(data, signup, pose.requirements, pose.requireAllStats);
 };
 const bannerStatRankings = (data, currentSignup) => {
   const statValue = (signup, stat) => {

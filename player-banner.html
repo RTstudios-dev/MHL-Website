@@ -213,17 +213,7 @@
       Number(requirements.gamesWith30Saves) > 0 ? `${requirements.gamesWith30Saves} games with 30+ saves` : '',
       Number(requirements.points) > 0 ? `${requirements.points} points` : '',
     ].filter(Boolean);
-    const values = stats.length ? [
-      item.requireAllStats === false
-        ? `Any one: ${stats.join(' or ')}`
-        : `All required: ${stats.join(' and ')}`,
-    ] : [];
-    if (!item.allPlayers) {
-      if (item.season1Players) values.push('Season 1 players');
-      if (item.season2Players) values.push('Season 2 players');
-      if (!item.season1Players && !item.season2Players) values.push('Staff award');
-    }
-    return values.join(' · ');
+    return stats.join(item.requireAllStats === false ? ' or ' : ' and ');
   };
   const setTargetMode = target => {
     pendingTarget = target;
@@ -302,7 +292,7 @@
       if (pose.unlocked === false) {
         const requirements = document.createElement('small');
         requirements.className = 'banner-pose-requirements';
-        requirements.textContent = `Requirements: ${itemRequirementsText(pose) || 'Contact league staff.'}`;
+        requirements.textContent = itemRequirementsText(pose) || 'Contact league staff.';
         option.append(requirements);
       }
       option.addEventListener('click', () => {
@@ -442,7 +432,7 @@
           image: badge.image,
           description: badge.unlocked
             ? badge.description || itemRequirementsText(badge) || 'Unlocked badge.'
-            : `Requirements: ${itemRequirementsText(badge) || 'Contact league staff.'}`,
+            : itemRequirementsText(badge) || 'Contact league staff.',
           selected: isEquipped,
           locked: badge.unlocked === false,
           action: {
@@ -510,7 +500,7 @@
         selected,
         locked: item.unlocked === false,
         description: item.unlocked === false
-          ? `Requirements: ${item.lockedRequirements || itemRequirementsText(item) || 'Contact league staff.'}`
+          ? item.lockedRequirements || itemRequirementsText(item) || 'Contact league staff.'
           : selected ? 'Currently equipped.' : '',
         action: {
           label: item.unlocked === false ? 'Locked' : 'Equip',

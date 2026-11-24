@@ -508,7 +508,7 @@ const MHLA = (() => {
                 sync();
                 touch();
               },
-            }), 'All players'),
+            }), 'Auto-grant to all players'),
             h('label', { class: 'checkline' }, h('input', {
               type: 'checkbox', checked: representative.season2Players,
               onchange: event => {
@@ -516,7 +516,7 @@ const MHLA = (() => {
                 sync();
                 touch();
               },
-            }), 'Season 2 players'),
+            }), 'Auto-grant to Season 2 players'),
             h('label', { class: 'checkline' }, h('input', {
               type: 'checkbox', checked: representative.season1Players,
               onchange: event => {
@@ -524,7 +524,8 @@ const MHLA = (() => {
                 sync();
                 touch();
               },
-            }), 'Season 1 players')));
+            }), 'Auto-grant to Season 1 players'),
+            h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.')));
       });
       componentSections.push(bannerComponentSection(
         `reskin-requirements:${key}`,
@@ -2319,15 +2320,16 @@ const MHLA = (() => {
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: item.allPlayers,
             onchange: event => { item.allPlayers = event.target.checked; touch(); },
-          }), 'All players'),
+          }), 'Auto-grant to all players'),
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: item.season2Players,
             onchange: event => { item.season2Players = event.target.checked; touch(); },
-          }), 'Season 2 players'),
+          }), 'Auto-grant to Season 2 players'),
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: item.season1Players,
             onchange: event => { item.season1Players = event.target.checked; touch(); },
-          }), 'Season 1 players')),
+          }), 'Auto-grant to Season 1 players')),
+        h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.'),
         manualAwards);
     });
     const addButton = pose || options.noAdd ? null : h('button', { class: 'btn sm', type: 'button', onclick: () => {
@@ -2585,15 +2587,16 @@ const MHLA = (() => {
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: pose.allPlayers,
             onchange: event => { pose.allPlayers = event.target.checked; touch(); },
-          }), 'All players'),
+          }), 'Auto-grant to all players'),
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: pose.season2Players,
             onchange: event => { pose.season2Players = event.target.checked; touch(); },
-          }), 'Season 2 players'),
+          }), 'Auto-grant to Season 2 players'),
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: pose.season1Players,
             onchange: event => { pose.season1Players = event.target.checked; touch(); },
-          }), 'Season 1 players')),
+          }), 'Auto-grant to Season 1 players')),
+        h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.'),
         manualAwards,
         ...Object.entries(componentMap).map(([componentKey, [collectionKey, title]]) =>
           playerBannerSpriteSection(collectionKey, title, componentKey, pose)));
@@ -2741,15 +2744,16 @@ const MHLA = (() => {
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: badge.allPlayers,
             onchange: event => { badge.allPlayers = event.target.checked; touch(); },
-          }), 'All players'),
+          }), 'Auto-grant to all players'),
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: badge.season2Players,
             onchange: event => { badge.season2Players = event.target.checked; touch(); },
-          }), 'Season 2 players'),
+          }), 'Auto-grant to Season 2 players'),
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: badge.season1Players,
             onchange: event => { badge.season1Players = event.target.checked; touch(); },
-          }), 'Season 1 players')),
+          }), 'Auto-grant to Season 1 players')),
+        h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.'),
         manualAwards);
     });
     const defaultBadgeSelect = h('select', {
