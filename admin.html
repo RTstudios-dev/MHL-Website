@@ -132,6 +132,11 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .signup-table[hidden]{display:none}
 .caps-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:640px;margin-bottom:16px}
 .checkline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.season1-player-checklist{display:flex;flex-direction:column;gap:6px}
+.season1-player-row{display:grid;grid-template-columns:24px minmax(160px,1fr) minmax(160px,1fr);align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--line);background:var(--card)}
+.season1-player-row input{margin:0}
+.season1-player-row b{min-width:0;overflow-wrap:anywhere}
+.season1-player-discord{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 .badge-admin-card{margin-top:14px}
 .reskin-admin-group{margin:10px 0;border:1px solid var(--line);background:var(--card)}
 .reskin-admin-group>summary{padding:10px 12px;color:var(--gold);cursor:pointer;font-weight:600}
@@ -1166,14 +1171,25 @@ const MHLA = (() => {
   function season1() {
     D.players = Array.isArray(D.players) ? D.players : [];
     D.season1PlayerIds = Array.isArray(D.season1PlayerIds) ? D.season1PlayerIds : [];
+    D.signups = Array.isArray(D.signups) ? D.signups : [];
+    const signupsById = new Map(D.signups.map(signup => [signup.id, signup]));
     const players = [...D.players].sort((a, b) =>
       String(a.name || '').localeCompare(String(b.name || ''), undefined,
         { sensitivity: 'base', numeric: true }));
     return [
       head('Season 1 Players'),
       h('p', { class: 'help' }, 'Check every player who was part of Season 1. These checks are available in badge, pose, and reskin requirements.'),
-      h('div', { class: 'ed' }, players.length ? players.map(player =>
-        h('label', { class: 'checkline' },
+      h('div', { class: 'ed season1-player-checklist' },
+        h('div', { class: 'season1-player-row', style: 'border:0;background:transparent' },
+          h('span', {}),
+          h('b', {}, 'In-game name'),
+          h('b', {}, 'Discord name')),
+        players.length ? players.map(player => {
+          const signup = signupsById.get(player.signupId);
+          const discordName = signup && signup.discord
+            ? signup.discord
+            : player.discord || '—';
+          return h('label', { class: 'season1-player-row' },
           h('input', {
             type: 'checkbox',
             checked: D.season1PlayerIds.includes(player.id),
@@ -1184,8 +1200,9 @@ const MHLA = (() => {
               touch();
             },
           }),
-          player.name || 'Unnamed player'))
-        : h('div', { class: 'empty' },
+          h('b', {}, player.name || 'Unnamed player'),
+          h('span', { class: 'season1-player-discord' }, discordName));
+        }) : h('div', { class: 'empty' },
           h('b', {}, 'No players'), 'Add players in the Players tab first.')),
     ];
   }

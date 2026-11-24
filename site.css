@@ -97,10 +97,14 @@ dialog.prompt-dialog::backdrop{background:#000b}
 .player-banner-hover-canvas .player-banner-value{color:#c9a35c;font:500 28px var(--disp);text-shadow:0 2px 3px #000}
 .player-banner-hover-canvas .player-banner-stat-label{color:var(--primary);font:500 15px var(--disp)}
 .player-banner-hover-canvas .player-banner-stat-value{color:#c9a35c;font:500 64px var(--disp)}
-.player-banner-hover-canvas .player-banner-stat-rank{position:absolute;min-width:58px;padding:4px 7px;border-radius:999px;text-align:center;font:700 18px var(--body);line-height:1;pointer-events:none}
-.player-banner-hover-canvas .player-banner-stat-rank-gold{background:#d6ad60;color:#2a1d09}
-.player-banner-hover-canvas .player-banner-stat-rank-silver{background:#bfc3c8;color:#202225}
-.player-banner-hover-canvas .player-banner-stat-rank-bronze{background:#b87945;color:#24140b}
+.player-banner-hover-canvas .player-banner-stat-rank{position:absolute;font:700 22px var(--body);line-height:1;text-shadow:0 2px 3px #000;pointer-events:none}
+.player-banner-hover-canvas .player-banner-stat-rank-gold{color:#d6ad60}
+.player-banner-hover-canvas .player-banner-stat-rank-silver{color:#bfc3c8}
+.player-banner-hover-canvas .player-banner-stat-rank-bronze{color:#b87945}
+.player-banner-stat-rank{position:absolute;font:700 22px var(--body);line-height:1;text-shadow:0 2px 3px #000;pointer-events:none}
+.player-banner-stat-rank-gold{color:#d6ad60}
+.player-banner-stat-rank-silver{color:#bfc3c8}
+.player-banner-stat-rank-bronze{color:#b87945}
 .player-stats-search{display:grid;flex:1;max-width:320px;gap:4px;color:var(--muted);font-size:14px}
 .player-stats-search input{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);padding:9px 12px;min-height:44px;width:100%}
 .player-stats-point-key{margin:0 12px 9px;color:var(--muted);font-size:13px;line-height:1.4}

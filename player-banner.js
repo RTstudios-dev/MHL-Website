@@ -13,6 +13,8 @@
     if (!Array.isArray(config.equippedStats))
       config.equippedStats = ['Goals', 'Assists', 'Saves'];
     else config.equippedStats = [...new Set(config.equippedStats)].slice(0, 3);
+    if (!config.equippedStats.length)
+      config.equippedStats = ['Goals', 'Assists', 'Saves'];
     if (typeof config.poseId !== 'string')
       config.poseId = signup.bannerDefaults && typeof signup.bannerDefaults.poseId === 'string'
         ? signup.bannerDefaults.poseId : '';
@@ -236,13 +238,16 @@
         rankElement.className = `player-banner-stat-rank player-banner-stat-rank-${rankClasses[rank]}`;
         rankElement.textContent = rankNames[rank];
         rankElement.style.zIndex = String(zIndex + 1);
-        rankElement.style.left = `${transform.x - 70}px`;
+        rankElement.style.left = `${transform.x - 62 * transform.scale}px`;
         rankElement.style.top = `${transform.y}px`;
         rankElement.style.transform = `scale(${transform.scale})`;
         rankElement.style.transformOrigin = 'top left';
         canvas.append(rankElement);
       }
-      addText(text, className, transform, zIndex, target);
+      const valueTransform = rank >= 1 && rank <= 3
+        ? { ...transform, x: transform.x + 70 * transform.scale }
+        : transform;
+      addText(text, className, valueTransform, zIndex, target);
     };
     const playerNameTransform = transformAt(
       [defaults.playerNameTransform], 0, { x: 424.5, y: 45, scale: 1 });

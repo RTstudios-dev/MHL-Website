@@ -892,7 +892,7 @@ const sanitizeBannerConfig = value => {
     puckTransform: sanitizeTransform(config.puckTransform),
     equippedStats: Array.isArray(config.equippedStats)
       ? config.equippedStats.slice(0, 20).map(item => str(item, 40)).filter(Boolean)
-      : [],
+      : ['Goals', 'Assists', 'Saves'],
   };
 };
 function sanitize(d) {
@@ -1002,7 +1002,13 @@ function sanitize(d) {
     photo: okImage(p.photo) ? p.photo : '',
     cardArtwork: okImage(p.cardArtwork) ? p.cardArtwork : '',
     badgeSlots: Array.isArray(p.badgeSlots) ? p.badgeSlots.slice(0, 3).map(id => str(id, 40)) : [],
-    bannerConfig: sanitizeBannerConfig(p.bannerConfig),
+    bannerConfig: sanitizeBannerConfig({
+      ...(p.bannerConfig && typeof p.bannerConfig === 'object' ? p.bannerConfig : {}),
+      equippedStats: Array.isArray(p.bannerConfig && p.bannerConfig.equippedStats)
+        && (p.bannerConfig.equippedStats.length || Object.prototype.hasOwnProperty.call(p.bannerConfig, 'equippedStats'))
+        ? p.bannerConfig.equippedStats
+        : ['Goals', 'Assists', 'Saves'],
+    }),
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
   const signupIds = new Set(signups.map(signup => signup.id));
@@ -2222,6 +2228,7 @@ const server = http.createServer(async (req, res) => {
         poseId: pose.id,
         equippedStats,
       });
+      signup.bannerConfig.equippedStats = equippedStats;
       writeData(data);
       return send(res, 200, {
         ok: true,
