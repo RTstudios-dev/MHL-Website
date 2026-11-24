@@ -13,6 +13,9 @@
     if (!Array.isArray(config.equippedStats))
       config.equippedStats = ['Goals', 'Assists', 'Saves'];
     else config.equippedStats = [...new Set(config.equippedStats)].slice(0, 3);
+    if (typeof config.poseId !== 'string')
+      config.poseId = signup.bannerDefaults && typeof signup.bannerDefaults.poseId === 'string'
+        ? signup.bannerDefaults.poseId : '';
     signup.bannerConfig = config;
     return config;
   };
@@ -36,6 +39,7 @@
 
     const config = ensureConfig(signup);
     const defaults = signup.bannerDefaults || {};
+    const activePoseId = config.poseId || defaults.poseId || '';
     const badgeFrameSize = 500;
     const badgeImageSize = 400;
     const badgeScaleRatio = 184 / badgeImageSize;
@@ -121,6 +125,11 @@
       stick: { items: signup.stickSprites || [], configKey: 'stickSpriteId' },
       puck: { items: signup.puckSprites || [], configKey: 'puckSpriteId' },
     };
+    if (activePoseId) {
+      Object.values(collections).forEach(collection => {
+        collection.items = collection.items.filter(item => item.poseId === activePoseId);
+      });
+    }
     const customLayers = Array.isArray(signup.bannerLayers) ? signup.bannerLayers : [];
     const defaultOrder = ['badges', 'stick', 'torso', 'puck', 'helmet', 'background'];
     const validKeys = new Set([...Object.keys(collections), 'badges', ...customLayers.map(layer => `custom:${layer.id}`)]);

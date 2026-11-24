@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MHL Player Card Preview</title>
+  <style>
+    :root {
+      --gold: #c9a35c;
+      --gold-bright: #dbc58d;
+      --ink: #141b33;
+      --panel: #10182b;
+      --text: #f2eee5;
+      --muted: #b3b8c7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 45%, #26324d 0, #121827 55%, #090c14 100%);
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    .card {
+      width: 430px;
+      height: 608px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      background: #151e34;
+      border: 1px solid #6f5d3a;
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+    }
+
+    .player-name {
+      height: 32px;
+      margin-bottom: 10px;
+      text-align: center;
+      font-size: 30px;
+      font-weight: 700;
+      line-height: 32px;
+    }
+
+    .middle {
+      height: 299px;
+      display: grid;
+      grid-template-columns: 58px minmax(0, 299px) 1fr;
+      gap: 16px;
+      flex: 0 0 299px;
+    }
+
+    .left-column {
+      height: 299px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .avatar,
+    .badge {
+      width: 58px;
+      height: 58px;
+      border: 2px solid #5f6e8c;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #203c75;
+      color: #f6da73;
+      font-size: 29px;
+      font-weight: 700;
+    }
+
+    .badge {
+      width: 76px;
+      height: 76px;
+      border: 2px solid #3171bd;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, #f2cd4f 0 22%, transparent 23%),
+        #173a75;
+      box-shadow: inset 0 0 0 5px #10182b;
+    }
+
+    .badge::after {
+      content: "MHL";
+      color: #e0bf62;
+      font-size: 20px;
+      text-shadow: 1px 2px 0 #000;
+    }
+
+    .banner-square {
+      width: 299px;
+      height: 299px;
+      overflow: hidden;
+      border: 1px solid #6f5d3a;
+      background: #17171b;
+    }
+
+    .banner-square img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: 50% 50%;
+    }
+
+    .stats {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-bottom: 2px;
+    }
+
+    .stat {
+      min-width: 0;
+      border-bottom: 1px solid rgba(201, 163, 92, 0.28);
+    }
+
+    .stat-label {
+      color: #91a6d4;
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-value {
+      margin-top: 2px;
+      color: var(--gold-bright);
+      font-size: 26px;
+      line-height: 30px;
+    }
+
+    .team-value {
+      height: 62px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: end;
+      padding: 10px 0 6px;
+    }
+
+    .metric {
+      border-right: 1px solid rgba(201, 163, 92, 0.25);
+    }
+
+    .metric:last-child { border-right: 0; }
+
+    .metric-label {
+      color: var(--muted);
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .metric-value {
+      margin-top: 3px;
+      color: var(--gold-bright);
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+  <article class="card" aria-label="MHL intro player card preview">
+    <div class="player-name">r_607</div>
+
+    <div class="middle">
+      <aside class="left-column" aria-label="Profile and badges">
+        <div class="avatar">R</div>
+        <div class="badge" title="MHL badge"></div>
+        <div class="badge" title="MHL badge"></div>
+        <div class="badge" title="MHL badge"></div>
+      </aside>
+
+      <div class="banner-square">
+        <img src="/uploads/r_607-preview.png" alt="r_607 player banner preview">
+      </div>
+
+      <aside class="stats" aria-label="Equipped stats">
+        <div class="stat">
+          <div class="stat-label">GOALS</div>
+          <div class="stat-value">8</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">ASSISTS</div>
+          <div class="stat-value">14</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">SAVES</div>
+          <div class="stat-value">19</div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="team-value">
+      <div class="metric">
+        <div class="metric-label">TEAM</div>
+        <div class="metric-value">MHL EU</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">VALUE</div>
+        <div class="metric-value">€7.5m</div>
+      </div>
+    </footer>
+  </article>
+</body>
+</html>

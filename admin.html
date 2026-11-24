@@ -133,6 +133,12 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .caps-edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:640px;margin-bottom:16px}
 .checkline{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
 .badge-admin-card{margin-top:14px}
+.reskin-admin-group{margin:10px 0;border:1px solid var(--line);background:var(--card)}
+.reskin-admin-group>summary{padding:10px 12px;color:var(--gold);cursor:pointer;font-weight:600}
+.reskin-admin-group>.badge-admin-card{margin:0 10px 10px}
+.pose-import-drop{padding:18px;border:1px dashed var(--gold);background:var(--card);text-align:center}
+.pose-import-drop.dragover{background:#c9a35c22}
+.pose-preview-image{width:120px;height:120px;object-fit:contain;background:#111013}
 .badge-image-picker .thumb{width:88px;height:88px;border-radius:50%}
 .banner-scale-control{display:grid;gap:10px}
 .banner-scale-values{display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:10px;align-items:end}
@@ -210,11 +216,16 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '';
-  const bannerSectionOpen = { editor: true, badges: true, background: true, helmet: true, torso: true, stick: true, puck: true };
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
+  const bannerSectionOpen = { editor: true, badges: true, poses: true, puck: true };
   let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
   const playoffMatchLimits = { quarterfinals: 4, semifinals: 2, finals: 1 };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const defaultPoseId = () => {
+    if (D.bannerDefaults && D.bannerDefaults.poseId) return D.bannerDefaults.poseId;
+    const pose = (D.bannerPoses || []).find(item => String(item.name || '').toLowerCase() === 'default');
+    return pose ? pose.id : 'default';
+  };
 
   // h('div', {class: 'x', onclick: fn}, ...children)
   function h(tag, attrs, ...kids) {
@@ -348,6 +359,67 @@ const MHLA = (() => {
     pw.focus();
   }
 
+  function bannerReskinRequirementsSection() {
+    const requirementDefaults = {
+      goals: 0, assists: 0, saves: 0, points: 0,
+      gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
+      gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
+      gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
+    };
+    const requirementLabels = {
+      goals: 'Goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      gamesScoredIn: 'Games with a goal',
+      gamesWith3Goals: 'Games with 3+ goals',
+      gamesWith5Goals: 'Games with 5+ goals',
+      gamesWith10Goals: 'Games with 10+ goals',
+      gamesWith100PercentSavePercentage: 'Games with 100% SV%',
+      gamesWith10Saves: 'Games with 10+ saves',
+      gamesWith20Saves: 'Games with 20+ saves',
+      gamesWith30Saves: 'Games with 30+ saves',
+    };
+    const entries = [];
+    const posesById = new Map((D.bannerPoses || []).map(pose => [pose.id, pose]));
+    for (const [key, componentName] of [
+      ['backgroundSprites', 'Background'],
+      ['helmetSprites', 'Helmet'],
+      ['torsoSprites', 'Torso'],
+      ['stickSprites', 'Stick'],
+    ]) {
+      for (const item of D[key] || []) {
+        item.requirements = { ...requirementDefaults, ...(item.requirements || {}) };
+        item.manualPlayerIds = Array.isArray(item.manualPlayerIds) ? item.manualPlayerIds : [];
+        const pose = posesById.get(item.poseId);
+        const fields = Object.entries(requirementLabels).map(([requirementKey, label]) =>
+          field(label, h('input', {
+            type: 'number', min: 0, max: 1000000, step: 1,
+            value: item.requirements[requirementKey] || 0,
+            oninput: event => {
+              const value = Number(event.target.value);
+              if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) return;
+              item.requirements[requirementKey] = value;
+              touch();
+            },
+          })));
+        entries.push(h('details', { class: 'manual-badge-awards' },
+          h('summary', {}, `${pose ? pose.name : 'Default'} — ${item.name || 'Reskin'} — ${componentName}`),
+          h('div', { class: 'badge-requirements' }, fields),
+          h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
+          h('div', { class: 'badge-audiences' },
+            h('label', { class: 'checkline' }, h('input', {
+              type: 'checkbox', checked: item.allPlayers,
+              onchange: event => { item.allPlayers = event.target.checked; touch(); },
+            }), 'All players'),
+            h('label', { class: 'checkline' }, h('input', {
+              type: 'checkbox', checked: item.season2Players,
+              onchange: event => { item.season2Players = event.target.checked; touch(); },
+            }), 'Season 2 players'))));
+      }
+    }
+    return bannerComponentSection('reskin-requirements', 'Reskin Requirements', null,
+      entries.length ? entries : h('div', { class: 'empty' },
+        h('b', {}, 'No reskins yet'), 'Batch-upload PNGs or add them in a pose.'));
+  }
+
   async function start() {
     const r = await fetch('/api/data', { cache: 'no-store' });
     D = await r.json();
@@ -355,6 +427,7 @@ const MHLA = (() => {
     D.bannedSteamIds = Array.isArray(D.bannedSteamIds) ? D.bannedSteamIds : [];
     D.playerListExclusions = Array.isArray(D.playerListExclusions) ? D.playerListExclusions : [];
     D.badges = Array.isArray(D.badges) ? D.badges : [];
+    D.bannerPoses = Array.isArray(D.bannerPoses) ? D.bannerPoses : [];
     D.bannerSprites = Array.isArray(D.bannerSprites) ? D.bannerSprites : [];
     D.helmetSprites = Array.isArray(D.helmetSprites) ? D.helmetSprites : [];
     D.torsoSprites = Array.isArray(D.torsoSprites) ? D.torsoSprites : [];
@@ -1412,10 +1485,11 @@ const MHLA = (() => {
         : layer === 'torso' ? 'torso'
         : layer === 'stick' ? 'stick'
         : 'puck';
-      const selected = items.find(item => item.id === D.bannerDefaults[defaultKey] && item.image)
-        || items.find(item => item.image)
-        || items.find(item => item.id === D.bannerDefaults[defaultKey])
-        || items[0];
+      const defaultPoseItems = items.filter(item => item.poseId === defaultPoseId());
+      const selected = defaultPoseItems.find(item => item.id === D.bannerDefaults[defaultKey] && item.image)
+        || defaultPoseItems.find(item => item.image)
+        || defaultPoseItems.find(item => item.id === D.bannerDefaults[defaultKey])
+        || defaultPoseItems[0];
       if (selected)
         selectComponent(`sprite:${selected.id}`, selected.name || title, layerTransform(selected), `sprite:${selected.id}`);
       else renderComponentProperties();
@@ -1595,7 +1669,8 @@ const MHLA = (() => {
         }
         if (layerKey === 'badges') return;
         const [key] = categoryMap[layerKey];
-        const items = D[key] = Array.isArray(D[key]) ? D[key] : [];
+        const items = (D[key] = Array.isArray(D[key]) ? D[key] : [])
+          .filter(item => item.poseId === defaultPoseId());
         const defaultId = D.bannerDefaults[
           layerKey === 'background' ? 'background'
           : layerKey === 'helmet' ? 'helmet'
@@ -1784,7 +1859,13 @@ const MHLA = (() => {
           const file = event.target.files[0];
           if (!file) return;
           if (file.size > 8_000_000) { alert('Layer PNG too large (max 8 MB)'); return; }
-          const url = await upload(file);
+          let url;
+          try {
+            url = await upload(file);
+          } catch (error) {
+            alert(error.message || 'Card layer upload failed.');
+            return;
+          }
           if (!url) return;
           let dimensions;
           try {
@@ -1835,7 +1916,8 @@ const MHLA = (() => {
         assets.append(addBadgeHint);
         return;
       }
-      const items = D[key] = Array.isArray(D[key]) ? D[key] : [];
+      const items = (D[key] = Array.isArray(D[key]) ? D[key] : [])
+        .filter(item => item.poseId === defaultPoseId());
       const defaultKey = activeLayer === 'background' ? 'background'
         : activeLayer === 'helmet' ? 'helmet'
         : activeLayer === 'torso' ? 'torso'
@@ -1858,48 +1940,7 @@ const MHLA = (() => {
         });
         assets.append(button);
       });
-      const uploadInput = h('input', {
-        type: 'file',
-        accept: 'image/png',
-        style: 'display:none',
-      });
-      uploadInput.addEventListener('change', async event => {
-        const file = event.target.files[0];
-        if (!file) return;
-        if (file.size > 8_000_000) { alert(`${title} PNG too large (max 8 MB)`); return; }
-        const url = await upload(file);
-        if (!url) return;
-        let dimensions;
-        try {
-          dimensions = await imageDimensions(url);
-        } catch (error) {
-          alert(error.message);
-          return;
-        }
-        const item = {
-          id: uid(), name: `New ${title}`, description: '', image: url,
-          naturalWidth: dimensions.width,
-          naturalHeight: dimensions.height,
-          transform: {
-            x: (canvasWidth - dimensions.width) / 2,
-            y: (canvasHeight - dimensions.height) / 2,
-            scale: 1,
-          },
-          requirements: {},
-          allPlayers: false, season2Players: false, manualPlayerIds: [],
-        };
-        items.push(item);
-        D.bannerDefaults[defaultKey] = item.id;
-        touch();
-        renderAssets();
-        renderCanvasAssets();
-      });
-      const addButton = h('button', {
-        type: 'button',
-        class: 'btn sm',
-        onclick: () => uploadInput.click(),
-      }, `Add ${title} PNG`);
-      assets.append(addButton, uploadInput);
+      assets.append(h('p', { class: 'help' }, 'Sprite PNGs are uploaded in the pose manager above.'));
     };
 
     const addLayerButton = h('button', {
@@ -1986,8 +2027,11 @@ const MHLA = (() => {
       body);
   }
 
-  function playerBannerSpriteSection(key, title, defaultKey) {
-    const items = D[key] = Array.isArray(D[key]) ? D[key] : [];
+  function playerBannerSpriteSection(key, title, defaultKey, pose = null, options = {}) {
+    const collection = D[key] = Array.isArray(D[key]) ? D[key] : [];
+    const items = collection.filter(item => pose
+      ? item.poseId === pose.id
+      : !options.defaultOnly || item.poseId === defaultPoseId());
     const requirementDefaults = {
       goals: 0, assists: 0, saves: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
@@ -2016,7 +2060,7 @@ const MHLA = (() => {
         value: item.id,
         selected: D.bannerDefaults[defaultKey] === item.id,
       }, item.name || title)));
-    const defaultsRow = h('div', { class: 'ed', style: 'margin-top:14px' },
+    const defaultsRow = pose ? null : h('div', { class: 'ed', style: 'margin-top:14px' },
       field(`Default ${title}`, defaultSelect, 'Used on every player card until the player equips a sprite.'));
 
     const cards = items.map(item => {
@@ -2031,7 +2075,13 @@ const MHLA = (() => {
           const file = event.target.files[0];
           if (!file) return;
           if (file.size > 8_000_000) { alert(`${title} image too large (max 8 MB)`); return; }
-          const url = await upload(file);
+          let url;
+          try {
+            url = await upload(file);
+          } catch (error) {
+            alert(error.message || 'Sprite upload failed.');
+            return;
+          }
           if (!url) return;
           let dimensions;
           try {
@@ -2115,7 +2165,7 @@ const MHLA = (() => {
           }), 'Season 2 players')),
         manualAwards);
     });
-    const addButton = h('button', { class: 'btn sm', type: 'button', onclick: () => {
+    const addButton = pose || options.noAdd ? null : h('button', { class: 'btn sm', type: 'button', onclick: () => {
           items.push({
             id: uid(), name: `New ${title}`, description: '', image: '',
             transform: { x: 334, y: 510, scale: 1 },
@@ -2125,9 +2175,272 @@ const MHLA = (() => {
           touch();
           draw();
         } }, `Add ${title}`);
+    if (pose) {
+      const groups = new Map();
+      items.forEach((item, index) => {
+        const name = item.name || title;
+        if (!groups.has(name)) groups.set(name, []);
+        groups.get(name).push(cards[index]);
+      });
+      const reskinSections = [...groups].map(([name, entries]) =>
+        h('details', { class: 'reskin-admin-group' },
+          h('summary', {}, name),
+          ...entries));
+      return bannerComponentSection(`pose:${pose.id}:${key}`, title, null,
+        reskinSections.length ? reskinSections : h('div', { class: 'empty' },
+          h('b', {}, `No ${title.toLowerCase()} reskins`), ' Upload matching PNGs to add reskins to this pose.'));
+    }
     return bannerComponentSection(key, title, addButton,
       defaultsRow,
-      cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, `No ${title.toLowerCase()} yet`), `Press Add ${title} to create one.`));
+      cards.length ? cards : h('div', { class: 'empty' },
+        h('b', {}, `No ${title.toLowerCase()} yet`),
+        options.noAdd ? 'Legacy assets appear here when available.' : `Press Add ${title} to create one.`));
+  }
+
+  function bannerPoseManager() {
+    D.bannerPoses = Array.isArray(D.bannerPoses) ? D.bannerPoses : [];
+    D.bannerDefaults = D.bannerDefaults && typeof D.bannerDefaults === 'object'
+      ? D.bannerDefaults : {};
+    const requirementDefaults = {
+      goals: 0, assists: 0, saves: 0, points: 0,
+      gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
+      gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
+      gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
+    };
+    const requirementLabels = {
+      goals: 'Goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      gamesScoredIn: 'Games with a goal',
+      gamesWith3Goals: 'Games with 3+ goals',
+      gamesWith5Goals: 'Games with 5+ goals',
+      gamesWith10Goals: 'Games with 10+ goals',
+      gamesWith100PercentSavePercentage: 'Games with 100% SV%',
+      gamesWith10Saves: 'Games with 10+ saves',
+      gamesWith20Saves: 'Games with 20+ saves',
+      gamesWith30Saves: 'Games with 30+ saves',
+    };
+    const componentMap = {
+      torso: ['torsoSprites', 'Torso'],
+      stick: ['stickSprites', 'Stick'],
+      background: ['backgroundSprites', 'Background'],
+      helmet: ['helmetSprites', 'Helmet'],
+    };
+    const importPngs = async files => {
+      let imported = 0;
+      const errors = [];
+      for (const file of Array.from(files || [])) {
+        const match = file.name.match(/^(.+)_([^_]+)_(background|torso|stick|helmet)\.png$/i);
+        if (!match) {
+          errors.push(`${file.name}: expected Reskin_Pose_Component.png`);
+          continue;
+        }
+        if (file.size > 8_000_000) {
+          errors.push(`${file.name}: exceeds the 8 MB limit`);
+          continue;
+        }
+        const poseMatches = D.bannerPoses.filter(pose =>
+          String(pose.name || '').trim().toLowerCase() === match[2].trim().toLowerCase());
+        if (poseMatches.length !== 1) {
+          errors.push(`${file.name}: ${poseMatches.length ? 'pose reference is ambiguous' : `pose "${match[2]}" was not found`}`);
+          continue;
+        }
+        const pose = poseMatches[0];
+        const [collectionKey] = componentMap[match[3].toLowerCase()];
+        const collection = D[collectionKey] = Array.isArray(D[collectionKey]) ? D[collectionKey] : [];
+        try {
+          const response = await fetch('/api/upload', { method: 'POST', body: file });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Upload failed.');
+          if (!/\.png$/i.test(result.url || '')) throw new Error('The selected file is not a PNG image.');
+          const dimensions = await imageDimensions(result.url);
+          collection.push({
+            id: uid(),
+            name: match[1].trim(),
+            poseId: pose.id,
+            description: '',
+            image: result.url,
+            naturalWidth: dimensions.width,
+            naturalHeight: dimensions.height,
+            transform: {
+              x: (849 - dimensions.width) / 2,
+              y: (1200 - dimensions.height) / 2,
+              scale: 1,
+            },
+            requirements: { ...requirementDefaults },
+            allPlayers: false,
+            season2Players: false,
+            manualPlayerIds: [],
+          });
+          imported++;
+        } catch (error) {
+          errors.push(`${file.name}: ${error.message || 'Upload failed'}`);
+        }
+      }
+      const errorSummary = errors.length
+        ? ` ${errors.slice(0, 8).join('; ')}${errors.length > 8 ? `; and ${errors.length - 8} more` : ''}`
+        : '';
+      bannerImportMessage = `Imported ${imported} PNG${imported === 1 ? '' : 's'}.${errorSummary}`;
+      if (imported) touch();
+      draw();
+    };
+    const importInput = h('input', {
+      type: 'file', accept: '.png,image/png', multiple: true, style: 'display:none',
+      onchange: event => {
+        const files = [...event.target.files];
+        event.target.value = '';
+        importPngs(files);
+      },
+    });
+    const dropArea = h('div', {
+      class: 'pose-import-drop',
+      ondragover: event => { event.preventDefault(); event.currentTarget.classList.add('dragover'); },
+      ondragleave: event => event.currentTarget.classList.remove('dragover'),
+      ondrop: event => {
+        event.preventDefault();
+        event.currentTarget.classList.remove('dragover');
+        importPngs(event.dataTransfer.files);
+      },
+    },
+      h('p', {}, 'Drop multiple PNGs here or select files. Name each file Reskin_Pose_Component.png, for example Goldman_Flying_Torso.png.'),
+      h('button', { type: 'button', class: 'btn sm', onclick: () => importInput.click() }, 'Choose PNGs'),
+      importInput);
+    const importSection = bannerComponentSection('pose-import', 'Batch PNG upload', null,
+      dropArea,
+      h('p', { class: 'help', role: 'status', 'aria-live': 'polite' }, bannerImportMessage));
+    const poseRequirementFields = pose => Object.entries(requirementLabels).map(([key, label]) =>
+      field(label, h('input', {
+        type: 'number', min: 0, max: 1000000, step: 1,
+        value: pose.requirements[key] || 0,
+        oninput: event => {
+          const value = Number(event.target.value);
+          if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) return;
+          pose.requirements[key] = value;
+          touch();
+        },
+      })));
+    const poses = D.bannerPoses.map(pose => {
+      pose.requirements = { ...requirementDefaults, ...(pose.requirements || {}) };
+      pose.manualPlayerIds = Array.isArray(pose.manualPlayerIds) ? pose.manualPlayerIds : [];
+      const previewInput = h('input', {
+        type: 'file', accept: 'image/png', style: 'display:none',
+        onchange: async event => {
+          const file = event.target.files[0];
+          event.target.value = '';
+          if (!file) return;
+          if (!/\.png$/i.test(file.name) || file.size > 8_000_000) {
+            alert('Pose preview must be a PNG no larger than 8 MB.');
+            return;
+          }
+          let url;
+          try {
+            url = await upload(file);
+          } catch (error) {
+            alert(error.message || 'Pose preview upload failed.');
+            return;
+          }
+          if (!url) return;
+          if (!/\.png$/i.test(url)) {
+            alert('Pose preview must be a PNG image.');
+            return;
+          }
+          try {
+            await imageDimensions(url);
+          } catch (error) {
+            alert(error.message);
+            return;
+          }
+          pose.previewImage = url;
+          touch();
+          draw();
+        },
+      });
+      const manualAwards = h('details', { class: 'manual-badge-awards' },
+        h('summary', {}, `Manual awards (${pose.manualPlayerIds.length})`),
+        D.signups.length ? h('div', {}, D.signups.map(signup => h('label', { class: 'checkline' },
+          h('input', {
+            type: 'checkbox',
+            checked: pose.manualPlayerIds.includes(signup.id),
+            onchange: event => {
+              if (event.target.checked) {
+                if (!pose.manualPlayerIds.includes(signup.id)) pose.manualPlayerIds.push(signup.id);
+              } else pose.manualPlayerIds = pose.manualPlayerIds.filter(id => id !== signup.id);
+              touch();
+              event.target.closest('details').querySelector('summary').textContent =
+                `Manual awards (${pose.manualPlayerIds.length})`;
+            },
+          }), `${signup.name}${signup.team ? ` — ${teamName(signup.team)}` : ''}`))) :
+          h('p', { class: 'help' }, 'No Season 2 signups are available to award manually.'));
+      const removePose = pose.id === defaultPoseId() ? null : h('button', {
+        class: 'btn del sm', type: 'button', onclick: () => {
+          if (!confirm(`Delete pose "${pose.name || 'Pose'}" and its reskins?`)) return;
+          const removed = new Set();
+          for (const key of ['bannerSprites', 'backgroundSprites', 'helmetSprites', 'torsoSprites', 'stickSprites', 'puckSprites']) {
+            D[key] = (D[key] || []).filter(item => {
+              if (item.poseId !== pose.id) return true;
+              removed.add(item.id);
+              return false;
+            });
+          }
+          for (const key of ['banner', 'background', 'helmet', 'torso', 'stick', 'puck'])
+            if (removed.has(D.bannerDefaults[key])) D.bannerDefaults[key] = '';
+          D.signups.forEach(signup => {
+            if (signup.bannerConfig && signup.bannerConfig.poseId === pose.id)
+              signup.bannerConfig.poseId = defaultPoseId();
+            for (const key of ['bannerSpriteId', 'backgroundSpriteId', 'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'puckSpriteId'])
+              if (signup.bannerConfig && removed.has(signup.bannerConfig[key])) signup.bannerConfig[key] = '';
+          });
+          D.bannerPoses = D.bannerPoses.filter(item => item !== pose);
+          touch();
+          draw();
+        },
+      }, 'Delete pose');
+      return bannerComponentSection(`pose:${pose.id}`, `Pose: ${pose.name || 'Pose'}`, removePose,
+        field('Pose reference name', text(pose, 'name', { maxlength: 80 })),
+        h('div', { class: 'img badge-image-picker' },
+          h('span', { class: 'thumb' }, pose.previewImage
+            ? h('img', { class: 'pose-preview-image', src: pose.previewImage, alt: `${pose.name} pose preview` })
+            : 'No preview image'),
+          h('div', {},
+            h('div', { class: 'f' }, 'Pose preview image', h('small', {}, 'PNG only; maximum 8 MB. Shown before players select this pose.')),
+            h('div', { class: 'acts', style: 'justify-content:flex-start' },
+              h('button', { class: 'btn line sm', type: 'button', onclick: () => previewInput.click() },
+                pose.previewImage ? 'Replace preview' : 'Upload preview'),
+              pose.previewImage ? h('button', { class: 'btn del sm', type: 'button', onclick: () => { pose.previewImage = ''; touch(); draw(); } }, 'Remove') : null),
+            previewInput)),
+        h('div', { class: 'badge-requirements' }, poseRequirementFields(pose)),
+        h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
+        h('div', { class: 'badge-audiences' },
+          h('label', { class: 'checkline' }, h('input', {
+            type: 'checkbox', checked: pose.allPlayers,
+            onchange: event => { pose.allPlayers = event.target.checked; touch(); },
+          }), 'All players'),
+          h('label', { class: 'checkline' }, h('input', {
+            type: 'checkbox', checked: pose.season2Players,
+            onchange: event => { pose.season2Players = event.target.checked; touch(); },
+          }), 'Season 2 players')),
+        manualAwards,
+        ...Object.entries(componentMap).map(([componentKey, [collectionKey, title]]) =>
+          playerBannerSpriteSection(collectionKey, title, componentKey, pose)));
+    });
+    const addPose = h('button', { class: 'btn sm', type: 'button', onclick: () => {
+      if (D.bannerPoses.length >= 100) { alert('You can add up to 100 poses.'); return; }
+      D.bannerPoses.push({
+        id: uid(),
+        name: 'New Pose',
+        previewImage: '',
+        requirements: { ...requirementDefaults },
+        allPlayers: false,
+        season2Players: false,
+        manualPlayerIds: [],
+      });
+      touch();
+      draw();
+    } }, 'Add Pose');
+    return [
+      importSection,
+      head('Poses', addPose),
+      h('p', { class: 'help' }, 'Each pose has its own Torso, Stick, Background, and Helmet reskins. The Default pose contains all legacy PNGs.'),
+      poses.length ? poses : h('div', { class: 'empty' }, h('b', {}, 'No poses'), 'Add a pose to begin.'),
+    ];
   }
 
   // collectible badges
@@ -2259,19 +2572,18 @@ const MHLA = (() => {
       }, badge.name || 'Badge')));
     return [
       head('Player Banners'),
-      h('p', { class: 'help' }, 'Players can equip unlocked badges and banner sprites in the in-game player card. One global default can be set for each sprite type.'),
+      h('p', { class: 'help' }, 'Players choose an unlocked pose before browsing its available components and reskins. Badges remain independent of poses; global sprite defaults apply to the Default pose.'),
+      ...bannerPoseManager(),
       bannerComponentSection('editor', 'Banner Layer Editor', null,
-        h('p', { class: 'help' }, 'Uploaded sprite and card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. Only the selected component shows a box and X/Y coordinates at its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
+        h('p', { class: 'help' }, 'Pose sprite PNGs and custom card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. The editor previews Default-pose sprites. Only the selected component shows a box and X/Y coordinates at its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
         bannerLayerEditor()),
       bannerComponentSection('badges', 'Badges', add,
         h('div', { class: 'ed' }, field('Default Badge', defaultBadgeSelect,
           'Shown in slot 1 for every player until they equip a different badge in that slot.')),
         cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.')),
-      playerBannerSpriteSection('backgroundSprites', 'Background', 'background'),
-      playerBannerSpriteSection('helmetSprites', 'Helmet', 'helmet'),
-      playerBannerSpriteSection('torsoSprites', 'Torso', 'torso'),
-      playerBannerSpriteSection('stickSprites', 'Stick', 'stick'),
-      playerBannerSpriteSection('puckSprites', 'Puck', 'puck'),
+      playerBannerSpriteSection('puckSprites', 'Legacy Puck (Default pose only)', 'puck', null,
+        { defaultOnly: true, noAdd: true }),
+      bannerReskinRequirementsSection(),
     ];
   }
 
