@@ -231,6 +231,9 @@
     };
     const addRankedText = (text, rank, className, transform, zIndex, target = null) => {
       if (!text) return;
+      const rankedTransform = rank >= 1 && rank <= 3
+        ? { ...transform, x: transform.x + 50 * transform.scale }
+        : transform;
       if (rank >= 1 && rank <= 3) {
         const rankNames = { 1: '1st', 2: '2nd', 3: '3rd' };
         const rankClasses = { 1: 'gold', 2: 'silver', 3: 'bronze' };
@@ -238,16 +241,15 @@
         rankElement.className = `player-banner-stat-rank player-banner-stat-rank-${rankClasses[rank]}`;
         rankElement.textContent = rankNames[rank];
         rankElement.style.zIndex = String(zIndex + 1);
-        rankElement.style.left = `${transform.x - 62 * transform.scale}px`;
-        rankElement.style.top = `${transform.y}px`;
-        rankElement.style.transform = `scale(${transform.scale})`;
+        rankElement.style.left = `${transform.x}px`;
+        rankElement.style.top = `${rankedTransform.y}px`;
+        rankElement.style.height = '64px';
+        rankElement.style.lineHeight = '64px';
+        rankElement.style.transform = `scale(${rankedTransform.scale})`;
         rankElement.style.transformOrigin = 'top left';
         canvas.append(rankElement);
       }
-      const valueTransform = rank >= 1 && rank <= 3
-        ? { ...transform, x: transform.x + 70 * transform.scale }
-        : transform;
-      addText(text, className, valueTransform, zIndex, target);
+      addText(text, className, rankedTransform, zIndex, target);
     };
     const playerNameTransform = transformAt(
       [defaults.playerNameTransform], 0, { x: 424.5, y: 45, scale: 1 });
