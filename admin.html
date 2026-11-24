@@ -377,47 +377,74 @@ const MHLA = (() => {
       gamesWith20Saves: 'Games with 20+ saves',
       gamesWith30Saves: 'Games with 30+ saves',
     };
-    const entries = [];
-    const posesById = new Map((D.bannerPoses || []).map(pose => [pose.id, pose]));
+    const componentSections = [];
     for (const [key, componentName] of [
       ['backgroundSprites', 'Background'],
       ['helmetSprites', 'Helmet'],
       ['torsoSprites', 'Torso'],
       ['stickSprites', 'Stick'],
     ]) {
-      for (const item of D[key] || []) {
-        item.requirements = { ...requirementDefaults, ...(item.requirements || {}) };
-        item.manualPlayerIds = Array.isArray(item.manualPlayerIds) ? item.manualPlayerIds : [];
-        const pose = posesById.get(item.poseId);
+      const items = D[key] || [];
+      const reskins = new Map();
+      for (const item of items) {
+        const name = String(item.name || '').trim();
+        if (name && !reskins.has(name)) {
+          item.requirements = { ...requirementDefaults, ...(item.requirements || {}) };
+          reskins.set(name, item);
+        }
+      }
+      const cards = [...reskins].map(([name, representative]) => {
+        representative.requirements = { ...requirementDefaults, ...(representative.requirements || {}) };
+        const matchingItems = items.filter(item => String(item.name || '').trim() === name);
+        const sync = () => matchingItems.forEach(item => {
+          item.requirements = { ...representative.requirements };
+          item.allPlayers = representative.allPlayers;
+          item.season2Players = representative.season2Players;
+        });
         const fields = Object.entries(requirementLabels).map(([requirementKey, label]) =>
           field(label, h('input', {
             type: 'number', min: 0, max: 1000000, step: 1,
-            value: item.requirements[requirementKey] || 0,
+            value: representative.requirements[requirementKey] || 0,
             oninput: event => {
               const value = Number(event.target.value);
               if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) return;
-              item.requirements[requirementKey] = value;
+              representative.requirements[requirementKey] = value;
+              sync();
               touch();
             },
           })));
-        entries.push(h('details', { class: 'manual-badge-awards' },
-          h('summary', {}, `${pose ? pose.name : 'Default'} — ${item.name || 'Reskin'} — ${componentName}`),
+        return h('section', { class: 'ed badge-admin-card' },
+          h('strong', {}, name),
           h('div', { class: 'badge-requirements' }, fields),
           h('p', { class: 'help', style: 'margin:0' }, 'All non-zero stat thresholds are required together.'),
           h('div', { class: 'badge-audiences' },
             h('label', { class: 'checkline' }, h('input', {
-              type: 'checkbox', checked: item.allPlayers,
-              onchange: event => { item.allPlayers = event.target.checked; touch(); },
+              type: 'checkbox', checked: representative.allPlayers,
+              onchange: event => {
+                representative.allPlayers = event.target.checked;
+                sync();
+                touch();
+              },
             }), 'All players'),
             h('label', { class: 'checkline' }, h('input', {
-              type: 'checkbox', checked: item.season2Players,
-              onchange: event => { item.season2Players = event.target.checked; touch(); },
-            }), 'Season 2 players'))));
-      }
+              type: 'checkbox', checked: representative.season2Players,
+              onchange: event => {
+                representative.season2Players = event.target.checked;
+                sync();
+                touch();
+              },
+            }), 'Season 2 players')));
+      });
+      componentSections.push(bannerComponentSection(
+        `reskin-requirements:${key}`,
+        componentName,
+        null,
+        cards.length ? cards : h('div', { class: 'empty' },
+          h('b', {}, `No ${componentName.toLowerCase()} reskins`),
+          ' Upload matching PNGs to create one.'),
+      ));
     }
-    return bannerComponentSection('reskin-requirements', 'Reskin Requirements', null,
-      entries.length ? entries : h('div', { class: 'empty' },
-        h('b', {}, 'No reskins yet'), 'Batch-upload PNGs or add them in a pose.'));
+    return bannerComponentSection('reskin-requirements', 'Reskin Requirements', null, ...componentSections);
   }
 
   async function start() {
@@ -2581,8 +2608,6 @@ const MHLA = (() => {
         h('div', { class: 'ed' }, field('Default Badge', defaultBadgeSelect,
           'Shown in slot 1 for every player until they equip a different badge in that slot.')),
         cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.')),
-      playerBannerSpriteSection('puckSprites', 'Legacy Puck (Default pose only)', 'puck', null,
-        { defaultOnly: true, noAdd: true }),
       bannerReskinRequirementsSection(),
     ];
   }
