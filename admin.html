@@ -139,6 +139,10 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .pose-import-drop{padding:18px;border:1px dashed var(--gold);background:var(--card);text-align:center}
 .pose-import-drop.dragover{background:#c9a35c22}
 .pose-preview-image{width:120px;height:120px;object-fit:contain;background:#111013}
+.uploaded-png-list{display:flex;flex-direction:column;gap:6px;max-height:70vh;overflow:auto}
+.uploaded-png-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:38px;padding:7px 8px;border:1px solid var(--line);background:var(--card)}
+.uploaded-png-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uploaded-png-delete{width:30px;height:30px;min-height:30px;padding:0;border:1px solid #8f3b35;border-radius:50%;background:transparent;color:#d69a94;font:700 16px var(--body);line-height:1;cursor:pointer}
 .badge-image-picker .thumb{width:88px;height:88px;border-radius:50%}
 .banner-scale-control{display:grid;gap:10px}
 .banner-scale-values{display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:10px;align-items:end}
@@ -359,6 +363,69 @@ const MHLA = (() => {
     pw.focus();
   }
 
+  function uploadedPngList() {
+    D.bannerPoses = Array.isArray(D.bannerPoses) ? D.bannerPoses : [];
+    D.badges = Array.isArray(D.badges) ? D.badges : [];
+    D.bannerLayers = Array.isArray(D.bannerLayers) ? D.bannerLayers : [];
+    const poseNames = new Map(D.bannerPoses.map(pose => [pose.id, pose.name || 'Default']));
+    const entries = [];
+    const addSprite = (key, component) => {
+      D[key] = Array.isArray(D[key]) ? D[key] : [];
+      D[key].forEach(item => {
+        if (!item.image) return;
+        const poseName = poseNames.get(item.poseId) || 'Default';
+        entries.push({
+          label: `${String(item.name || 'Unnamed reskin').trim()} — ${poseName} — ${component}`,
+          remove: () => { item.image = ''; touch(); },
+        });
+      });
+    };
+    addSprite('bannerSprites', 'Banner');
+    addSprite('backgroundSprites', 'Background');
+    addSprite('helmetSprites', 'Helmet');
+    addSprite('torsoSprites', 'Torso');
+    addSprite('stickSprites', 'Stick');
+    addSprite('puckSprites', 'Puck');
+    D.badges.forEach(badge => {
+      if (badge.image) entries.push({
+        label: `${badge.name || 'Badge'} — Badge`,
+        remove: () => { badge.image = ''; touch(); },
+      });
+    });
+    D.bannerLayers.forEach(layer => {
+      if (layer.image) entries.push({
+        label: `${layer.name || 'Card layer'} — Card layer`,
+        remove: () => { layer.image = ''; touch(); },
+      });
+    });
+    D.bannerPoses.forEach(pose => {
+      if (pose.previewImage) entries.push({
+        label: `${pose.name || 'Pose'} — Pose preview`,
+        remove: () => { pose.previewImage = ''; touch(); },
+      });
+    });
+    entries.sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }));
+    const rows = entries.map(entry => h('div', { class: 'uploaded-png-row' },
+      h('span', {}, entry.label),
+      h('button', {
+        type: 'button',
+        class: 'uploaded-png-delete',
+        title: `Delete ${entry.label}`,
+        'aria-label': `Delete ${entry.label}`,
+        onclick: () => {
+          if (!confirm(`Delete "${entry.label}"?`)) return;
+          entry.remove();
+          draw();
+        },
+      }, '×')));
+    return bannerComponentSection('uploaded-pngs', 'Uploaded PNGs', null,
+      h('div', { class: 'uploaded-png-list' },
+        rows.length ? rows : h('div', { class: 'empty' },
+          h('b', {}, 'No uploaded PNGs'),
+          ' Uploaded banner assets will appear here.')));
+  }
+
   function bannerReskinRequirementsSection() {
     const requirementDefaults = {
       goals: 0, assists: 0, saves: 0, points: 0,
@@ -399,6 +466,7 @@ const MHLA = (() => {
         const sync = () => matchingItems.forEach(item => {
           item.requirements = { ...representative.requirements };
           item.allPlayers = representative.allPlayers;
+          item.season1Players = representative.season1Players;
           item.season2Players = representative.season2Players;
         });
         const fields = Object.entries(requirementLabels).map(([requirementKey, label]) =>
@@ -433,7 +501,15 @@ const MHLA = (() => {
                 sync();
                 touch();
               },
-            }), 'Season 2 players')));
+            }), 'Season 2 players'),
+            h('label', { class: 'checkline' }, h('input', {
+              type: 'checkbox', checked: representative.season1Players,
+              onchange: event => {
+                representative.season1Players = event.target.checked;
+                sync();
+                touch();
+              },
+            }), 'Season 1 players')));
       });
       componentSections.push(bannerComponentSection(
         `reskin-requirements:${key}`,
@@ -453,6 +529,7 @@ const MHLA = (() => {
     D.signups = Array.isArray(D.signups) ? D.signups : [];
     D.bannedSteamIds = Array.isArray(D.bannedSteamIds) ? D.bannedSteamIds : [];
     D.playerListExclusions = Array.isArray(D.playerListExclusions) ? D.playerListExclusions : [];
+    D.season1PlayerIds = Array.isArray(D.season1PlayerIds) ? D.season1PlayerIds : [];
     D.badges = Array.isArray(D.badges) ? D.badges : [];
     D.bannerPoses = Array.isArray(D.bannerPoses) ? D.bannerPoses : [];
     D.bannerSprites = Array.isArray(D.bannerSprites) ? D.bannerSprites : [];
@@ -606,7 +683,7 @@ const MHLA = (() => {
   }
 
   // frame
-  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['signups', 'Season 2 Player Sign Ups'], ['badges', 'Player Banners'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
+  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['season1', 'Season 1 Players'], ['signups', 'Season 2 Player Sign Ups'], ['badges', 'Player Banners'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
   function draw() {
     const y = scrollY;
     const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
@@ -626,7 +703,7 @@ const MHLA = (() => {
           if (dirty && !confirm('You have unsaved changes. Log out anyway?')) return;
           dirty = false; await fetch('/api/logout', { method: 'POST' }); login();
         } }, 'Log out'))));
-    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, signups, badges, news, rules, logs, settings })[tab]());
+    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, season1, signups, badges, news, rules, logs, settings })[tab]());
     root.replaceChildren(bar, panel);
     scrollTo(0, y);
   }
@@ -1083,6 +1160,33 @@ const MHLA = (() => {
             D.matches.forEach(m => (m.goals || []).forEach(x => ['s', 'a1', 'a2'].forEach(k => { if (x[k] === p.id) x[k] = ''; })));
             touch(); draw();
           } }, p.signupId ? 'Remove' : 'Delete'))))))) : h('div', { class: 'empty' }, h('b', {}, 'No players'), 'Press Add player to add one.'),
+    ];
+  }
+
+  function season1() {
+    D.players = Array.isArray(D.players) ? D.players : [];
+    D.season1PlayerIds = Array.isArray(D.season1PlayerIds) ? D.season1PlayerIds : [];
+    const players = [...D.players].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), undefined,
+        { sensitivity: 'base', numeric: true }));
+    return [
+      head('Season 1 Players'),
+      h('p', { class: 'help' }, 'Check every player who was part of Season 1. These checks are available in badge, pose, and reskin requirements.'),
+      h('div', { class: 'ed' }, players.length ? players.map(player =>
+        h('label', { class: 'checkline' },
+          h('input', {
+            type: 'checkbox',
+            checked: D.season1PlayerIds.includes(player.id),
+            onchange: event => {
+              D.season1PlayerIds = event.target.checked
+                ? [...new Set([...D.season1PlayerIds, player.id])]
+                : D.season1PlayerIds.filter(id => id !== player.id);
+              touch();
+            },
+          }),
+          player.name || 'Unnamed player'))
+        : h('div', { class: 'empty' },
+          h('b', {}, 'No players'), 'Add players in the Players tab first.')),
     ];
   }
 
@@ -2189,7 +2293,11 @@ const MHLA = (() => {
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: item.season2Players,
             onchange: event => { item.season2Players = event.target.checked; touch(); },
-          }), 'Season 2 players')),
+          }), 'Season 2 players'),
+          h('label', { class: 'checkline' }, h('input', {
+            type: 'checkbox', checked: item.season1Players,
+            onchange: event => { item.season1Players = event.target.checked; touch(); },
+          }), 'Season 1 players')),
         manualAwards);
     });
     const addButton = pose || options.noAdd ? null : h('button', { class: 'btn sm', type: 'button', onclick: () => {
@@ -2197,7 +2305,7 @@ const MHLA = (() => {
             id: uid(), name: `New ${title}`, description: '', image: '',
             transform: { x: 334, y: 510, scale: 1 },
             requirements: { ...requirementDefaults },
-            allPlayers: false, season2Players: false, manualPlayerIds: [],
+            allPlayers: false, season1Players: false, season2Players: false, manualPlayerIds: [],
           });
           touch();
           draw();
@@ -2294,7 +2402,7 @@ const MHLA = (() => {
             },
             requirements: { ...requirementDefaults },
             allPlayers: false,
-            season2Players: false,
+            season1Players: false, season2Players: false,
             manualPlayerIds: [],
           });
           imported++;
@@ -2443,7 +2551,11 @@ const MHLA = (() => {
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: pose.season2Players,
             onchange: event => { pose.season2Players = event.target.checked; touch(); },
-          }), 'Season 2 players')),
+          }), 'Season 2 players'),
+          h('label', { class: 'checkline' }, h('input', {
+            type: 'checkbox', checked: pose.season1Players,
+            onchange: event => { pose.season1Players = event.target.checked; touch(); },
+          }), 'Season 1 players')),
         manualAwards,
         ...Object.entries(componentMap).map(([componentKey, [collectionKey, title]]) =>
           playerBannerSpriteSection(collectionKey, title, componentKey, pose)));
@@ -2456,7 +2568,7 @@ const MHLA = (() => {
         previewImage: '',
         requirements: { ...requirementDefaults },
         allPlayers: false,
-        season2Players: false,
+        season1Players: false, season2Players: false,
         manualPlayerIds: [],
       });
       touch();
@@ -2486,7 +2598,7 @@ const MHLA = (() => {
         id: uid(), name: 'New badge', description: '', image: '',
         scale: 1,
         requirements: { ...badgeRequirementDefaults },
-        allPlayers: false, season2Players: false, manualPlayerIds: [],
+        allPlayers: false, season1Players: false, season2Players: false, manualPlayerIds: [],
       });
       touch(); draw();
     } }, 'Add badge');
@@ -2586,7 +2698,11 @@ const MHLA = (() => {
           h('label', { class: 'checkline' }, h('input', {
             type: 'checkbox', checked: badge.season2Players,
             onchange: event => { badge.season2Players = event.target.checked; touch(); },
-          }), 'Season 2 players')),
+          }), 'Season 2 players'),
+          h('label', { class: 'checkline' }, h('input', {
+            type: 'checkbox', checked: badge.season1Players,
+            onchange: event => { badge.season1Players = event.target.checked; touch(); },
+          }), 'Season 1 players')),
         manualAwards);
     });
     const defaultBadgeSelect = h('select', {
@@ -2609,6 +2725,7 @@ const MHLA = (() => {
           'Shown in slot 1 for every player until they equip a different badge in that slot.')),
         cards.length ? cards : h('div', { class: 'empty' }, h('b', {}, 'No badges yet'), 'Press Add badge to create a collectible.')),
       bannerReskinRequirementsSection(),
+      uploadedPngList(),
     ];
   }
 

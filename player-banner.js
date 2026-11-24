@@ -227,6 +227,23 @@
       if (target) makeTarget(element, target.category, target);
       canvas.append(element);
     };
+    const addRankedText = (text, rank, className, transform, zIndex, target = null) => {
+      if (!text) return;
+      if (rank >= 1 && rank <= 3) {
+        const rankNames = { 1: '1st', 2: '2nd', 3: '3rd' };
+        const rankClasses = { 1: 'gold', 2: 'silver', 3: 'bronze' };
+        const rankElement = document.createElement('div');
+        rankElement.className = `player-banner-stat-rank player-banner-stat-rank-${rankClasses[rank]}`;
+        rankElement.textContent = rankNames[rank];
+        rankElement.style.zIndex = String(zIndex + 1);
+        rankElement.style.left = `${transform.x - 70}px`;
+        rankElement.style.top = `${transform.y}px`;
+        rankElement.style.transform = `scale(${transform.scale})`;
+        rankElement.style.transformOrigin = 'top left';
+        canvas.append(rankElement);
+      }
+      addText(text, className, transform, zIndex, target);
+    };
     const playerNameTransform = transformAt(
       [defaults.playerNameTransform], 0, { x: 424.5, y: 45, scale: 1 });
     if ((Number(defaults.canvasVersion) || 0) < 5) playerNameTransform.x = 424.5;
@@ -263,7 +280,8 @@
       const valueTransform = transformAt(defaults.statValueTransforms, index, { x: 50, y: [803, 943, 1083][index], scale: 1 });
       const target = targeting === 'stats' ? { category: 'stats', slot: index } : null;
       addText(stat, 'player-banner-stat-label', labelTransform, 300, target);
-      addText(statValue(stat), 'player-banner-stat-value', valueTransform, 301, target);
+      const rank = Number(signup.statRanks && signup.statRanks[stat]) || 0;
+      addRankedText(statValue(stat), rank, 'player-banner-stat-value', valueTransform, 301, target);
     });
     fit(viewport, canvas);
   };

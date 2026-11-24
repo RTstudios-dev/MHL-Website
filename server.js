@@ -33,7 +33,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -705,10 +705,19 @@ const configuredPointsFor = (data, signup, stats) => {
     : Math.floor(stats.goals / requirements.goals);
   return primaryPoints + Math.floor(stats.assists / requirements.assists);
 };
+const isSeason1Player = (data, signup) => {
+  const ids = new Set(Array.isArray(data.season1PlayerIds) ? data.season1PlayerIds : []);
+  if (ids.has(signup.id)) return true;
+  const linkedPlayer = (data.players || []).find(player => player.signupId === signup.id);
+  return !!linkedPlayer && ids.has(linkedPlayer.id);
+};
 const badgeIsUnlocked = (data, signup, badge) => {
   if (!badge || !badge.image) return false;
   if (badge.manualPlayerIds.includes(signup.id)) return true;
-  if (!badge.allPlayers && !badge.season2Players) return false;
+  const season1 = isSeason1Player(data, signup);
+  if (!badge.allPlayers
+      && !(badge.season2Players)
+      && !(badge.season1Players && season1)) return false;
   const stats = trackedStatsFor(data, signup.id);
   const requirements = badge.requirements || {};
   const required = key => num(requirements[key], Number.MAX_SAFE_INTEGER);
@@ -728,7 +737,10 @@ const badgeIsUnlocked = (data, signup, badge) => {
 const poseIsUnlocked = (data, signup, pose) => {
   if (!pose) return false;
   if (pose.manualPlayerIds.includes(signup.id)) return true;
-  if (!pose.allPlayers && !pose.season2Players) return false;
+  const season1 = isSeason1Player(data, signup);
+  if (!pose.allPlayers
+      && !(pose.season2Players)
+      && !(pose.season1Players && season1)) return false;
   const stats = trackedStatsFor(data, signup.id);
   const requirements = pose.requirements || {};
   const required = key => num(requirements[key], Number.MAX_SAFE_INTEGER);
@@ -744,6 +756,63 @@ const poseIsUnlocked = (data, signup, pose) => {
     && stats.gamesWith20Saves >= required('gamesWith20Saves')
     && stats.gamesWith30Saves >= required('gamesWith30Saves')
     && configuredPointsFor(data, signup, stats) >= required('points');
+};
+const bannerStatRankings = (data, currentSignup) => {
+  const statValue = (signup, stat) => {
+    const stats = trackedStatsFor(data, signup.id);
+    const values = {
+      Goals: stats.goals,
+      Assists: stats.assists,
+      Saves: stats.saves,
+      Wins: stats.wins,
+      Losses: stats.losses,
+      'Stick Saves': stats.stickSaves,
+      'Body Saves': stats.bodySaves,
+      Passes: stats.passes,
+      'Games Played': stats.gamesPlayed,
+      'Games Scored In': stats.gamesScoredIn,
+      '3-Goal Games': stats.gamesWith3Goals,
+      '5-Goal Games': stats.gamesWith5Goals,
+      '10-Goal Games': stats.gamesWith10Goals,
+      '100% Save Percentage Games': stats.gamesWith100PercentSavePercentage,
+      '10-Save Games': stats.gamesWith10Saves,
+      '20-Save Games': stats.gamesWith20Saves,
+      '30-Save Games': stats.gamesWith30Saves,
+    };
+    if (Object.prototype.hasOwnProperty.call(values, stat)) return Number(values[stat]) || 0;
+    if (stat === 'Skater Value') return Number(signupValues(signup).skaterValue) || 0;
+    if (stat === 'Goalie Value') return Number(signupValues(signup).goalieValue) || 0;
+    if (stat === 'Save Percentage') {
+      const games = Number(stats.savePercentageGames) || 0;
+      const basis = Number(stats.savePercentageTotalBasisPoints) || 0;
+      return games ? basis / games : 0;
+    }
+    return 0;
+  };
+  const statNames = [
+    'Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
+    'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
+    '3-Goal Games', '5-Goal Games', '10-Goal Games',
+    '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
+    'Skater Value', 'Goalie Value',
+  ];
+  const rankings = {};
+  for (const stat of statNames) {
+    const ordered = data.signups
+      .map(signup => ({ signupId: signup.id, value: statValue(signup, stat) }))
+      .sort((a, b) => b.value - a.value || String(a.signupId).localeCompare(String(b.signupId)));
+    const current = ordered.find(entry => entry.signupId === currentSignup.id);
+    if (!current || current.value <= 0) continue;
+    let rank = 1;
+    for (let index = 0; index < ordered.length && index < 3; index++) {
+      if (index > 0 && ordered[index].value < ordered[index - 1].value) rank = index + 1;
+      if (ordered[index].signupId === currentSignup.id) {
+        rankings[stat] = rank <= 3 ? rank : 0;
+        break;
+      }
+    }
+  }
+  return rankings;
 };
 const badgeCollectionFor = (data, signup) => data.badges
   .filter(badge => badge.image)
@@ -940,6 +1009,10 @@ function sanitize(d) {
   const playerListExclusions = [...new Set((Array.isArray(d.playerListExclusions) ? d.playerListExclusions : [])
     .map(value => str(value, 40))
     .filter(value => signupIds.has(value)))];
+  const playerIds = new Set(players.map(player => player.id));
+  const season1PlayerIds = [...new Set((Array.isArray(d.season1PlayerIds) ? d.season1PlayerIds : [])
+    .map(value => str(value, 40))
+    .filter(value => playerIds.has(value)))];
   const rawBannerDefaults = d.bannerDefaults && typeof d.bannerDefaults === 'object'
     ? d.bannerDefaults : {};
   const badgeIds = new Set();
@@ -978,6 +1051,7 @@ function sanitize(d) {
         gamesWith30Saves: num(requirements.gamesWith30Saves, Number.MAX_SAFE_INTEGER),
       },
       allPlayers: !!source.allPlayers,
+      season1Players: !!source.season1Players,
       season2Players: !!source.season2Players,
       manualPlayerIds,
     };
@@ -1008,6 +1082,7 @@ function sanitize(d) {
       requirements: Object.fromEntries(poseRequirementKeys.map(key =>
         [key, num(requirements[key], Number.MAX_SAFE_INTEGER)])),
       allPlayers: !!source.allPlayers,
+      season1Players: !!source.season1Players,
       season2Players: !!source.season2Players,
       manualPlayerIds,
     };
@@ -1022,6 +1097,7 @@ function sanitize(d) {
       previewImage: '',
       requirements: Object.fromEntries(poseRequirementKeys.map(key => [key, 0])),
       allPlayers: true,
+      season1Players: false,
       season2Players: false,
       manualPlayerIds: [],
     };
@@ -1070,6 +1146,7 @@ function sanitize(d) {
           gamesWith30Saves: num(requirements.gamesWith30Saves, Number.MAX_SAFE_INTEGER),
         },
         allPlayers: !!source.allPlayers,
+        season1Players: !!source.season1Players,
         season2Players: !!source.season2Players,
         manualPlayerIds,
       };
@@ -1157,7 +1234,7 @@ function sanitize(d) {
   syncSignupPlayers({ players, signups });
   return {
     site, teams, rounds, matches, players, news, rules, signups, badges, draft,
-    bannedSteamIds, playerListExclusions,
+    bannedSteamIds, playerListExclusions, season1PlayerIds,
     bannerPoses, bannerSprites, backgroundSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
     bannerLayers, bannerDefaults,
   };
@@ -2036,6 +2113,7 @@ const server = http.createServer(async (req, res) => {
           badgeSlots: equippedBadgeSlotsFor(data, signup),
           badges: badgeCollectionFor(data, signup),
           bannerConfig,
+          statRanks: bannerStatRankings(data, signup),
           bannerPoses: unlockedPoses.map(pose => ({
             id: pose.id, name: pose.name, previewImage: pose.previewImage,
           })),
