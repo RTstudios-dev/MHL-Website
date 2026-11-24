@@ -656,6 +656,9 @@ const attachTrackedStats = data => {
     ...signup,
     trackedStats: trackedStatsFor(data, signup.id),
   }));
+  data.signups.forEach(signup => {
+    signup.statRanks = bannerStatRankings(data, signup);
+  });
   const statsBySignupId = new Map(data.signups.map(signup => [signup.id, signup.trackedStats]));
   data.players = data.players.map(player => ({
     ...player,

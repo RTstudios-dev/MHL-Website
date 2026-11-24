@@ -88,6 +88,19 @@ dialog.prompt-dialog::backdrop{background:#000b}
 .player-stats-profile-message p{margin-top:12px;color:var(--muted);line-height:1.5}
 .player-stats-profile-action{display:inline-flex;align-items:center;justify-content:center;min-height:42px;margin-top:18px;padding:0 16px;background:var(--gold);color:var(--on-gold);font-size:14px;font-weight:700}
 .player-stats-profile-action:hover{color:var(--on-gold)}
+.player-banner-hover{position:fixed;z-index:3000;width:220px;height:311px;overflow:hidden;border:1px solid var(--gold);background:#151418;box-shadow:0 10px 34px #000b;pointer-events:none}
+.player-banner-hover[hidden]{display:none}
+.player-banner-hover-canvas{position:absolute;left:0;top:0;width:849px;height:1200px;transform-origin:top left;color:#ece6da}
+.player-banner-hover-canvas .player-banner-image{position:absolute;display:block;max-width:none;object-fit:contain;pointer-events:none}
+.player-banner-hover-canvas .player-banner-text{position:absolute;transform-origin:top left;white-space:nowrap;pointer-events:none}
+.player-banner-hover-canvas .player-banner-name{color:#f2eee5;font:500 34px var(--disp);text-shadow:0 2px 3px #000}
+.player-banner-hover-canvas .player-banner-value{color:#c9a35c;font:500 28px var(--disp);text-shadow:0 2px 3px #000}
+.player-banner-hover-canvas .player-banner-stat-label{color:var(--primary);font:500 15px var(--disp)}
+.player-banner-hover-canvas .player-banner-stat-value{color:#c9a35c;font:500 64px var(--disp)}
+.player-banner-hover-canvas .player-banner-stat-rank{position:absolute;min-width:58px;padding:4px 7px;border-radius:999px;text-align:center;font:700 18px var(--body);line-height:1;pointer-events:none}
+.player-banner-hover-canvas .player-banner-stat-rank-gold{background:#d6ad60;color:#2a1d09}
+.player-banner-hover-canvas .player-banner-stat-rank-silver{background:#bfc3c8;color:#202225}
+.player-banner-hover-canvas .player-banner-stat-rank-bronze{background:#b87945;color:#24140b}
 .player-stats-search{display:grid;flex:1;max-width:320px;gap:4px;color:var(--muted);font-size:14px}
 .player-stats-search input{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);padding:9px 12px;min-height:44px;width:100%}
 .player-stats-point-key{margin:0 12px 9px;color:var(--muted);font-size:13px;line-height:1.4}
