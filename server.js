@@ -34,6 +34,7 @@ const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
+const MAX_STATS_IMPORT_BYTES = 20_000_000;
 const MAX_TRACKED_STAT_GAMES = 20;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
 const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], season2Rounds: [], season2Matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatGames: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
@@ -1638,7 +1639,7 @@ const normalizeStatsReports = rawReports => {
         const goalsScored = raw.goalsScored === undefined ? 0 : raw.goalsScored;
         const savesInGame = raw.savesInGame === undefined ? 0 : raw.savesInGame;
         const shotsInGame = raw.shotsInGame === undefined ? 0 : raw.shotsInGame;
-        const role = raw.role === undefined ? '' : raw.role;
+        const role = raw.role == null ? '' : raw.role;
         if (!/^\d{17}$/.test(steamId))
           return { error: 'A game summary event has an invalid Steam ID.' };
         if (!Number.isSafeInteger(savePercentageBasisPoints) ||
@@ -2152,10 +2153,10 @@ const handleStatsPush = async (req, res) => {
 
     let rawBody;
     try {
-      rawBody = await readRawLimited(req, 2 * 1024 * 1024);
+      rawBody = await readRawLimited(req, MAX_STATS_IMPORT_BYTES);
     } catch (error) {
       if (error && error.statusCode === 413)
-        return send(res, 413, { error: 'Stats JSON exceeds the 2 MB limit.' });
+        return send(res, 413, { error: 'Stats JSON exceeds the 20 MB limit.' });
       throw error;
     }
 
@@ -2713,7 +2714,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/admin/import-stats' && req.method === 'POST') {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
 
-      const payload = JSON.parse(await readBody(req, 20_000_000) || '{}');
+      const payload = JSON.parse(await readBody(req, MAX_STATS_IMPORT_BYTES) || '{}');
       const normalized = normalizeStatsReports(payload && payload.reports);
       if (normalized.error) return send(res, 400, { error: normalized.error });
 
