@@ -20,9 +20,8 @@
 <div>
 <header class="mtop" id="mtop"></header>
 <main class="main" id="main">
-<div class="ph player-stats-heading-row">
+<div class="ph">
   <h1>Player Stats</h1>
-  <aside class="player-stats-profile-card" id="playerStatsProfileCard" aria-label="Your player stats" hidden></aside>
 </div>
 <div class="player-stats-top-row" id="playerStatsTopRow">
   <div class="stats-source-switch" role="group" aria-label="Stats source" id="statsSource">
@@ -213,88 +212,6 @@
         + Math.floor(player.a / assistsPerPoint);
     }
   };
-  let personalPlayer = null;
-  const profileCard = $('playerStatsProfileCard');
-  const showProfileMessage = (title, message, action = '') => {
-    profileCard.innerHTML = `<div class="player-stats-profile-message"><h3>${esc(title)}</h3><p>${esc(message)}</p>${action}</div>`;
-    profileCard.hidden = false;
-  };
-  function renderPersonalStats() {
-    if (!personalPlayer) return;
-    const stats = {
-      goals: personalPlayer.g,
-      volleyGoals: personalPlayer.vg,
-      assists: personalPlayer.a,
-      saves: personalPlayer.s,
-      shots: personalPlayer.shots,
-      goalPercentage: personalPlayer.goalPercentage,
-      goalieGames: personalPlayer.goalieGames,
-      skaterGames: personalPlayer.skaterGames,
-      goalPerfectGames: personalPlayer.goalPerfectGames,
-      points: personalPlayer.p,
-      record: `${personalPlayer.w}:${personalPlayer.l}`,
-    };
-    profileCard.innerHTML = `<div class="player-stats-profile-heading">
-      <small>Your ${source === 'pug' ? 'Pug' : 'Season 2'} Stats</small>
-      <div class="player-stats-profile-person">${personalPlayer.photo
-        ? `<img src="${esc(personalPlayer.photo)}" alt="">`
-        : `<span class="avatar" aria-hidden="true">${esc((personalPlayer.name || '?').slice(0, 1).toUpperCase())}</span>`}
-        <div><h3>${esc(personalPlayer.name)}</h3><span>${esc(personalPlayer.position || 'Unassigned')} / ${esc(personalPlayer.t ? personalPlayer.t.name : 'Unassigned')}</span></div>
-      </div>
-    </div>
-    <div class="player-stats-profile-values">
-      <div><span>Goals</span><strong>${stats.goals}</strong></div>
-      <div><span>Volley Goals</span><strong>${stats.volleyGoals}</strong></div>
-      <div><span>Assists</span><strong>${stats.assists}</strong></div>
-      <div><span>Saves</span><strong>${stats.saves}</strong></div>
-      <div><span>Shots</span><strong>${stats.shots}</strong></div>
-      <div><span>Goal Percentage</span><strong>${stats.goalPercentage.toFixed(1)}%</strong></div>
-      <div><span>Games as Goalie</span><strong>${stats.goalieGames}</strong></div>
-      <div><span>Games as Skater</span><strong>${stats.skaterGames}</strong></div>
-      <div><span>Games with 100% Goal Percentage</span><strong>${stats.goalPerfectGames}</strong></div>
-      <div><span>Points</span><strong>${stats.points}</strong></div>
-      <div><span>W:L</span><strong>${stats.record}</strong></div>
-    </div>`;
-    profileCard.hidden = false;
-  }
-  async function loadPersonalStatsCard() {
-    try {
-      const sessionResponse = await fetch('/api/player/me', { credentials: 'same-origin', cache: 'no-store' });
-      if (!sessionResponse.ok) throw new Error('Could not check the player session.');
-      const session = await sessionResponse.json();
-      if (!session.authenticated) {
-        showProfileMessage('Sign In To View Your Player Stats', 'Sign in with Steam to see your tracked player stats.',
-          '<a class="player-stats-profile-action" href="/player-login">Sign In</a>');
-        return;
-      }
-
-      const signupResponse = await fetch('/api/player/signup', { credentials: 'same-origin', cache: 'no-store' });
-      if (signupResponse.status === 401) {
-        showProfileMessage('Sign In To View Your Player Stats', 'Your player session expired. Sign in again to view your stats.',
-          '<a class="player-stats-profile-action" href="/player-login">Sign In</a>');
-        return;
-      }
-      if (signupResponse.status === 404) {
-        showProfileMessage('No linked Season 2 signup', 'Link a Season 2 signup to this Steam account to view your player stats.',
-          '<a class="player-stats-profile-action" href="/season-2-players">Season 2 Signups</a>');
-        return;
-      }
-      if (!signupResponse.ok) {
-        const error = await signupResponse.json().catch(() => ({}));
-        throw new Error(error.error || 'Could not load the linked signup.');
-      }
-      const result = await signupResponse.json();
-      personalPlayer = P.find(player => player.id === result.signup.id) || null;
-      if (!personalPlayer) {
-        showProfileMessage('Player stats unavailable', 'Your linked signup could not be found in the current stats list.');
-        return;
-      }
-      renderPersonalStats();
-    } catch (error) {
-      console.error('Unable to load the signed-in player stats:', error);
-      showProfileMessage('Player stats unavailable', 'We could not load your player stats. Please refresh to try again.');
-    }
-  }
   const filtered = () => {
     const query = search.trim().toLocaleLowerCase();
     return P.filter(player => {
@@ -456,7 +373,6 @@
     applyStatsSource();
     $('statsSource').querySelectorAll('button').forEach(item =>
       item.setAttribute('aria-pressed', String(item === button)));
-    renderPersonalStats();
     leaders();
     table();
   });
@@ -479,7 +395,7 @@
   document.addEventListener('scroll', hideBannerHover, true);
   window.addEventListener('blur', hideBannerHover);
   syncStatSortOptions();
-  leaders(); table(); loadPersonalStatsCard();
+  leaders(); table();
 })();
 </script>
 </body>
