@@ -57,6 +57,7 @@
           <option value="p">Points</option>
           <option value="w">Wins</option>
           <option value="g">Goals</option>
+          <option value="vg">Volley Goals</option>
           <option value="s">Saves</option>
           <option value="a">Assists</option>
           <option value="value">Value</option>
@@ -98,10 +99,11 @@
   ].join(' · ');
   const P = (D.signups || []).map(player => {
     const stats = player.trackedStats || {};
-    const g = Number(stats.goals) || 0, a = Number(stats.assists) || 0, s = Number(stats.saves) || 0;
+    const g = Number(stats.goals) || 0, vg = Number(stats.volleyGoals) || 0;
+    const a = Number(stats.assists) || 0, s = Number(stats.saves) || 0;
     const w = Number(stats.wins) || 0, l = Number(stats.losses) || 0;
     return {
-      ...player, g, a, s, w, l,
+      ...player, g, vg, a, s, w, l,
       pugStats: stats,
       seasonTwoStats: player.season2TrackedStats || {},
       p: (player.position === 'Goalie' ? Math.floor(s / savesPerPoint) : Math.floor(g / goalsPerPoint))
@@ -176,11 +178,12 @@
       ? compactEuroFormat.format(value).replace(/([KMBT])$/, (_, suffix) => suffix.toLowerCase())
       : euroFormat.format(value);
   };
-  const NAMES = { p: 'Points', w: 'Wins', g: 'Goals', s: 'Saves', a: 'Assists', value: 'Value' };
+  const NAMES = { p: 'Points', w: 'Wins', g: 'Goals', vg: 'Volley Goals', s: 'Saves', a: 'Assists', value: 'Value' };
   const applyStatsSource = () => {
     for (const player of P) {
       const stats = source === 'season2' ? player.seasonTwoStats : player.pugStats;
       player.g = Number(stats.goals) || 0;
+      player.vg = Number(stats.volleyGoals) || 0;
       player.a = Number(stats.assists) || 0;
       player.s = Number(stats.saves) || 0;
       player.w = Number(stats.wins) || 0;
@@ -199,6 +202,7 @@
     if (!personalPlayer) return;
     const stats = {
       goals: personalPlayer.g,
+      volleyGoals: personalPlayer.vg,
       assists: personalPlayer.a,
       saves: personalPlayer.s,
       points: personalPlayer.p,
@@ -214,6 +218,7 @@
     </div>
     <div class="player-stats-profile-values">
       <div><span>Goals</span><strong>${stats.goals}</strong></div>
+      <div><span>Volley Goals</span><strong>${stats.volleyGoals}</strong></div>
       <div><span>Assists</span><strong>${stats.assists}</strong></div>
       <div><span>Saves</span><strong>${stats.saves}</strong></div>
       <div><span>Points</span><strong>${stats.points}</strong></div>
@@ -281,6 +286,7 @@
   const metricValue = player => key === 'p' ? player.p
     : key === 'w' ? player.w
       : key === 'g' ? player.g
+        : key === 'vg' ? player.vg
         : key === 's' ? player.s
           : key === 'a' ? player.a : valueForCurrentFilter(player);
   const rank = () => {
@@ -320,6 +326,10 @@
         option.hidden = filter === 'goalie';
         option.disabled = filter === 'goalie';
       }
+      if (option.value === 'vg') {
+        option.hidden = filter === 'goalie';
+        option.disabled = filter === 'goalie';
+      }
       if (option.value === 's') {
         option.hidden = filter === 'skater';
         option.disabled = filter === 'skater';
@@ -346,7 +356,7 @@
     const showSaves = filter !== 'skater';
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
-        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">W:L</th><th scope="col">A</th>${showGoals ? '<th scope="col">G</th>' : ''}${showSaves ? '<th scope="col">S</th>' : ''}<th scope="col">P</th></tr></thead>
+        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">W:L</th><th scope="col">A</th>${showGoals ? '<th scope="col">G</th><th scope="col">VG</th>' : ''}${showSaves ? '<th scope="col">S</th>' : ''}<th scope="col">P</th></tr></thead>
       <tbody>${rows.map(player => `<tr data-player-id="${esc(player.id)}"><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
         ? `<img src="${esc(player.photo)}" alt="">`
         : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -359,6 +369,7 @@
         <td class="player-stat-cell player-stat-value" data-label="W:L">${player.w}:${player.l}</td>
         <td class="player-stat-cell player-stat-value" data-label="A">${player.a}</td>
         ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="G">${player.g}</td>` : ''}
+        ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="Volley Goals">${player.vg}</td>` : ''}
         ${showSaves ? `<td class="player-stat-cell player-stat-value" data-label="S">${player.s}</td>` : ''}
         <td class="player-stat-cell player-stat-value" data-label="P">${player.p}</td></tr>`).join('')}</tbody>
     </table></div>`;

@@ -5,7 +5,7 @@
 //   DATA_DIR             where data.json, uploads/, and player sessions live; use persistent storage when hosted
 //   ADMIN_PASSWORD_HASH  from `node hash-password.js` (use this when hosted)
 //   ADMIN_PASSWORD       plain text password, works but the hash is better
-//   STEAM_API_KEY        optional, resolves existing custom Steam profile links for player editing
+//   STEAM_API_KEY        Steam Web API key for custom profile links and in-game sign-in
 //   MHL_MOD_API_KEY      key for protected roster access and game-stat uploads; the public roster needs no key
 //   MHL_STATS_SFTP_CONFIG optional SFTP sources for pulling pending game-stat JSON
 //   MHL_STATS_SFTP_POLL_SECONDS polling interval for SFTP sources; default 60
@@ -24,6 +24,8 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const PLAYER_SESSION_DIR = path.join(DATA_DIR, '.player-sessions');
 const STEAM_OPENID = 'https://steamcommunity.com/openid/login';
 const STEAM_API_KEY = (process.env.STEAM_API_KEY || '').trim();
+const STEAM_APP_ID = '2994020';
+const STEAM_TICKET_IDENTITY = 'mhlwebsite.rtstudios.uk';
 const MHL_MOD_API_KEY = (process.env.MHL_MOD_API_KEY || '').trim();
 const MHL_STATS_PUSH_KEY = (process.env.MHL_STATS_PUSH_KEY || '').trim();
 // league logo: logo.png, logo.webp or logo.jpg next to server.js (optional)
@@ -199,6 +201,7 @@ const STATIC = {
   '/sign-up': ['sign-up.html', HTML],
   '/player-login': ['player-login.html', HTML],
   '/player-banner': ['player-banner.html', HTML],
+  '/game-login': ['game-login.html', HTML],
   '/player-card-preview': ['player-card-preview.html', HTML],
   '/season-2-players': ['season-2-players.html', HTML],
   '/news': ['news.html', HTML],
@@ -216,8 +219,10 @@ const sessions = new Map(); // token -> expiry
 const SESSION_MS = 12 * 3600 * 1000;
 const steamStates = new Map(); // state -> { returnTo, realm, expires }
 const steamNonces = new Map(); // nonce -> expiry
+const steamGameLoginCodes = new Map(); // code -> { steamId, returnPath, expires }
 const PLAYER_SESSION_MS = 12 * 3600 * 1000;
 const STEAM_STATE_MS = 5 * 60 * 1000;
+const STEAM_GAME_LOGIN_CODE_MS = 60 * 1000;
 const fails = new Map(); // ip -> {n, until}
 const publicLimits = new Map(); // key -> {n, until}
 setInterval(() => {
@@ -226,6 +231,7 @@ setInterval(() => {
   prunePlayerSessions(now);
   for (const [state, entry] of steamStates) if (entry.expires < now) steamStates.delete(state);
   for (const [nonce, exp] of steamNonces) if (exp < now) steamNonces.delete(nonce);
+  for (const [code, entry] of steamGameLoginCodes) if (entry.expires < now) steamGameLoginCodes.delete(code);
   for (const [ip, f] of fails) if (f.until < now && f.n === 0) fails.delete(ip);
   for (const [key, limit] of publicLimits) if (limit.until < now) publicLimits.delete(key);
 }, 10 * 60 * 1000).unref();
@@ -627,7 +633,7 @@ const signupSteamId = signup => {
   return /^\d{17}$/.test(storedId) ? storedId : '';
 };
 const emptyTrackedStats = () => ({
-  goals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
+  goals: 0, volleyGoals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
   stickSaves: 0, bodySaves: 0, passes: 0, gamesPlayed: 0,
   savePercentageTotalBasisPoints: 0, savePercentageGames: 0,
   gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0, gamesWith10Goals: 0,
@@ -643,6 +649,7 @@ const trackedStatsFor = (data, signupId, seasonTwo = false) => {
     : null;
   return {
     goals: num(raw && raw.goals, Number.MAX_SAFE_INTEGER),
+    volleyGoals: num(raw && raw.volleyGoals, Number.MAX_SAFE_INTEGER),
     assists: num(raw && raw.assists, Number.MAX_SAFE_INTEGER),
     saves: num(raw && raw.saves, Number.MAX_SAFE_INTEGER),
     wins: num(raw && raw.wins, Number.MAX_SAFE_INTEGER),
@@ -702,6 +709,27 @@ async function steamProfileUrl(steamId) {
     clearTimeout(timeout);
   }
 }
+async function authenticateGameSteamTicket(ticket) {
+  const endpoint = new URL('https://api.steampowered.com/ISteamUserAuth/AuthenticateUserTicket/v1/');
+  endpoint.searchParams.set('key', STEAM_API_KEY);
+  endpoint.searchParams.set('appid', STEAM_APP_ID);
+  endpoint.searchParams.set('ticket', ticket);
+  endpoint.searchParams.set('identity', STEAM_TICKET_IDENTITY);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(endpoint, { signal: controller.signal });
+    if (!response.ok) throw new Error('Steam ticket validation failed with HTTP ' + response.status);
+    const result = await response.json();
+    const params = result && result.response && result.response.params;
+    const steamId = params && String(params.steamid || '');
+    if (!params || params.result !== 'OK' || !/^\d{17}$/.test(steamId))
+      return '';
+    return steamId;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 const okUrl = u => /^https:\/\/[^\s"<>]+$/.test(String(u || '')) ? String(u).slice(0, 300) : '';
 const normalizeStatsPointRequirements = value => {
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -732,6 +760,7 @@ const statRequirementsMet = (data, signup, requirements, requireAllStats) => {
   const stats = trackedStatsFor(data, signup.id);
   const available = {
     goals: stats.goals,
+    volleyGoals: stats.volleyGoals,
     assists: stats.assists,
     saves: stats.saves,
     gamesScoredIn: stats.gamesScoredIn,
@@ -775,6 +804,7 @@ const bannerStatRankings = (data, currentSignup) => {
     const stats = trackedStatsFor(data, signup.id);
     const values = {
       Goals: stats.goals,
+      'Volley Goals': stats.volleyGoals,
       Assists: stats.assists,
       Saves: stats.saves,
       Wins: stats.wins,
@@ -803,7 +833,7 @@ const bannerStatRankings = (data, currentSignup) => {
     return 0;
   };
   const statNames = [
-    'Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
+    'Goals', 'Volley Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
     'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
     '3-Goal Games', '5-Goal Games', '10-Goal Games',
     '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
@@ -1080,6 +1110,7 @@ function sanitize(d) {
       scale: Math.max(0.1, Math.min(5, Number.isFinite(Number(source.scale)) ? Number(source.scale) : 1)),
       requirements: {
         goals: num(requirements.goals, Number.MAX_SAFE_INTEGER),
+        volleyGoals: num(requirements.volleyGoals, Number.MAX_SAFE_INTEGER),
         assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
         saves: num(requirements.saves, Number.MAX_SAFE_INTEGER),
         points: num(requirements.points, Number.MAX_SAFE_INTEGER),
@@ -1101,7 +1132,7 @@ function sanitize(d) {
     };
   }).filter(Boolean);
   const poseRequirementKeys = [
-    'goals', 'assists', 'saves', 'points', 'gamesScoredIn',
+    'goals', 'volleyGoals', 'assists', 'saves', 'points', 'gamesScoredIn',
     'gamesWith3Goals', 'gamesWith5Goals', 'gamesWith10Goals',
     'gamesWith100PercentSavePercentage', 'gamesWith10Saves',
     'gamesWith20Saves', 'gamesWith30Saves',
@@ -1179,6 +1210,7 @@ function sanitize(d) {
         transform: sanitizeCanvasTransform(source.transform, { x: 334, y: 510, scale: 1 }),
         requirements: {
           goals: num(requirements.goals, Number.MAX_SAFE_INTEGER),
+          volleyGoals: num(requirements.volleyGoals, Number.MAX_SAFE_INTEGER),
           assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
           saves: num(requirements.saves, Number.MAX_SAFE_INTEGER),
           points: num(requirements.points, Number.MAX_SAFE_INTEGER),
@@ -1426,12 +1458,14 @@ const normalizeStatsReports = rawReports => {
         const scorerSteamId = str(raw.scorerSteamId, 17);
         const assist1SteamId = str(raw.assist1SteamId, 17);
         const assist2SteamId = str(raw.assist2SteamId, 17);
+        const volleyGoal = raw.volleyGoal === undefined ? false : raw.volleyGoal;
         if (!/^\d{17}$/.test(scorerSteamId) ||
             (assist1SteamId && !/^\d{17}$/.test(assist1SteamId)) ||
-            (assist2SteamId && !/^\d{17}$/.test(assist2SteamId))) {
+            (assist2SteamId && !/^\d{17}$/.test(assist2SteamId)) ||
+            typeof volleyGoal !== 'boolean') {
           return { error: 'A goal event has an invalid Steam ID.' };
         }
-        events.push({ eventId, type, scorerSteamId, assist1SteamId, assist2SteamId });
+        events.push({ eventId, type, scorerSteamId, assist1SteamId, assist2SteamId, volleyGoal });
       } else if (type === 'save' || type === 'stickSave' || type === 'bodySave' || type === 'pass') {
         const steamId = str(raw.steamId, 17);
         const count = Number(raw.count);
@@ -1523,6 +1557,8 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
         if (scorer) {
           const stats = countsFor(scorer.id);
           stats.goals = increaseTrackedStat(stats.goals);
+          if (event.volleyGoal)
+            stats.volleyGoals = increaseTrackedStat(stats.volleyGoals);
           eventCredited = true;
         }
         const creditedAssists = new Set([event.assist1SteamId, event.assist2SteamId]
@@ -2058,6 +2094,84 @@ const server = http.createServer(async (req, res) => {
         ],
       });
     }
+    if (p === '/api/player/game-login' && req.method === 'POST') {
+      if (!STEAM_API_KEY)
+        return send(res, 503, { error: 'In-game Steam sign-in is not configured on this website.' });
+      if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json'))
+        return send(res, 415, { error: 'The in-game sign-in request must use JSON.' });
+      if (!allowPublic('steam-game-login:' + clientIp(req), 20, 60 * 60 * 1000))
+        return send(res, 429, { error: 'Too many in-game sign-in attempts. Please try again later.' });
+
+      let payload;
+      try {
+        payload = JSON.parse(await readBody(req, 12000) || '{}');
+      } catch {
+        return send(res, 400, { error: 'The in-game sign-in request is invalid.' });
+      }
+      const ticket = payload && typeof payload.ticket === 'string' ? payload.ticket : '';
+      const returnPath = payload && payload.returnPath;
+      if (ticket.length < 64 || ticket.length > 8192 || ticket.length % 2 !== 0 ||
+          !/^[a-f0-9]+$/i.test(ticket) ||
+          !['/', '/player-login', '/player-banner'].includes(returnPath))
+        return send(res, 400, { error: 'The in-game sign-in request is invalid.' });
+
+      let steamId;
+      try {
+        steamId = await authenticateGameSteamTicket(ticket);
+      } catch (error) {
+        console.error('[steam-game-login] Steam ticket validation failed:', error.message);
+        return send(res, 503, { error: 'Steam sign-in could not be verified right now. Please try again.' });
+      }
+      if (!steamId)
+        return send(res, 401, { error: 'Steam could not verify the game sign-in. Please try again.' });
+
+      if (steamGameLoginCodes.size >= 10000)
+        steamGameLoginCodes.delete(steamGameLoginCodes.keys().next().value);
+      const code = crypto.randomBytes(32).toString('hex');
+      steamGameLoginCodes.set(code, {
+        steamId,
+        returnPath,
+        expires: Date.now() + STEAM_GAME_LOGIN_CODE_MS,
+      });
+      return send(res, 200, { code });
+    }
+    if (p === '/api/player/game-login/consume' && req.method === 'POST') {
+      const origin = requestOrigin(req);
+      if (!origin || req.headers.origin !== origin)
+        return send(res, 403, { error: 'The in-game sign-in request must come from this website.' });
+      if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json'))
+        return send(res, 415, { error: 'The in-game sign-in request must use JSON.' });
+
+      let payload;
+      try {
+        payload = JSON.parse(await readBody(req, 1024) || '{}');
+      } catch {
+        return send(res, 400, { error: 'The in-game sign-in code is invalid.' });
+      }
+      const code = payload && typeof payload.code === 'string' ? payload.code : '';
+      const pending = /^[a-f0-9]{64}$/.test(code) ? steamGameLoginCodes.get(code) : null;
+      if (!pending || pending.expires <= Date.now())
+        return send(res, 401, { error: 'This in-game sign-in has expired. Please reopen the page from Puck.' });
+      steamGameLoginCodes.delete(code);
+
+      const { profileUrl, lookupFailed } = await steamProfileUrl(pending.steamId);
+      const token = crypto.randomBytes(32).toString('hex');
+      try {
+        savePlayerSession(token, {
+          steamId: pending.steamId,
+          profileUrl,
+          lookupFailed,
+          expires: Date.now() + PLAYER_SESSION_MS,
+        });
+      } catch (error) {
+        console.error('[player-session] Could not persist in-game Steam sign-in:', error.message);
+        return send(res, 500, { error: 'Could not save your Steam sign-in. Please try again.' });
+      }
+      const secure = origin.startsWith('https://') ? '; Secure' : '';
+      return send(res, 200, { ok: true, returnPath: pending.returnPath }, 'application/json', {
+        'Set-Cookie': `mhl_player=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${PLAYER_SESSION_MS / 1000}${secure}`,
+      });
+    }
     if (p === '/api/player/me' && req.method === 'GET') {
       const player = playerSession(req);
       return send(res, 200, {
@@ -2531,7 +2645,7 @@ const server = http.createServer(async (req, res) => {
         ? current.statsImportLogs.slice(0, MAX_STATS_IMPORT_LOGS)
         : [];
       const trackedStatKeys = new Set([
-        'goals', 'assists', 'saves', 'wins', 'losses', 'stickSaves', 'bodySaves', 'passes',
+        'goals', 'volleyGoals', 'assists', 'saves', 'wins', 'losses', 'stickSaves', 'bodySaves', 'passes',
       ]);
       const currentSignupIds = new Set(current.signups.map(signup => signup.id));
       for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {

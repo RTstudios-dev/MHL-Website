@@ -432,13 +432,13 @@ const MHLA = (() => {
 
   function bannerReskinRequirementsSection() {
     const requirementDefaults = {
-      goals: 0, assists: 0, saves: 0, points: 0,
+      goals: 0, volleyGoals: 0, assists: 0, saves: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
       gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
       gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
     };
     const requirementLabels = {
-      goals: 'Goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves', points: 'Points',
       gamesScoredIn: 'Games with a goal',
       gamesWith3Goals: 'Games with 3+ goals',
       gamesWith5Goals: 'Games with 5+ goals',
@@ -1061,7 +1061,7 @@ const MHLA = (() => {
     };
     const trackedStatInput = (signup, key, label) => {
       const stats = signup.trackedStats || (signup.trackedStats = {
-        goals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
+        goals: 0, volleyGoals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
         stickSaves: 0, bodySaves: 0, passes: 0,
       });
       return h('input', {
@@ -1143,7 +1143,7 @@ const MHLA = (() => {
       h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
         h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Assists', 'Saves', 'Stick saves', 'Body saves', 'Passes', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Volley goals', 'Assists', 'Saves', 'Stick saves', 'Body saves', 'Passes', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {},
           h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
           h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
@@ -1156,6 +1156,7 @@ const MHLA = (() => {
           h('td', {}, playerValue(p, 'skaterValue', 'Skater value')),
           h('td', {}, playerValue(p, 'goalieValue', 'Goalie value')),
             playerStatCell(p, 'goals', 'Goals'),
+            playerStatCell(p, 'volleyGoals', 'Volley goals'),
             playerStatCell(p, 'assists', 'Assists'),
             playerStatCell(p, 'saves', 'Saves'),
             playerStatCell(p, 'stickSaves', 'Stick saves'),
@@ -2189,13 +2190,13 @@ const MHLA = (() => {
       ? item.poseId === pose.id
       : !options.defaultOnly || item.poseId === defaultPoseId());
     const requirementDefaults = {
-      goals: 0, assists: 0, saves: 0, points: 0,
+      goals: 0, volleyGoals: 0, assists: 0, saves: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
       gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
       gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
     };
     const requirementLabels = {
-      goals: 'Goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves', points: 'Points',
       gamesScoredIn: 'Games with a goal',
       gamesWith3Goals: 'Games with 3+ goals',
       gamesWith5Goals: 'Games with 5+ goals',
@@ -2370,13 +2371,13 @@ const MHLA = (() => {
     D.bannerDefaults = D.bannerDefaults && typeof D.bannerDefaults === 'object'
       ? D.bannerDefaults : {};
     const requirementDefaults = {
-      goals: 0, assists: 0, saves: 0, points: 0,
+      goals: 0, volleyGoals: 0, assists: 0, saves: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
       gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
       gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
     };
     const requirementLabels = {
-      goals: 'Goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves', points: 'Points',
       gamesScoredIn: 'Games with a goal',
       gamesWith3Goals: 'Games with 3+ goals',
       gamesWith5Goals: 'Games with 5+ goals',
@@ -2630,7 +2631,7 @@ const MHLA = (() => {
     D.bannerDefaults = D.bannerDefaults && typeof D.bannerDefaults === 'object'
       ? D.bannerDefaults : {};
     const badgeRequirementDefaults = {
-      goals: 0, assists: 0, saves: 0, points: 0,
+      goals: 0, volleyGoals: 0, assists: 0, saves: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
       gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
       gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
@@ -2669,6 +2670,7 @@ const MHLA = (() => {
       });
       const requirementLabels = {
         goals: 'Goals',
+        volleyGoals: 'Volley goals',
         assists: 'Assists',
         saves: 'Saves',
         points: 'Points',

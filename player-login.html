@@ -111,6 +111,7 @@
   <h3 class="profile-stat-heading" id="profileTrackedStatsTitle" hidden>Tracked Game Stats</h3>
   <div class="profile-stats profile-tracked-stats" id="profileTrackedStats" hidden>
     <div><span>Goals</span><strong id="trackedGoals">0</strong></div>
+    <div><span>Volley Goals</span><strong id="trackedVolleyGoals">0</strong></div>
     <div><span>Assists</span><strong id="trackedAssists">0</strong></div>
     <div><span>Saves</span><strong id="trackedSaves">0</strong></div>
     <div><span>Wins</span><strong id="trackedWins">0</strong></div>
@@ -209,6 +210,7 @@
   const profileTrackedStats = document.getElementById('profileTrackedStats');
   const profileTrackedStatElements = {
     goals: document.getElementById('trackedGoals'),
+    volleyGoals: document.getElementById('trackedVolleyGoals'),
     assists: document.getElementById('trackedAssists'),
     saves: document.getElementById('trackedSaves'),
     wins: document.getElementById('trackedWins'),
@@ -298,6 +300,7 @@
     profileWinsLosses.textContent = `${Number(trackedStats.wins) || 0}:${Number(trackedStats.losses) || 0}`;
     profilePoints.textContent = Number.isSafeInteger(signup.points) ? signup.points : 0;
     profileTrackedStatElements.goals.textContent = goals;
+    profileTrackedStatElements.volleyGoals.textContent = Number(trackedStats.volleyGoals) || 0;
     profileTrackedStatElements.assists.textContent = assists;
     profileTrackedStatElements.saves.textContent = saves;
     profileTrackedStatElements.wins.textContent = Number(trackedStats.wins) || 0;

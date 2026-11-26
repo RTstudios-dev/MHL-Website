@@ -276,7 +276,7 @@
     const stats = signup.trackedStats || {};
     const statValue = stat => {
       const values = {
-        Goals: stats.goals, Assists: stats.assists, Saves: stats.saves,
+        Goals: stats.goals, 'Volley Goals': stats.volleyGoals, Assists: stats.assists, Saves: stats.saves,
         Wins: stats.wins, Losses: stats.losses, 'Stick Saves': stats.stickSaves,
         'Body Saves': stats.bodySaves, Passes: stats.passes, 'Games Played': stats.gamesPlayed,
         'Games Scored In': stats.gamesScoredIn, '3-Goal Games': stats.gamesWith3Goals,

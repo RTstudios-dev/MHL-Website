@@ -181,7 +181,7 @@
     stats: { title: 'Stats', field: '', items: () => [] },
   };
   const stats = [
-    'Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
+    'Goals', 'Volley Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
     'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
     '3-Goal Games', '5-Goal Games', '10-Goal Games',
     '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
@@ -200,6 +200,7 @@
     const requirements = item.requirements || {};
     const stats = [
       Number(requirements.goals) > 0 ? `${requirements.goals} goals` : '',
+      Number(requirements.volleyGoals) > 0 ? `${requirements.volleyGoals} volley goals` : '',
       Number(requirements.assists) > 0 ? `${requirements.assists} assists` : '',
       Number(requirements.saves) > 0 ? `${requirements.saves} saves` : '',
       Number(requirements.gamesScoredIn) > 0 ? `${requirements.gamesScoredIn} games with a goal` : '',
