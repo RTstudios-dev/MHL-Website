@@ -323,6 +323,8 @@ const MHLA = (() => {
     item.playerGroupIds = Array.isArray(item.playerGroupIds) ? item.playerGroupIds : [];
     return h('fieldset', { class: 'player-group-requirements' },
       h('legend', {}, 'Grant to player groups'),
+      h('p', { class: 'help', style: 'flex-basis:100%;margin:0' },
+        'Selecting a group restricts the component to its members; members of selected groups are auto-granted.'),
       D.playerGroups.length ? D.playerGroups.map(group => h('label', { class: 'checkline' },
         h('input', {
           type: 'checkbox',

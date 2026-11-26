@@ -763,6 +763,10 @@ const isInPlayerGroup = (data, signup, groupId) => {
   const linkedPlayer = (data.players || []).find(player => player.signupId === signup.id);
   return !!linkedPlayer && group.playerIds.includes(linkedPlayer.id);
 };
+const matchesPlayerGroupRequirements = (data, signup, item) => {
+  const groupIds = Array.isArray(item.playerGroupIds) ? item.playerGroupIds : [];
+  return !groupIds.length || groupIds.some(groupId => isInPlayerGroup(data, signup, groupId));
+};
 const statRequirementsMet = (data, signup, requirements, requireAllStats) => {
   const stats = trackedStatsFor(data, signup.id);
   const available = {
@@ -796,13 +800,13 @@ const automaticallyGranted = (data, signup, item) => {
     || (item.playerGroupIds || []).some(groupId => isInPlayerGroup(data, signup, groupId));
 };
 const badgeIsUnlocked = (data, signup, badge) => {
-  if (!badge || !badge.image) return false;
+  if (!badge || !badge.image || !matchesPlayerGroupRequirements(data, signup, badge)) return false;
   if (badge.manualPlayerIds.includes(signup.id)) return true;
   return automaticallyGranted(data, signup, badge)
     || statRequirementsMet(data, signup, badge.requirements, badge.requireAllStats);
 };
 const poseIsUnlocked = (data, signup, pose) => {
-  if (!pose) return false;
+  if (!pose || !matchesPlayerGroupRequirements(data, signup, pose)) return false;
   if (pose.manualPlayerIds.includes(signup.id)) return true;
   return automaticallyGranted(data, signup, pose)
     || statRequirementsMet(data, signup, pose.requirements, pose.requireAllStats);
