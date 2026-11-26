@@ -60,6 +60,11 @@
           <option value="vg">Volley Goals</option>
           <option value="s">Saves</option>
           <option value="a">Assists</option>
+          <option value="shots">Shots</option>
+          <option value="goalPercentage">Goal Percentage</option>
+          <option value="goalieGames">Goalie Games</option>
+          <option value="skaterGames">Skater Games</option>
+          <option value="goalPerfectGames">Games With 100% Goal Percentage</option>
           <option value="value">Value</option>
         </select>
       </label>
@@ -101,6 +106,7 @@
     const stats = player.trackedStats || {};
     const g = Number(stats.goals) || 0, vg = Number(stats.volleyGoals) || 0;
     const a = Number(stats.assists) || 0, s = Number(stats.saves) || 0;
+    const shots = Number(stats.shots) || 0;
     const w = Number(stats.wins) || 0, l = Number(stats.losses) || 0;
     return {
       ...player, g, vg, a, s, w, l,
@@ -108,6 +114,11 @@
       seasonTwoStats: player.season2TrackedStats || {},
       p: (player.position === 'Goalie' ? Math.floor(s / savesPerPoint) : Math.floor(g / goalsPerPoint))
         + Math.floor(a / assistsPerPoint),
+      shots,
+      goalPercentage: shots ? g / shots * 100 : 0,
+      goalieGames: Number(stats.goalieGames) || 0,
+      skaterGames: Number(stats.skaterGames) || 0,
+      goalPerfectGames: Number(stats.gamesWith100PercentGoalPercentage) || 0,
       value: Number(player.position === 'Goalie' ? player.goalieValue : player.skaterValue) || 0,
       goalie: player.position === 'Goalie',
       t: D.T[player.team] || null,
@@ -178,7 +189,12 @@
       ? compactEuroFormat.format(value).replace(/([KMBT])$/, (_, suffix) => suffix.toLowerCase())
       : euroFormat.format(value);
   };
-  const NAMES = { p: 'Points', w: 'Wins', g: 'Goals', vg: 'Volley Goals', s: 'Saves', a: 'Assists', value: 'Value' };
+  const NAMES = {
+    p: 'Points', w: 'Wins', g: 'Goals', vg: 'Volley Goals', s: 'Saves', a: 'Assists',
+    shots: 'Shots', goalPercentage: 'Goal Percentage', goalieGames: 'Goalie Games',
+    skaterGames: 'Skater Games', goalPerfectGames: 'Games With 100% Goal Percentage',
+    value: 'Value',
+  };
   const applyStatsSource = () => {
     for (const player of P) {
       const stats = source === 'season2' ? player.seasonTwoStats : player.pugStats;
@@ -186,6 +202,11 @@
       player.vg = Number(stats.volleyGoals) || 0;
       player.a = Number(stats.assists) || 0;
       player.s = Number(stats.saves) || 0;
+      player.shots = Number(stats.shots) || 0;
+      player.goalPercentage = player.shots ? player.g / player.shots * 100 : 0;
+      player.goalieGames = Number(stats.goalieGames) || 0;
+      player.skaterGames = Number(stats.skaterGames) || 0;
+      player.goalPerfectGames = Number(stats.gamesWith100PercentGoalPercentage) || 0;
       player.w = Number(stats.wins) || 0;
       player.l = Number(stats.losses) || 0;
       player.p = (player.goalie ? Math.floor(player.s / savesPerPoint) : Math.floor(player.g / goalsPerPoint))
@@ -205,6 +226,11 @@
       volleyGoals: personalPlayer.vg,
       assists: personalPlayer.a,
       saves: personalPlayer.s,
+      shots: personalPlayer.shots,
+      goalPercentage: personalPlayer.goalPercentage,
+      goalieGames: personalPlayer.goalieGames,
+      skaterGames: personalPlayer.skaterGames,
+      goalPerfectGames: personalPlayer.goalPerfectGames,
       points: personalPlayer.p,
       record: `${personalPlayer.w}:${personalPlayer.l}`,
     };
@@ -221,6 +247,11 @@
       <div><span>Volley Goals</span><strong>${stats.volleyGoals}</strong></div>
       <div><span>Assists</span><strong>${stats.assists}</strong></div>
       <div><span>Saves</span><strong>${stats.saves}</strong></div>
+      <div><span>Shots</span><strong>${stats.shots}</strong></div>
+      <div><span>Goal Percentage</span><strong>${stats.goalPercentage.toFixed(1)}%</strong></div>
+      <div><span>Games as Goalie</span><strong>${stats.goalieGames}</strong></div>
+      <div><span>Games as Skater</span><strong>${stats.skaterGames}</strong></div>
+      <div><span>Games with 100% Goal Percentage</span><strong>${stats.goalPerfectGames}</strong></div>
       <div><span>Points</span><strong>${stats.points}</strong></div>
       <div><span>W:L</span><strong>${stats.record}</strong></div>
     </div>`;
@@ -288,7 +319,16 @@
       : key === 'g' ? player.g
         : key === 'vg' ? player.vg
         : key === 's' ? player.s
-          : key === 'a' ? player.a : valueForCurrentFilter(player);
+          : key === 'a' ? player.a
+            : key === 'shots' ? player.shots
+              : key === 'goalPercentage' ? player.goalPercentage
+                : key === 'goalieGames' ? player.goalieGames
+                  : key === 'skaterGames' ? player.skaterGames
+                    : key === 'goalPerfectGames' ? player.goalPerfectGames
+                      : valueForCurrentFilter(player);
+  const formattedMetricValue = player => key === 'goalPercentage'
+    ? `${metricValue(player).toFixed(1)}%`
+    : metricValue(player);
   const rank = () => {
     const list = [...filtered()];
     return list.sort((x, y) => (direction === 'high' ? metricValue(y) - metricValue(x) : metricValue(x) - metricValue(y))
@@ -314,8 +354,8 @@
     }
     const [one, ...rest] = list;
     $('leaders').innerHTML = `<div class="leaders">
-    <div class="top1" data-player-id="${esc(one.id)}"><div class="top1-person">${playerAvatar(one, 'leader-photo featured-photo')}<div><span class="k">${leaderLabel()}</span><h2>${esc(one.name)}</h2></div></div><span class="big num">${key === 'value' ? formatValue(valueForCurrentFilter(one)) : metricValue(one)}</span></div>
-    <div class="rest">${rest.slice(0, 4).map((p, i) => `<div class="lm" data-player-id="${esc(p.id)}"><span class="r">${i + 2}</span>${playerAvatar(p, 'leader-photo')}<span class="nm">${esc(p.name)}</span><span class="v">${key === 'value' ? formatValue(valueForCurrentFilter(p)) : metricValue(p)}</span></div>`).join('')
+    <div class="top1" data-player-id="${esc(one.id)}"><div class="top1-person">${playerAvatar(one, 'leader-photo featured-photo')}<div><span class="k">${leaderLabel()}</span><h2>${esc(one.name)}</h2></div></div><span class="big num">${key === 'value' ? formatValue(valueForCurrentFilter(one)) : formattedMetricValue(one)}</span></div>
+    <div class="rest">${rest.slice(0, 4).map((p, i) => `<div class="lm" data-player-id="${esc(p.id)}"><span class="r">${i + 2}</span>${playerAvatar(p, 'leader-photo')}<span class="nm">${esc(p.name)}</span><span class="v">${key === 'value' ? formatValue(valueForCurrentFilter(p)) : formattedMetricValue(p)}</span></div>`).join('')
         || '<div class="lm"><span></span><span></span><span class="nm">No one else has any yet.</span><span></span></div>'}</div>
     </div>`;
   }
@@ -356,7 +396,7 @@
     const showSaves = filter !== 'skater';
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
-        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">W:L</th><th scope="col">A</th>${showGoals ? '<th scope="col">G</th><th scope="col">VG</th>' : ''}${showSaves ? '<th scope="col">S</th>' : ''}<th scope="col">P</th></tr></thead>
+        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">W:L</th><th scope="col">A</th>${showGoals ? '<th scope="col">G</th><th scope="col">VG</th>' : ''}${showSaves ? '<th scope="col">S</th>' : ''}<th scope="col">Shots</th><th scope="col">Goal %</th><th scope="col">Goalie Games</th><th scope="col">Skater Games</th><th scope="col">100% Goal% Games</th><th scope="col">P</th></tr></thead>
       <tbody>${rows.map(player => `<tr data-player-id="${esc(player.id)}"><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
         ? `<img src="${esc(player.photo)}" alt="">`
         : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -371,6 +411,11 @@
         ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="G">${player.g}</td>` : ''}
         ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="Volley Goals">${player.vg}</td>` : ''}
         ${showSaves ? `<td class="player-stat-cell player-stat-value" data-label="S">${player.s}</td>` : ''}
+        <td class="player-stat-cell player-stat-value" data-label="Shots">${player.shots}</td>
+        <td class="player-stat-cell player-stat-value" data-label="Goal Percentage">${player.goalPercentage.toFixed(1)}%</td>
+        <td class="player-stat-cell player-stat-value" data-label="Goalie Games">${player.goalieGames}</td>
+        <td class="player-stat-cell player-stat-value" data-label="Skater Games">${player.skaterGames}</td>
+        <td class="player-stat-cell player-stat-value" data-label="Games With 100% Goal Percentage">${player.goalPerfectGames}</td>
         <td class="player-stat-cell player-stat-value" data-label="P">${player.p}</td></tr>`).join('')}</tbody>
     </table></div>`;
   }

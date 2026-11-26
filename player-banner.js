@@ -279,8 +279,10 @@
         Goals: stats.goals, 'Volley Goals': stats.volleyGoals, Assists: stats.assists, Saves: stats.saves,
         Wins: stats.wins, Losses: stats.losses, 'Stick Saves': stats.stickSaves,
         'Body Saves': stats.bodySaves, Passes: stats.passes, 'Games Played': stats.gamesPlayed,
+        Shots: stats.shots, 'Goalie Games': stats.goalieGames, 'Skater Games': stats.skaterGames,
         'Games Scored In': stats.gamesScoredIn, '3-Goal Games': stats.gamesWith3Goals,
         '5-Goal Games': stats.gamesWith5Goals, '10-Goal Games': stats.gamesWith10Goals,
+        'Games With 100% Goal Percentage': stats.gamesWith100PercentGoalPercentage,
         '100% Save Percentage Games': stats.gamesWith100PercentSavePercentage,
         '10-Save Games': stats.gamesWith10Saves, '20-Save Games': stats.gamesWith20Saves,
         '30-Save Games': stats.gamesWith30Saves,
@@ -294,6 +296,11 @@
         const games = Number(stats.savePercentageGames) || 0;
         const basis = Number(stats.savePercentageTotalBasisPoints) || 0;
         return games ? (basis / games / 100).toFixed(1) : '0.0';
+      }
+      if (stat === 'Goal Percentage') {
+        const shots = Number(stats.shots) || 0;
+        const goals = Number(stats.goals) || 0;
+        return shots ? (goals / shots * 100).toFixed(1) : '0.0';
       }
       return '0';
     };

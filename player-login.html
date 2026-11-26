@@ -120,6 +120,10 @@
     <div><span>Body Saves</span><strong id="trackedBodySaves">0</strong></div>
     <div><span>Passes</span><strong id="trackedPasses">0</strong></div>
     <div><span>Games Played</span><strong id="trackedGamesPlayed">0</strong></div>
+    <div><span>Shots</span><strong id="trackedShots">0</strong></div>
+    <div><span>Goal Percentage</span><strong id="trackedGoalPercentage">0.0%</strong></div>
+    <div><span>Games as Goalie</span><strong id="trackedGoalieGames">0</strong></div>
+    <div><span>Games as Skater</span><strong id="trackedSkaterGames">0</strong></div>
     <div><span>Goals / Game</span><strong id="trackedGoalsPerGame">0.00</strong></div>
     <div><span>Assists / Game</span><strong id="trackedAssistsPerGame">0.00</strong></div>
     <div><span>Saves / Game</span><strong id="trackedSavesPerGame">0.00</strong></div>
@@ -128,6 +132,7 @@
     <div><span>Games With 3+ Goals</span><strong id="trackedGamesWith3Goals">0</strong></div>
     <div><span>Games With 5+ Goals</span><strong id="trackedGamesWith5Goals">0</strong></div>
     <div><span>Games With 10+ Goals</span><strong id="trackedGamesWith10Goals">0</strong></div>
+    <div><span>Games With 100% Goal Percentage</span><strong id="trackedGamesWith100PercentGoalPercentage">0</strong></div>
     <div><span>Games With 100% Save Percentage</span><strong id="trackedGamesWith100PercentSavePercentage">0</strong></div>
     <div><span>Games With 10+ Saves</span><strong id="trackedGamesWith10Saves">0</strong></div>
     <div><span>Games With 20+ Saves</span><strong id="trackedGamesWith20Saves">0</strong></div>
@@ -219,10 +224,16 @@
     bodySaves: document.getElementById('trackedBodySaves'),
     passes: document.getElementById('trackedPasses'),
     gamesPlayed: document.getElementById('trackedGamesPlayed'),
+    shots: document.getElementById('trackedShots'),
+    goalPercentage: document.getElementById('trackedGoalPercentage'),
+    goalieGames: document.getElementById('trackedGoalieGames'),
+    skaterGames: document.getElementById('trackedSkaterGames'),
     gamesScoredIn: document.getElementById('trackedGamesScoredIn'),
     gamesWith3Goals: document.getElementById('trackedGamesWith3Goals'),
     gamesWith5Goals: document.getElementById('trackedGamesWith5Goals'),
     gamesWith10Goals: document.getElementById('trackedGamesWith10Goals'),
+    gamesWith100PercentGoalPercentage:
+      document.getElementById('trackedGamesWith100PercentGoalPercentage'),
     gamesWith100PercentSavePercentage: document.getElementById('trackedGamesWith100PercentSavePercentage'),
     gamesWith10Saves: document.getElementById('trackedGamesWith10Saves'),
     gamesWith20Saves: document.getElementById('trackedGamesWith20Saves'),
@@ -289,6 +300,7 @@
     const goals = Number(trackedStats.goals) || 0;
     const assists = Number(trackedStats.assists) || 0;
     const saves = Number(trackedStats.saves) || 0;
+    const shots = Number(trackedStats.shots) || 0;
     const gamesPlayed = Number(trackedStats.gamesPlayed) || 0;
     const perGame = value => gamesPlayed ? (Number(value) / gamesPlayed).toFixed(2) : '0.00';
     const savePercentageGames = Number(trackedStats.savePercentageGames) || 0;
@@ -309,10 +321,17 @@
     profileTrackedStatElements.bodySaves.textContent = Number(trackedStats.bodySaves) || 0;
     profileTrackedStatElements.passes.textContent = Number(trackedStats.passes) || 0;
     profileTrackedStatElements.gamesPlayed.textContent = gamesPlayed;
+    profileTrackedStatElements.shots.textContent = shots;
+    profileTrackedStatElements.goalPercentage.textContent =
+      `${(shots ? goals / shots * 100 : 0).toFixed(1)}%`;
+    profileTrackedStatElements.goalieGames.textContent = Number(trackedStats.goalieGames) || 0;
+    profileTrackedStatElements.skaterGames.textContent = Number(trackedStats.skaterGames) || 0;
     profileTrackedStatElements.gamesScoredIn.textContent = Number(trackedStats.gamesScoredIn) || 0;
     profileTrackedStatElements.gamesWith3Goals.textContent = Number(trackedStats.gamesWith3Goals) || 0;
     profileTrackedStatElements.gamesWith5Goals.textContent = Number(trackedStats.gamesWith5Goals) || 0;
     profileTrackedStatElements.gamesWith10Goals.textContent = Number(trackedStats.gamesWith10Goals) || 0;
+    profileTrackedStatElements.gamesWith100PercentGoalPercentage.textContent =
+      Number(trackedStats.gamesWith100PercentGoalPercentage) || 0;
     profileTrackedStatElements.gamesWith100PercentSavePercentage.textContent =
       Number(trackedStats.gamesWith100PercentSavePercentage) || 0;
     profileTrackedStatElements.gamesWith10Saves.textContent = Number(trackedStats.gamesWith10Saves) || 0;

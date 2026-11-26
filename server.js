@@ -35,7 +35,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -634,7 +634,8 @@ const signupSteamId = signup => {
 };
 const emptyTrackedStats = () => ({
   goals: 0, volleyGoals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
-  stickSaves: 0, bodySaves: 0, passes: 0, gamesPlayed: 0,
+  stickSaves: 0, bodySaves: 0, passes: 0, gamesPlayed: 0, shots: 0,
+  goalieGames: 0, skaterGames: 0, gamesWith100PercentGoalPercentage: 0,
   savePercentageTotalBasisPoints: 0, savePercentageGames: 0,
   gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0, gamesWith10Goals: 0,
   gamesWith100PercentSavePercentage: 0,
@@ -647,8 +648,10 @@ const trackedStatsFor = (data, signupId, seasonTwo = false) => {
   const raw = statsBySignup && Object.prototype.hasOwnProperty.call(statsBySignup, signupId)
     ? statsBySignup[signupId]
     : null;
+  const goals = num(raw && raw.goals, Number.MAX_SAFE_INTEGER);
+  const shots = num(raw && raw.shots, Number.MAX_SAFE_INTEGER);
   return {
-    goals: num(raw && raw.goals, Number.MAX_SAFE_INTEGER),
+    goals,
     volleyGoals: num(raw && raw.volleyGoals, Number.MAX_SAFE_INTEGER),
     assists: num(raw && raw.assists, Number.MAX_SAFE_INTEGER),
     saves: num(raw && raw.saves, Number.MAX_SAFE_INTEGER),
@@ -658,6 +661,12 @@ const trackedStatsFor = (data, signupId, seasonTwo = false) => {
     bodySaves: num(raw && raw.bodySaves, Number.MAX_SAFE_INTEGER),
     passes: num(raw && raw.passes, Number.MAX_SAFE_INTEGER),
     gamesPlayed: num(raw && raw.gamesPlayed, Number.MAX_SAFE_INTEGER),
+    shots,
+    goalPercentage: shots ? goals / shots * 100 : 0,
+    goalieGames: num(raw && raw.goalieGames, Number.MAX_SAFE_INTEGER),
+    skaterGames: num(raw && raw.skaterGames, Number.MAX_SAFE_INTEGER),
+    gamesWith100PercentGoalPercentage: num(
+      raw && raw.gamesWith100PercentGoalPercentage, Number.MAX_SAFE_INTEGER),
     savePercentageTotalBasisPoints: num(raw && raw.savePercentageTotalBasisPoints, Number.MAX_SAFE_INTEGER),
     savePercentageGames: num(raw && raw.savePercentageGames, Number.MAX_SAFE_INTEGER),
     gamesScoredIn: num(raw && raw.gamesScoredIn, Number.MAX_SAFE_INTEGER),
@@ -669,6 +678,40 @@ const trackedStatsFor = (data, signupId, seasonTwo = false) => {
     gamesWith20Saves: num(raw && raw.gamesWith20Saves, Number.MAX_SAFE_INTEGER),
     gamesWith30Saves: num(raw && raw.gamesWith30Saves, Number.MAX_SAFE_INTEGER),
   };
+};
+const historicalRoleGames = (gamesPlayed, goals, saves) => {
+  if (goals < 3 && saves > 15) return { goalieGames: gamesPlayed, skaterGames: 0 };
+  if (goals >= 5 && saves === 0) return { goalieGames: 0, skaterGames: gamesPlayed };
+
+  const goalieEquivalent = saves / 3;
+  const totalEquivalent = goals + goalieEquivalent;
+  const skaterShare = totalEquivalent ? goals / totalEquivalent : 0.5;
+  let skaterGames = Math.round(gamesPlayed * skaterShare);
+  if (gamesPlayed > 1)
+    skaterGames = Math.max(1, Math.min(gamesPlayed - 1, skaterGames));
+  return { goalieGames: gamesPlayed - skaterGames, skaterGames };
+};
+const migrateTrackedStats = data => {
+  if (num(data.trackedStatsMigrationVersion) >= 1) return false;
+  for (const key of ['playerStats', 'season2PlayerStats']) {
+    const bucket = data[key] && typeof data[key] === 'object' && !Array.isArray(data[key])
+      ? data[key]
+      : {};
+    for (const stats of Object.values(bucket)) {
+      if (!stats || typeof stats !== 'object' || Array.isArray(stats)) continue;
+      const goals = num(stats.goals, Number.MAX_SAFE_INTEGER);
+      const saves = num(stats.saves, Number.MAX_SAFE_INTEGER);
+      const gamesPlayed = num(stats.gamesPlayed, Number.MAX_SAFE_INTEGER);
+      const roles = historicalRoleGames(gamesPlayed, goals, saves);
+      stats.goalieGames = roles.goalieGames;
+      stats.skaterGames = roles.skaterGames;
+      stats.shots = Math.min(Number.MAX_SAFE_INTEGER, goals * 2);
+      stats.gamesWith100PercentGoalPercentage = 0;
+    }
+    data[key] = bucket;
+  }
+  data.trackedStatsMigrationVersion = 1;
+  return true;
 };
 const attachTrackedStats = data => {
   data.signups = data.signups.map(signup => ({
@@ -774,10 +817,15 @@ const statRequirementsMet = (data, signup, requirements, requireAllStats) => {
     volleyGoals: stats.volleyGoals,
     assists: stats.assists,
     saves: stats.saves,
+    shots: stats.shots,
+    goalPercentage: stats.goalPercentage,
+    goalieGames: stats.goalieGames,
+    skaterGames: stats.skaterGames,
     gamesScoredIn: stats.gamesScoredIn,
     gamesWith3Goals: stats.gamesWith3Goals,
     gamesWith5Goals: stats.gamesWith5Goals,
     gamesWith10Goals: stats.gamesWith10Goals,
+    gamesWith100PercentGoalPercentage: stats.gamesWith100PercentGoalPercentage,
     gamesWith100PercentSavePercentage: stats.gamesWith100PercentSavePercentage,
     gamesWith10Saves: stats.gamesWith10Saves,
     gamesWith20Saves: stats.gamesWith20Saves,
@@ -825,6 +873,11 @@ const bannerStatRankings = (data, currentSignup) => {
       'Body Saves': stats.bodySaves,
       Passes: stats.passes,
       'Games Played': stats.gamesPlayed,
+      Shots: stats.shots,
+      'Goal Percentage': stats.goalPercentage,
+      'Goalie Games': stats.goalieGames,
+      'Skater Games': stats.skaterGames,
+      'Games With 100% Goal Percentage': stats.gamesWith100PercentGoalPercentage,
       'Games Scored In': stats.gamesScoredIn,
       '3-Goal Games': stats.gamesWith3Goals,
       '5-Goal Games': stats.gamesWith5Goals,
@@ -846,7 +899,8 @@ const bannerStatRankings = (data, currentSignup) => {
   };
   const statNames = [
     'Goals', 'Volley Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
-    'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
+    'Passes', 'Games Played', 'Shots', 'Goal Percentage', 'Goalie Games', 'Skater Games',
+    'Save Percentage', 'Games Scored In', 'Games With 100% Goal Percentage',
     '3-Goal Games', '5-Goal Games', '10-Goal Games',
     '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
     'Skater Value', 'Goalie Value',
@@ -1147,11 +1201,17 @@ function sanitize(d) {
         volleyGoals: num(requirements.volleyGoals, Number.MAX_SAFE_INTEGER),
         assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
         saves: num(requirements.saves, Number.MAX_SAFE_INTEGER),
+        shots: num(requirements.shots, Number.MAX_SAFE_INTEGER),
+        goalPercentage: num(requirements.goalPercentage, Number.MAX_SAFE_INTEGER),
+        goalieGames: num(requirements.goalieGames, Number.MAX_SAFE_INTEGER),
+        skaterGames: num(requirements.skaterGames, Number.MAX_SAFE_INTEGER),
         points: num(requirements.points, Number.MAX_SAFE_INTEGER),
         gamesScoredIn: num(requirements.gamesScoredIn, Number.MAX_SAFE_INTEGER),
         gamesWith3Goals: num(requirements.gamesWith3Goals, Number.MAX_SAFE_INTEGER),
         gamesWith5Goals: num(requirements.gamesWith5Goals, Number.MAX_SAFE_INTEGER),
         gamesWith10Goals: num(requirements.gamesWith10Goals, Number.MAX_SAFE_INTEGER),
+        gamesWith100PercentGoalPercentage: num(
+          requirements.gamesWith100PercentGoalPercentage, Number.MAX_SAFE_INTEGER),
         gamesWith100PercentSavePercentage: num(
           requirements.gamesWith100PercentSavePercentage, Number.MAX_SAFE_INTEGER),
         gamesWith10Saves: num(requirements.gamesWith10Saves, Number.MAX_SAFE_INTEGER),
@@ -1167,9 +1227,10 @@ function sanitize(d) {
     };
   }).filter(Boolean);
   const poseRequirementKeys = [
-    'goals', 'volleyGoals', 'assists', 'saves', 'points', 'gamesScoredIn',
+    'goals', 'volleyGoals', 'assists', 'saves', 'shots', 'goalPercentage',
+    'goalieGames', 'skaterGames', 'points', 'gamesScoredIn',
     'gamesWith3Goals', 'gamesWith5Goals', 'gamesWith10Goals',
-    'gamesWith100PercentSavePercentage', 'gamesWith10Saves',
+    'gamesWith100PercentGoalPercentage', 'gamesWith100PercentSavePercentage', 'gamesWith10Saves',
     'gamesWith20Saves', 'gamesWith30Saves',
   ];
   const poseIds = new Set();
@@ -1250,11 +1311,17 @@ function sanitize(d) {
           volleyGoals: num(requirements.volleyGoals, Number.MAX_SAFE_INTEGER),
           assists: num(requirements.assists, Number.MAX_SAFE_INTEGER),
           saves: num(requirements.saves, Number.MAX_SAFE_INTEGER),
+          shots: num(requirements.shots, Number.MAX_SAFE_INTEGER),
+          goalPercentage: num(requirements.goalPercentage, Number.MAX_SAFE_INTEGER),
+          goalieGames: num(requirements.goalieGames, Number.MAX_SAFE_INTEGER),
+          skaterGames: num(requirements.skaterGames, Number.MAX_SAFE_INTEGER),
           points: num(requirements.points, Number.MAX_SAFE_INTEGER),
           gamesScoredIn: num(requirements.gamesScoredIn, Number.MAX_SAFE_INTEGER),
           gamesWith3Goals: num(requirements.gamesWith3Goals, Number.MAX_SAFE_INTEGER),
           gamesWith5Goals: num(requirements.gamesWith5Goals, Number.MAX_SAFE_INTEGER),
           gamesWith10Goals: num(requirements.gamesWith10Goals, Number.MAX_SAFE_INTEGER),
+          gamesWith100PercentGoalPercentage: num(
+            requirements.gamesWith100PercentGoalPercentage, Number.MAX_SAFE_INTEGER),
           gamesWith100PercentSavePercentage: num(requirements.gamesWith100PercentSavePercentage, Number.MAX_SAFE_INTEGER),
           gamesWith10Saves: num(requirements.gamesWith10Saves, Number.MAX_SAFE_INTEGER),
           gamesWith20Saves: num(requirements.gamesWith20Saves, Number.MAX_SAFE_INTEGER),
@@ -1327,12 +1394,9 @@ function sanitize(d) {
   };
   signups.forEach(signup => {
     if (!poseIds.has(signup.bannerConfig.poseId)) signup.bannerConfig.poseId = defaultPose.id;
-    const used = new Set();
     signup.badgeSlots = [0, 1, 2].map(index => {
       const badgeId = signup.badgeSlots[index] || '';
-      if (!validBadgeIds.has(badgeId) || used.has(badgeId)) return '';
-      used.add(badgeId);
-      return badgeId;
+      return validBadgeIds.has(badgeId) ? badgeId : '';
     });
   });
   const linkedSignupIds = new Set();
@@ -1354,6 +1418,7 @@ function sanitize(d) {
     bannedSteamIds, playerListExclusions, season1PlayerIds, playerGroups,
     bannerPoses, bannerSprites, backgroundSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
     bannerLayers, bannerDefaults,
+    trackedStatsMigrationVersion: num(d.trackedStatsMigrationVersion),
   };
 }
 
@@ -1393,10 +1458,14 @@ function teamPageHtml(req, team) {
     .replace('</head>', () => extra + '</head>');
 }
 
-const readData = () => ({ ...EMPTY, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) });
 const writeData = d => {
   fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(d, null, 2));
   fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
+};
+const readData = () => {
+  const data = { ...EMPTY, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) };
+  if (migrateTrackedStats(data)) writeData(data);
+  return data;
 };
 const createSiteBackup = () => {
   const assets = [];
@@ -1504,7 +1573,8 @@ const normalizeStatsReports = rawReports => {
           return { error: 'A goal event has an invalid Steam ID.' };
         }
         events.push({ eventId, type, scorerSteamId, assist1SteamId, assist2SteamId, volleyGoal });
-      } else if (type === 'save' || type === 'stickSave' || type === 'bodySave' || type === 'pass') {
+      } else if (type === 'save' || type === 'stickSave' || type === 'bodySave' ||
+          type === 'pass' || type === 'shots') {
         const steamId = str(raw.steamId, 17);
         const count = Number(raw.count);
         if (!/^\d{17}$/.test(steamId) || !Number.isSafeInteger(count) || count < 1 || count > 1000)
@@ -1515,20 +1585,27 @@ const normalizeStatsReports = rawReports => {
         const savePercentageBasisPoints = raw.savePercentageBasisPoints;
         const goalsScored = raw.goalsScored === undefined ? 0 : raw.goalsScored;
         const savesInGame = raw.savesInGame === undefined ? 0 : raw.savesInGame;
+        const shotsInGame = raw.shotsInGame === undefined ? 0 : raw.shotsInGame;
+        const role = raw.role === undefined ? '' : raw.role;
         if (!/^\d{17}$/.test(steamId) ||
             !Number.isSafeInteger(savePercentageBasisPoints) ||
             savePercentageBasisPoints < -1 || savePercentageBasisPoints > 10000 ||
             !Number.isSafeInteger(goalsScored) || goalsScored < 0 || goalsScored > 1000 ||
-            !Number.isSafeInteger(savesInGame) || savesInGame < 0 || savesInGame > 1000) {
+            !Number.isSafeInteger(savesInGame) || savesInGame < 0 || savesInGame > 1000 ||
+            !Number.isSafeInteger(shotsInGame) || shotsInGame < 0 || shotsInGame > 1000 ||
+            (role !== '' && role !== 'goalie' && role !== 'skater')) {
           return { error: 'A game summary event is invalid.' };
         }
-        events.push({ eventId, type, steamId, savePercentageBasisPoints, goalsScored, savesInGame });
+        events.push({
+          eventId, type, steamId, savePercentageBasisPoints, goalsScored, savesInGame,
+          shotsInGame, role,
+        });
       } else if (type === 'statAdjustment') {
         const steamId = str(raw.steamId, 17);
         const stat = raw.stat;
         const count = Number(raw.count);
         if (!/^\d{17}$/.test(steamId) ||
-            !['save', 'stickSave', 'bodySave', 'pass'].includes(stat) ||
+            !['save', 'stickSave', 'bodySave', 'pass', 'shots'].includes(stat) ||
             !Number.isSafeInteger(count) || count < 1 || count > 1000) {
           return { error: 'A player stat adjustment event is invalid.' };
         }
@@ -1612,7 +1689,7 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
         if (eventCredited) credited++;
         else unmatched++;
       } else if (event.type === 'save' || event.type === 'stickSave' ||
-          event.type === 'bodySave' || event.type === 'pass') {
+          event.type === 'bodySave' || event.type === 'pass' || event.type === 'shots') {
         const signup = signupBySteamId.get(event.steamId);
         if (signup) {
           const stats = countsFor(signup.id);
@@ -1622,6 +1699,8 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
               ? 'bodySaves'
               : event.type === 'pass'
                 ? 'passes'
+                : event.type === 'shots'
+                  ? 'shots'
                 : 'saves';
           stats[key] = increaseTrackedStat(stats[key], event.count);
           credited++;
@@ -1631,6 +1710,10 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
         if (signup) {
           const stats = countsFor(signup.id);
           stats.gamesPlayed = increaseTrackedStat(stats.gamesPlayed);
+          if (event.role === 'goalie')
+            stats.goalieGames = increaseTrackedStat(stats.goalieGames);
+          else if (event.role === 'skater')
+            stats.skaterGames = increaseTrackedStat(stats.skaterGames);
           if (event.goalsScored >= 1)
             stats.gamesScoredIn = increaseTrackedStat(stats.gamesScoredIn);
           if (event.goalsScored >= 3)
@@ -1639,6 +1722,9 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
             stats.gamesWith5Goals = increaseTrackedStat(stats.gamesWith5Goals);
           if (event.goalsScored >= 10)
             stats.gamesWith10Goals = increaseTrackedStat(stats.gamesWith10Goals);
+          if (event.goalsScored >= 2 && event.shotsInGame === event.goalsScored)
+            stats.gamesWith100PercentGoalPercentage = increaseTrackedStat(
+              stats.gamesWith100PercentGoalPercentage);
           if (event.savesInGame >= 10)
             stats.gamesWith10Saves = increaseTrackedStat(stats.gamesWith10Saves);
           if (event.savesInGame >= 20)
@@ -1666,6 +1752,8 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
               ? 'bodySaves'
               : event.stat === 'pass'
                 ? 'passes'
+                : event.stat === 'shots'
+                  ? 'shots'
                 : 'saves';
           stats[key] = Math.max(0, num(stats[key], Number.MAX_SAFE_INTEGER) - event.count);
           credited++;
@@ -2685,6 +2773,7 @@ const server = http.createServer(async (req, res) => {
         : [];
       const trackedStatKeys = new Set([
         'goals', 'volleyGoals', 'assists', 'saves', 'wins', 'losses', 'stickSaves', 'bodySaves', 'passes',
+        'shots', 'goalieGames', 'skaterGames', 'gamesWith100PercentGoalPercentage',
       ]);
       const currentSignupIds = new Set(current.signups.map(signup => signup.id));
       for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
@@ -2695,7 +2784,9 @@ const server = http.createServer(async (req, res) => {
         }
       }
       for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
-        clean.playerStats[signupId] = { ...trackedStatsFor(current, signupId), ...stats };
+        const trackedStats = trackedStatsFor(current, signupId);
+        delete trackedStats.goalPercentage;
+        clean.playerStats[signupId] = { ...trackedStats, ...stats };
       }
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
       const incomingSignups = new Map(requestedSignups
@@ -2719,12 +2810,9 @@ const server = http.createServer(async (req, res) => {
         if (!remainingSignupIds.has(signupId)) delete clean.season2PlayerStats[signupId];
       const badgeIds = new Set(clean.badges.map(badge => badge.id));
       for (const signup of clean.signups) {
-        const usedBadges = new Set();
         signup.badgeSlots = [0, 1, 2].map(index => {
           const badgeId = (signup.badgeSlots || [])[index] || '';
-          if (!badgeIds.has(badgeId) || usedBadges.has(badgeId)) return '';
-          usedBadges.add(badgeId);
-          return badgeId;
+          return badgeIds.has(badgeId) ? badgeId : '';
         });
       }
       const currentDraft = normalizeDraft(current.draft, current.teams, current.signups);

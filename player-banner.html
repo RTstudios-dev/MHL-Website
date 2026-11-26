@@ -182,8 +182,10 @@
   };
   const stats = [
     'Goals', 'Volley Goals', 'Assists', 'Saves', 'Wins', 'Losses', 'Stick Saves', 'Body Saves',
-    'Passes', 'Games Played', 'Save Percentage', 'Games Scored In',
+    'Passes', 'Games Played', 'Shots', 'Goal Percentage', 'Goalie Games', 'Skater Games',
+    'Save Percentage', 'Games Scored In',
     '3-Goal Games', '5-Goal Games', '10-Goal Games',
+    'Games With 100% Goal Percentage',
     '100% Save Percentage Games', '10-Save Games', '20-Save Games', '30-Save Games',
     'Skater Value', 'Goalie Value',
   ];
@@ -191,10 +193,15 @@
   let activeCategory = 'badges';
   let pendingTarget = null;
   let dirty = false;
+  let editRevision = 0;
 
   const status = (message, kind = '') => {
     editorStatus.textContent = message;
     editorStatus.className = `banner-editor-status${kind ? ` ${kind}` : ''}`;
+  };
+  const markDirty = () => {
+    dirty = true;
+    editRevision += 1;
   };
   const itemRequirementsText = item => {
     const requirements = item.requirements || {};
@@ -203,10 +210,17 @@
       Number(requirements.volleyGoals) > 0 ? `${requirements.volleyGoals} volley goals` : '',
       Number(requirements.assists) > 0 ? `${requirements.assists} assists` : '',
       Number(requirements.saves) > 0 ? `${requirements.saves} saves` : '',
+      Number(requirements.shots) > 0 ? `${requirements.shots} shots` : '',
+      Number(requirements.goalPercentage) > 0
+        ? `${requirements.goalPercentage}% goal percentage` : '',
+      Number(requirements.goalieGames) > 0 ? `${requirements.goalieGames} goalie games` : '',
+      Number(requirements.skaterGames) > 0 ? `${requirements.skaterGames} skater games` : '',
       Number(requirements.gamesScoredIn) > 0 ? `${requirements.gamesScoredIn} games with a goal` : '',
       Number(requirements.gamesWith3Goals) > 0 ? `${requirements.gamesWith3Goals} games with 3+ goals` : '',
       Number(requirements.gamesWith5Goals) > 0 ? `${requirements.gamesWith5Goals} games with 5+ goals` : '',
       Number(requirements.gamesWith10Goals) > 0 ? `${requirements.gamesWith10Goals} games with 10+ goals` : '',
+      Number(requirements.gamesWith100PercentGoalPercentage) > 0
+        ? `${requirements.gamesWith100PercentGoalPercentage} games with 100% goal percentage` : '',
       Number(requirements.gamesWith100PercentSavePercentage) > 0
         ? `${requirements.gamesWith100PercentSavePercentage} games with 100% save percentage` : '',
       Number(requirements.gamesWith10Saves) > 0 ? `${requirements.gamesWith10Saves} games with 10+ saves` : '',
@@ -253,7 +267,7 @@
           const field = categories[target.category].field;
           window.MHLPlayerBanner.ensureConfig(signup)[field] = pendingTarget.itemId;
         }
-        dirty = true;
+        markDirty();
         setTargetMode(null);
         renderInventory();
         status('Component updated. Save your banner to keep the change.');
@@ -315,7 +329,7 @@
           if (!items.some(item => item.id === config[field] && item.poseId === pose.id))
             config[field] = '';
         }
-        dirty = true;
+        markDirty();
         if (pendingTarget) setTargetMode(null);
         else renderBanner();
         renderPosePicker();
@@ -401,7 +415,7 @@
           config.equippedStats = selected
             ? config.equippedStats.filter(item => item !== stat)
             : [...config.equippedStats, stat];
-          dirty = true;
+          markDirty();
           renderBanner();
           renderInventory();
           status(selected
@@ -481,7 +495,7 @@
     const defaultItem = unlockedItems.find(item => item.id === defaultId) || unlockedItems[0];
     const selectDefault = () => {
       config[definition.field] = '';
-      dirty = true;
+      markDirty();
       renderBanner();
       renderInventory();
       status('Default component selected. Save your banner to keep the change.');
@@ -518,7 +532,7 @@
           label: item.unlocked === false ? 'Locked' : 'Equip',
           run: () => {
             config[definition.field] = item.id;
-            dirty = true;
+            markDirty();
             renderBanner();
             renderInventory();
             status('Component updated. Save your banner to keep the change.');
@@ -548,6 +562,7 @@
     if (!signup) return;
     saveButton.disabled = true;
     status('Saving banner…');
+    const savedRevision = editRevision;
     try {
       const config = window.MHLPlayerBanner.ensureConfig(signup);
       const response = await fetch('/api/player/banner-config', {
@@ -557,13 +572,18 @@
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not save your banner.');
-      signup.bannerConfig = result.bannerConfig;
-      if (Array.isArray(result.badgeSlots)) signup.badgeSlots = result.badgeSlots;
-      dirty = false;
+      const editsWereMadeDuringSave = editRevision !== savedRevision;
+      if (!editsWereMadeDuringSave) {
+        signup.bannerConfig = result.bannerConfig;
+        if (Array.isArray(result.badgeSlots)) signup.badgeSlots = result.badgeSlots;
+        dirty = false;
+      }
       renderBanner();
       renderPosePicker();
       renderInventory();
-      status('Banner saved.', 'success');
+      status(editsWereMadeDuringSave
+        ? 'Saved. Newer edits still need saving.'
+        : 'Banner saved.', 'success');
     } catch (error) {
       status(error.message || 'Could not save your banner.', 'error');
     } finally {

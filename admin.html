@@ -520,17 +520,22 @@ const MHLA = (() => {
 
   function bannerReskinRequirementsSection() {
     const requirementDefaults = {
-      goals: 0, volleyGoals: 0, assists: 0, saves: 0, points: 0,
+      goals: 0, volleyGoals: 0, assists: 0, saves: 0, shots: 0, goalPercentage: 0,
+      goalieGames: 0, skaterGames: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
-      gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
+      gamesWith10Goals: 0, gamesWith100PercentGoalPercentage: 0,
+      gamesWith100PercentSavePercentage: 0,
       gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
     };
     const requirementLabels = {
-      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves',
+      shots: 'Shots', goalPercentage: 'Goal percentage', goalieGames: 'Goalie games',
+      skaterGames: 'Skater games', points: 'Points',
       gamesScoredIn: 'Games with a goal',
       gamesWith3Goals: 'Games with 3+ goals',
       gamesWith5Goals: 'Games with 5+ goals',
       gamesWith10Goals: 'Games with 10+ goals',
+      gamesWith100PercentGoalPercentage: 'Games with 100% goal percentage',
       gamesWith100PercentSavePercentage: 'Games with 100% SV%',
       gamesWith10Saves: 'Games with 10+ saves',
       gamesWith20Saves: 'Games with 20+ saves',
@@ -1154,7 +1159,8 @@ const MHLA = (() => {
     const trackedStatInput = (signup, key, label) => {
       const stats = signup.trackedStats || (signup.trackedStats = {
         goals: 0, volleyGoals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
-        stickSaves: 0, bodySaves: 0, passes: 0,
+        stickSaves: 0, bodySaves: 0, passes: 0, shots: 0, goalieGames: 0,
+        skaterGames: 0, gamesWith100PercentGoalPercentage: 0,
       });
       return h('input', {
         type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
@@ -1174,6 +1180,14 @@ const MHLA = (() => {
       if (signup) return h('td', {}, trackedStatInput(signup, key, label));
       const stats = tot[player.id] || { g: 0, a: 0 };
       return h('td', { class: 'tot' }, key === 'goals' ? stats.g : key === 'assists' ? stats.a : '—');
+    };
+    const playerGoalPercentageCell = player => {
+      const signup = signupForPlayer(player);
+      if (!signup) return h('td', { class: 'tot' }, '—');
+      const stats = signup.trackedStats || {};
+      const goals = Number(stats.goals) || 0;
+      const shots = Number(stats.shots) || 0;
+      return h('td', { class: 'tot' }, `${(shots ? goals / shots * 100 : 0).toFixed(1)}%`);
     };
     const playerValue = (player, key, label) => h('input', {
       type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
@@ -1270,7 +1284,7 @@ const MHLA = (() => {
         h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
           h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name))))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable player-table' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Volley goals', 'Assists', 'Saves', 'Stick saves', 'Body saves', 'Passes', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Volley goals', 'Assists', 'Saves', 'Shots', 'Goal %', 'Goalie games', 'Skater games', '100% goal% games', 'Stick saves', 'Body saves', 'Passes', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {
           hidden: !matchesPlayerSearch(p),
           'data-player-search': playerSearchText(p),
@@ -1289,6 +1303,11 @@ const MHLA = (() => {
             playerStatCell(p, 'volleyGoals', 'Volley goals'),
             playerStatCell(p, 'assists', 'Assists'),
             playerStatCell(p, 'saves', 'Saves'),
+            playerStatCell(p, 'shots', 'Shots'),
+            playerGoalPercentageCell(p),
+            playerStatCell(p, 'goalieGames', 'Goalie games'),
+            playerStatCell(p, 'skaterGames', 'Skater games'),
+            playerStatCell(p, 'gamesWith100PercentGoalPercentage', 'Games with 100% goal percentage'),
             playerStatCell(p, 'stickSaves', 'Stick saves'),
             playerStatCell(p, 'bodySaves', 'Body saves'),
             playerStatCell(p, 'passes', 'Passes'),
@@ -2402,17 +2421,22 @@ const MHLA = (() => {
       ? item.poseId === pose.id
       : !options.defaultOnly || item.poseId === defaultPoseId());
     const requirementDefaults = {
-      goals: 0, volleyGoals: 0, assists: 0, saves: 0, points: 0,
+      goals: 0, volleyGoals: 0, assists: 0, saves: 0, shots: 0, goalPercentage: 0,
+      goalieGames: 0, skaterGames: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
-      gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
+      gamesWith10Goals: 0, gamesWith100PercentGoalPercentage: 0,
+      gamesWith100PercentSavePercentage: 0,
       gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
     };
     const requirementLabels = {
-      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves',
+      shots: 'Shots', goalPercentage: 'Goal percentage', goalieGames: 'Goalie games',
+      skaterGames: 'Skater games', points: 'Points',
       gamesScoredIn: 'Games with a goal',
       gamesWith3Goals: 'Games with 3+ goals',
       gamesWith5Goals: 'Games with 5+ goals',
       gamesWith10Goals: 'Games with 10+ goals',
+      gamesWith100PercentGoalPercentage: 'Games with 100% goal percentage',
       gamesWith100PercentSavePercentage: 'Games with 100% SV%',
       gamesWith10Saves: 'Games with 10+ saves',
       gamesWith20Saves: 'Games with 20+ saves',
@@ -2590,17 +2614,22 @@ const MHLA = (() => {
     D.bannerDefaults = D.bannerDefaults && typeof D.bannerDefaults === 'object'
       ? D.bannerDefaults : {};
     const requirementDefaults = {
-      goals: 0, volleyGoals: 0, assists: 0, saves: 0, points: 0,
+      goals: 0, volleyGoals: 0, assists: 0, saves: 0, shots: 0, goalPercentage: 0,
+      goalieGames: 0, skaterGames: 0, points: 0,
       gamesScoredIn: 0, gamesWith3Goals: 0, gamesWith5Goals: 0,
-      gamesWith10Goals: 0, gamesWith100PercentSavePercentage: 0,
+      gamesWith10Goals: 0, gamesWith100PercentGoalPercentage: 0,
+      gamesWith100PercentSavePercentage: 0,
       gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
     };
     const requirementLabels = {
-      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves', points: 'Points',
+      goals: 'Goals', volleyGoals: 'Volley goals', assists: 'Assists', saves: 'Saves',
+      shots: 'Shots', goalPercentage: 'Goal percentage', goalieGames: 'Goalie games',
+      skaterGames: 'Skater games', points: 'Points',
       gamesScoredIn: 'Games with a goal',
       gamesWith3Goals: 'Games with 3+ goals',
       gamesWith5Goals: 'Games with 5+ goals',
       gamesWith10Goals: 'Games with 10+ goals',
+      gamesWith100PercentGoalPercentage: 'Games with 100% goal percentage',
       gamesWith100PercentSavePercentage: 'Games with 100% SV%',
       gamesWith10Saves: 'Games with 10+ saves',
       gamesWith20Saves: 'Games with 20+ saves',
@@ -2897,11 +2926,16 @@ const MHLA = (() => {
         volleyGoals: 'Volley goals',
         assists: 'Assists',
         saves: 'Saves',
+        shots: 'Shots',
+        goalPercentage: 'Goal percentage',
+        goalieGames: 'Goalie games',
+        skaterGames: 'Skater games',
         points: 'Points',
         gamesScoredIn: 'Games with a goal',
         gamesWith3Goals: 'Games with 3+ goals',
         gamesWith5Goals: 'Games with 5+ goals',
         gamesWith10Goals: 'Games with 10+ goals',
+        gamesWith100PercentGoalPercentage: 'Games with 100% goal percentage',
         gamesWith100PercentSavePercentage: 'Games with 100% SV%',
         gamesWith10Saves: 'Games with 10+ saves',
         gamesWith20Saves: 'Games with 20+ saves',
