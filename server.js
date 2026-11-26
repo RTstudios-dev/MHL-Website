@@ -35,7 +35,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -756,6 +756,13 @@ const isSeason1Player = (data, signup) => {
   const linkedPlayer = (data.players || []).find(player => player.signupId === signup.id);
   return !!linkedPlayer && ids.has(linkedPlayer.id);
 };
+const isInPlayerGroup = (data, signup, groupId) => {
+  const group = (data.playerGroups || []).find(item => item.id === groupId);
+  if (!group) return false;
+  if (group.playerIds.includes(signup.id)) return true;
+  const linkedPlayer = (data.players || []).find(player => player.signupId === signup.id);
+  return !!linkedPlayer && group.playerIds.includes(linkedPlayer.id);
+};
 const statRequirementsMet = (data, signup, requirements, requireAllStats) => {
   const stats = trackedStatsFor(data, signup.id);
   const available = {
@@ -785,7 +792,8 @@ const automaticallyGranted = (data, signup, item) => {
   if (item.allPlayers) return true;
   const season1 = isSeason1Player(data, signup);
   return (item.season1Players && season1)
-    || (item.season2Players && !season1);
+    || (item.season2Players && !season1)
+    || (item.playerGroupIds || []).some(groupId => isInPlayerGroup(data, signup, groupId));
 };
 const badgeIsUnlocked = (data, signup, badge) => {
   if (!badge || !badge.image) return false;
@@ -1086,6 +1094,28 @@ function sanitize(d) {
   const season1PlayerIds = [...new Set((Array.isArray(d.season1PlayerIds) ? d.season1PlayerIds : [])
     .map(value => str(value, 40))
     .filter(value => playerIds.has(value)))];
+  const playerGroupIds = new Set();
+  const playerGroups = (Array.isArray(d.playerGroups) ? d.playerGroups : []).slice(0, 100).map(source => {
+    if (!source || typeof source !== 'object') return null;
+    const id = str(source.id, 40) || crypto.randomUUID();
+    if (playerGroupIds.has(id)) return null;
+    playerGroupIds.add(id);
+    const memberIds = new Set();
+    const groupPlayerIds = (Array.isArray(source.playerIds) ? source.playerIds : [])
+      .slice(0, 5000)
+      .map(value => str(value, 40))
+      .filter(value => playerIds.has(value) && !memberIds.has(value) && memberIds.add(value));
+    return {
+      id,
+      name: str(source.name, 80) || 'Player group',
+      playerIds: groupPlayerIds,
+    };
+  }).filter(Boolean);
+  const validPlayerGroupIds = new Set(playerGroups.map(group => group.id));
+  const normalizePlayerGroupIds = value => [...new Set((Array.isArray(value) ? value : [])
+    .slice(0, 100)
+    .map(groupId => str(groupId, 40))
+    .filter(groupId => validPlayerGroupIds.has(groupId)))];
   const rawBannerDefaults = d.bannerDefaults && typeof d.bannerDefaults === 'object'
     ? d.bannerDefaults : {};
   const badgeIds = new Set();
@@ -1128,6 +1158,7 @@ function sanitize(d) {
       allPlayers: !!source.allPlayers,
       season1Players: !!source.season1Players,
       season2Players: !!source.season2Players,
+      playerGroupIds: normalizePlayerGroupIds(source.playerGroupIds),
       manualPlayerIds,
     };
   }).filter(Boolean);
@@ -1160,6 +1191,7 @@ function sanitize(d) {
       allPlayers: !!source.allPlayers,
       season1Players: !!source.season1Players,
       season2Players: !!source.season2Players,
+      playerGroupIds: normalizePlayerGroupIds(source.playerGroupIds),
       manualPlayerIds,
     };
   }).filter(Boolean);
@@ -1176,6 +1208,7 @@ function sanitize(d) {
       allPlayers: true,
       season1Players: false,
       season2Players: false,
+      playerGroupIds: [],
       manualPlayerIds: [],
     };
     bannerPoses.unshift(defaultPose);
@@ -1227,6 +1260,7 @@ function sanitize(d) {
         allPlayers: !!source.allPlayers,
         season1Players: !!source.season1Players,
         season2Players: !!source.season2Players,
+        playerGroupIds: normalizePlayerGroupIds(source.playerGroupIds),
         manualPlayerIds,
       };
     }).filter(Boolean);
@@ -1313,7 +1347,7 @@ function sanitize(d) {
   syncSignupPlayers({ players, signups });
   return {
     site, teams, rounds, matches, players, news, rules, signups, badges, draft,
-    bannedSteamIds, playerListExclusions, season1PlayerIds,
+    bannedSteamIds, playerListExclusions, season1PlayerIds, playerGroups,
     bannerPoses, bannerSprites, backgroundSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
     bannerLayers, bannerDefaults,
   };
@@ -2554,6 +2588,7 @@ const server = http.createServer(async (req, res) => {
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
         data.players = data.players.map(({ steam, ...player }) => player);
         data.badges = data.badges.map(({ manualPlayerIds, ...badge }) => badge);
+        delete data.playerGroups;
         delete data.bannedSteamIds;
         delete data.playerListExclusions;
       }

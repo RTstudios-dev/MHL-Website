@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Signing in | MHL</title>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<main class="main">
+  <h1>Signing in with Steam</h1>
+  <p id="status" role="status" aria-live="polite">Verifying the sign-in from Puck…</p>
+</main>
+<script>
+(() => {
+  const status = document.getElementById('status');
+  const code = location.hash.slice(1);
+  history.replaceState(null, '', location.pathname);
+  if (!/^[a-f0-9]{64}$/.test(code)) {
+    status.textContent = 'This sign-in link is invalid. Reopen the page from Puck.';
+    return;
+  }
+  fetch('/api/player/game-login/consume', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    credentials: 'same-origin',
+    body: JSON.stringify({ code }),
+  }).then(async response => {
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Steam sign-in could not be completed.');
+    if (!['/', '/player-login', '/player-banner'].includes(result.returnPath))
+      throw new Error('The sign-in destination is invalid.');
+    location.replace(result.returnPath);
+  }).catch(error => {
+    status.textContent = error.message || 'Steam sign-in could not be completed. Reopen the page from Puck.';
+  });
+})();
+</script>
+</body>
+</html>

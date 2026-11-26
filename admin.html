@@ -137,6 +137,23 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .season1-player-row input{margin:0}
 .season1-player-row b{min-width:0;overflow-wrap:anywhere}
 .season1-player-discord{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.season1-player-group{padding:0}
+.season1-player-group>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;cursor:pointer;font-weight:600;color:var(--gold)}
+.season1-player-group>summary small{color:var(--muted);font-weight:400}
+.season1-player-group-content{padding:12px;border-top:1px solid var(--line)}
+.player-group-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(260px,1.5fr) auto;gap:12px;align-items:end}
+.player-group-picker{position:relative;min-width:0;border:1px solid var(--line);background:var(--paper)}
+.player-group-picker>summary{min-height:42px;padding:10px;cursor:pointer;color:var(--ink)}
+.player-group-picker-options{display:grid;gap:4px;max-height:240px;overflow:auto;padding:8px;border-top:1px solid var(--line)}
+.player-group-option{display:flex;align-items:center;gap:8px;padding:4px;font-size:13px}
+.player-group-option input{width:18px;height:18px;min-height:0}
+.player-group-search{margin:8px 8px 0;width:calc(100% - 16px)}
+.player-group-requirements{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0 0;padding:10px;border:1px solid var(--line)}
+.player-group-requirements legend{padding:0 6px;color:var(--muted);font-size:13px}
+.player-filter-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.player-search{display:grid;gap:4px;width:min(320px,100%);font-size:14px;font-weight:600}
+.player-search input{font:inherit}
+.player-filter-controls .f{width:min(280px,100%)}
 .badge-admin-card{margin-top:14px}
 .reskin-admin-group{margin:10px 0;border:1px solid var(--line);background:var(--card)}
 .reskin-admin-group>summary{padding:10px 12px;color:var(--gold);cursor:pointer;font-weight:600}
@@ -206,6 +223,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
   .team-management{grid-template-columns:1fr}
   .draft-order-panel{position:static}
   .team-draft-settings{grid-template-columns:1fr}
+  .player-group-row{grid-template-columns:1fr}
   .point-requirements{grid-template-columns:1fr}
   .badge-requirements{grid-template-columns:repeat(2,minmax(0,1fr))}
   .match{grid-template-columns:1fr}
@@ -225,7 +243,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', playerSearch = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
   const bannerSectionOpen = { editor: true, badges: true, poses: true };
   let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
   const playoffMatchLimits = { quarterfinals: 4, semifinals: 2, finals: 1 };
@@ -251,6 +269,66 @@ const MHLA = (() => {
     return el;
   }
   const field = (label, input, help) => h('label', { class: 'f' }, h('span', {}, label), input, help ? h('small', {}, help) : null);
+  function playerMultiSelect(selectedIds, label, onChange) {
+    let selected = new Set(selectedIds);
+    const players = [...D.players].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), undefined,
+        { sensitivity: 'base', numeric: true }));
+    const summary = h('summary', {}, `Players (${selected.size} selected)`);
+    const options = players.map(player => {
+      const signup = D.signups.find(item => item.id === player.signupId);
+      const discord = signup && signup.discord ? signup.discord : player.discord || '';
+      const name = player.name || 'Unnamed player';
+      const searchText = `${name} ${discord}`.toLocaleLowerCase();
+      const checkbox = h('input', {
+        type: 'checkbox',
+        checked: selected.has(player.id),
+        onchange: event => {
+          if (event.target.checked) selected.add(player.id);
+          else selected.delete(player.id);
+          const ids = [...selected];
+          summary.textContent = `Players (${ids.length} selected)`;
+          onChange(ids);
+        },
+      });
+      return h('label', { class: 'player-group-option', 'data-search': searchText },
+        checkbox, `${name}${discord ? ` — ${discord}` : ''}`);
+    });
+    const search = h('input', {
+      class: 'player-group-search',
+      type: 'search',
+      placeholder: 'Search players',
+      'aria-label': `Search players for ${label}`,
+      oninput: event => {
+        const query = event.target.value.trim().toLocaleLowerCase();
+        options.forEach(option => {
+          option.hidden = !!query && !option.dataset.search.includes(query);
+        });
+      },
+    });
+    return h('details', { class: 'player-group-picker' },
+      summary, search,
+      h('div', { class: 'player-group-picker-options' },
+        options.length ? options : h('p', { class: 'help' }, 'No players are available.')));
+  }
+  function playerGroupRequirements(item, onChange) {
+    item.playerGroupIds = Array.isArray(item.playerGroupIds) ? item.playerGroupIds : [];
+    return h('fieldset', { class: 'player-group-requirements' },
+      h('legend', {}, 'Grant to player groups'),
+      D.playerGroups.length ? D.playerGroups.map(group => h('label', { class: 'checkline' },
+        h('input', {
+          type: 'checkbox',
+          checked: item.playerGroupIds.includes(group.id),
+          onchange: event => {
+            item.playerGroupIds = event.target.checked
+              ? [...new Set([...item.playerGroupIds, group.id])]
+              : item.playerGroupIds.filter(id => id !== group.id);
+            if (onChange) onChange();
+            touch();
+          },
+        }), group.name)) : h('span', { class: 'help', style: 'margin:0' },
+        'Create a group in Player Groups to add group-based requirements.'));
+  }
   const scaleString = value => String(Math.round(Number(value) * 100) / 100);
   const syncBannerScaleInputs = (key, value) => {
     if (!key) return;
@@ -467,6 +545,8 @@ const MHLA = (() => {
       const cards = [...reskins].map(([name, representative]) => {
         representative.requirements = { ...requirementDefaults, ...(representative.requirements || {}) };
         representative.requireAllStats = representative.requireAllStats !== false;
+        representative.playerGroupIds = Array.isArray(representative.playerGroupIds)
+          ? representative.playerGroupIds : [];
         const matchingItems = items.filter(item => String(item.name || '').trim() === name);
         const sync = () => matchingItems.forEach(item => {
           item.requirements = { ...representative.requirements };
@@ -474,6 +554,7 @@ const MHLA = (() => {
           item.allPlayers = representative.allPlayers;
           item.season1Players = representative.season1Players;
           item.season2Players = representative.season2Players;
+          item.playerGroupIds = [...representative.playerGroupIds];
         });
         const fields = Object.entries(requirementLabels).map(([requirementKey, label]) =>
           field(label, h('input', {
@@ -525,7 +606,8 @@ const MHLA = (() => {
                 touch();
               },
             }), 'Auto-grant to Season 1 players'),
-            h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.')));
+            h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.')),
+          playerGroupRequirements(representative, sync));
       });
       componentSections.push(bannerComponentSection(
         `reskin-requirements:${key}`,
@@ -546,6 +628,7 @@ const MHLA = (() => {
     D.bannedSteamIds = Array.isArray(D.bannedSteamIds) ? D.bannedSteamIds : [];
     D.playerListExclusions = Array.isArray(D.playerListExclusions) ? D.playerListExclusions : [];
     D.season1PlayerIds = Array.isArray(D.season1PlayerIds) ? D.season1PlayerIds : [];
+    D.playerGroups = Array.isArray(D.playerGroups) ? D.playerGroups : [];
     D.badges = Array.isArray(D.badges) ? D.badges : [];
     D.bannerPoses = Array.isArray(D.bannerPoses) ? D.bannerPoses : [];
     D.bannerSprites = Array.isArray(D.bannerSprites) ? D.bannerSprites : [];
@@ -699,7 +782,7 @@ const MHLA = (() => {
   }
 
   // frame
-  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['season1', 'Season 1 Players'], ['signups', 'Season 2 Player Sign Ups'], ['badges', 'Player Banners'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
+  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['season1', 'Player Groups'], ['signups', 'Season 2 Player Sign Ups'], ['badges', 'Player Banners'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
   function draw() {
     const y = scrollY;
     const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
@@ -1094,8 +1177,41 @@ const MHLA = (() => {
         touch();
       },
     });
+    const playerSearchText = player => {
+      const editable = editablePlayerData(player);
+      return [
+        player.name, editable.name, editable.discord, player.number, player.role,
+        teamName(player.team), player.signupPosition,
+      ].filter(Boolean).join(' ').toLocaleLowerCase();
+    };
+    const searchQuery = playerSearch.trim().toLocaleLowerCase();
+    const matchesPlayerSearch = player => !searchQuery
+      || playerSearchText(player).includes(searchQuery);
+    const searchInput = h('input', {
+      type: 'search',
+      placeholder: 'Name, Discord, team, number...',
+      'aria-label': 'Search players',
+      value: playerSearch,
+      oninput: event => {
+        playerSearch = event.target.value;
+        const query = playerSearch.trim().toLocaleLowerCase();
+        let visible = 0;
+        document.querySelectorAll('.player-table tbody tr').forEach(row => {
+          row.hidden = !!query && !row.getAttribute('data-player-search').includes(query);
+          if (!row.hidden) visible++;
+        });
+        const noResults = document.getElementById('playersNoResults');
+        if (noResults) noResults.hidden = visible !== 0;
+      },
+    });
+    const noResults = h('p', {
+      id: 'playersNoResults',
+      class: 'help',
+      hidden: list.some(matchesPlayerSearch),
+    }, 'No players match your search.');
     return [
       head('Players', h('button', { class: 'btn sm', type: 'button', onclick: () => {
+        playerSearch = '';
         D.players.push({ id: uid(), name: '', team: playerFilter || (D.teams[0] && D.teams[0].id) || '', role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
         const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
       } }, 'Add player')),
@@ -1140,11 +1256,16 @@ const MHLA = (() => {
           fileInput, ' ', importButton, status);
       })(),
       h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Remove hides a signup-linked player from the Players list without deleting the signup; remove the signup separately in Season 2 Player Sign Ups. Edit team, position, name, Discord username, number, values, and tracked stats here. Game mod events continue adding to tracked stats. Point requirements are set independently under Settings.'),
-      h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
-        h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name)))),
-      list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable' },
+      h('div', { class: 'player-filter-controls' },
+        h('label', { class: 'player-search' }, 'Search players', searchInput),
+        h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
+          h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name))))),
+      list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable player-table' },
         h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Volley goals', 'Assists', 'Saves', 'Stick saves', 'Body saves', 'Passes', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
-        h('tbody', {}, list.map(p => h('tr', {},
+        h('tbody', {}, list.map(p => h('tr', {
+          hidden: !matchesPlayerSearch(p),
+          'data-player-search': playerSearchText(p),
+        },
           h('td', {}, text(editablePlayerData(p), 'name', { maxlength: 40, 'aria-label': 'In-game name', placeholder: 'In-game name' })),
           h('td', {}, text(editablePlayerData(p), 'discord', { maxlength: 80, 'aria-label': 'Discord username', placeholder: 'Discord username' })),
           h('td', {}, h('select', { 'aria-label': 'Team', onchange: e => updatePlayerTeam(p, e.target.value) },
@@ -1174,24 +1295,38 @@ const MHLA = (() => {
             const t = tot[p.id] || { g: 0, a: 0 };
             if (!confirm(`Delete ${p.name || 'this player'}?` + (t.g || t.a ? ` Their ${t.g} goals and ${t.a} assists are removed from the matches too.` : ''))) return;
             D.players = D.players.filter(x => x !== p);
+            D.season1PlayerIds = D.season1PlayerIds.filter(id => id !== p.id);
+            D.playerGroups.forEach(group => {
+              group.playerIds = (group.playerIds || []).filter(id => id !== p.id);
+            });
             D.matches.forEach(m => (m.goals || []).forEach(x => ['s', 'a1', 'a2'].forEach(k => { if (x[k] === p.id) x[k] = ''; })));
             touch(); draw();
           } }, p.signupId ? 'Remove' : 'Delete'))))))) : h('div', { class: 'empty' }, h('b', {}, 'No players'), 'Press Add player to add one.'),
+      list.length ? noResults : null,
     ];
   }
 
   function season1() {
     D.players = Array.isArray(D.players) ? D.players : [];
     D.season1PlayerIds = Array.isArray(D.season1PlayerIds) ? D.season1PlayerIds : [];
+    D.playerGroups = Array.isArray(D.playerGroups) ? D.playerGroups : [];
     D.signups = Array.isArray(D.signups) ? D.signups : [];
     const signupsById = new Map(D.signups.map(signup => [signup.id, signup]));
     const players = [...D.players].sort((a, b) =>
       String(a.name || '').localeCompare(String(b.name || ''), undefined,
         { sensitivity: 'base', numeric: true }));
-    return [
-      head('Season 1 Players'),
-      h('p', { class: 'help' }, 'Check every player who was part of Season 1. These checks are available in badge, pose, and reskin requirements.'),
-      h('div', { class: 'ed season1-player-checklist' },
+    const addGroup = () => {
+      if (D.playerGroups.length >= 100) {
+        alert('You can add up to 100 player groups.');
+        return;
+      }
+      D.playerGroups.push({ id: uid(), name: 'New group', playerIds: [] });
+      touch();
+      draw();
+    };
+    const season1Members = h('div', { class: 'season1-player-group-content' },
+      h('p', { class: 'help' }, 'Select the players included in the Season 1 group.'),
+      h('div', { class: 'season1-player-checklist' },
         h('div', { class: 'season1-player-row', style: 'border:0;background:transparent' },
           h('span', {}),
           h('b', {}, 'In-game name'),
@@ -1202,20 +1337,71 @@ const MHLA = (() => {
             ? signup.discord
             : player.discord || '—';
           return h('label', { class: 'season1-player-row' },
-          h('input', {
-            type: 'checkbox',
-            checked: D.season1PlayerIds.includes(player.id),
-            onchange: event => {
-              D.season1PlayerIds = event.target.checked
-                ? [...new Set([...D.season1PlayerIds, player.id])]
-                : D.season1PlayerIds.filter(id => id !== player.id);
-              touch();
-            },
-          }),
-          h('b', {}, player.name || 'Unnamed player'),
-          h('span', { class: 'season1-player-discord' }, discordName));
+            h('input', {
+              type: 'checkbox',
+              checked: D.season1PlayerIds.includes(player.id),
+              onchange: event => {
+                D.season1PlayerIds = event.target.checked
+                  ? [...new Set([...D.season1PlayerIds, player.id])]
+                  : D.season1PlayerIds.filter(id => id !== player.id);
+                const count = document.getElementById('season1-player-count');
+                if (count) count.textContent = `${D.season1PlayerIds.length} selected`;
+                touch();
+              },
+            }),
+            h('b', {}, player.name || 'Unnamed player'),
+            h('span', { class: 'season1-player-discord' }, discordName));
         }) : h('div', { class: 'empty' },
-          h('b', {}, 'No players'), 'Add players in the Players tab first.')),
+          h('b', {}, 'No players'), 'Add players in the Players tab first.')));
+    const groups = D.playerGroups.map(group => {
+      group.playerIds = Array.isArray(group.playerIds) ? group.playerIds : [];
+      return h('div', { class: 'ed player-group-row' },
+        field('Group name', text(group, 'name', {
+          maxlength: 80,
+          placeholder: 'Group name',
+          'aria-label': `Name for ${group.name || 'player group'}`,
+        })),
+        h('div', { class: 'f' },
+          h('span', {}, 'Players'),
+          playerMultiSelect(group.playerIds, group.name || 'player group', ids => {
+            group.playerIds = ids;
+            touch();
+          }),
+          h('small', {}, 'Search by player name or Discord username.')),
+        h('button', {
+          class: 'btn del sm',
+          type: 'button',
+          onclick: () => {
+            if (!confirm(`Delete the player group "${group.name || 'New group'}"?`)) return;
+            D.playerGroups = D.playerGroups.filter(item => item !== group);
+            for (const component of [
+              ...D.badges, ...D.bannerPoses,
+              ...(D.bannerSprites || []), ...(D.backgroundSprites || []),
+              ...(D.helmetSprites || []), ...(D.torsoSprites || []),
+              ...(D.stickSprites || []), ...(D.puckSprites || []),
+            ]) {
+              const ids = Array.isArray(component.playerGroupIds) ? component.playerGroupIds : [];
+              component.playerGroupIds = ids.filter(id => id !== group.id);
+            }
+            touch();
+            draw();
+          },
+        }, 'Delete group'));
+    });
+    return [
+      head('Player Groups', h('button', {
+        class: 'btn sm',
+        type: 'button',
+        disabled: D.playerGroups.length >= 100,
+        onclick: addGroup,
+      }, 'Add group')),
+      h('p', { class: 'help' }, 'Organize players into named groups. Groups can be selected as banner-component requirements.'),
+      h('details', { class: 'ed season1-player-group' },
+        h('summary', {},
+          h('span', {}, 'Season 1 Players'),
+          h('small', { id: 'season1-player-count' }, `${D.season1PlayerIds.length} selected`)),
+        season1Members),
+      groups,
     ];
   }
 
@@ -2224,6 +2410,7 @@ const MHLA = (() => {
       item.requirements = { ...requirementDefaults, ...(item.requirements || {}) };
       item.requireAllStats = item.requireAllStats !== false;
       item.manualPlayerIds = Array.isArray(item.manualPlayerIds) ? item.manualPlayerIds : [];
+      item.playerGroupIds = Array.isArray(item.playerGroupIds) ? item.playerGroupIds : [];
       item.transform = item.transform && typeof item.transform === 'object'
         ? item.transform : { x: 334, y: 510, scale: 1 };
       item.transform.scale = Math.max(0.1, Math.min(5, Number(item.transform.scale) || 1));
@@ -2331,6 +2518,7 @@ const MHLA = (() => {
             onchange: event => { item.season1Players = event.target.checked; touch(); },
           }), 'Auto-grant to Season 1 players')),
         h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.'),
+        playerGroupRequirements(item),
         manualAwards);
     });
     const addButton = pose || options.noAdd ? null : h('button', { class: 'btn sm', type: 'button', onclick: () => {
@@ -2340,6 +2528,7 @@ const MHLA = (() => {
             requirements: { ...requirementDefaults },
             requireAllStats: true,
             allPlayers: false, season1Players: false, season2Players: false, manualPlayerIds: [],
+            playerGroupIds: [],
           });
           touch();
           draw();
@@ -2439,6 +2628,7 @@ const MHLA = (() => {
             allPlayers: false,
             season1Players: false, season2Players: false,
             manualPlayerIds: [],
+            playerGroupIds: [],
           });
           imported++;
         } catch (error) {
@@ -2491,6 +2681,7 @@ const MHLA = (() => {
       pose.requirements = { ...requirementDefaults, ...(pose.requirements || {}) };
       pose.requireAllStats = pose.requireAllStats !== false;
       pose.manualPlayerIds = Array.isArray(pose.manualPlayerIds) ? pose.manualPlayerIds : [];
+      pose.playerGroupIds = Array.isArray(pose.playerGroupIds) ? pose.playerGroupIds : [];
       const requireAllStats = h('label', { class: 'checkline' }, h('input', {
         type: 'checkbox',
         checked: pose.requireAllStats,
@@ -2598,6 +2789,7 @@ const MHLA = (() => {
             onchange: event => { pose.season1Players = event.target.checked; touch(); },
           }), 'Auto-grant to Season 1 players')),
         h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.'),
+        playerGroupRequirements(pose),
         manualAwards,
         ...Object.entries(componentMap).map(([componentKey, [collectionKey, title]]) =>
           playerBannerSpriteSection(collectionKey, title, componentKey, pose)));
@@ -2613,6 +2805,7 @@ const MHLA = (() => {
         allPlayers: false,
         season1Players: false, season2Players: false,
         manualPlayerIds: [],
+        playerGroupIds: [],
       });
       touch();
       draw();
@@ -2642,7 +2835,7 @@ const MHLA = (() => {
         scale: 1,
         requirements: { ...badgeRequirementDefaults },
         requireAllStats: true,
-        allPlayers: false, season1Players: false, season2Players: false, manualPlayerIds: [],
+        allPlayers: false, season1Players: false, season2Players: false, manualPlayerIds: [], playerGroupIds: [],
       });
       touch(); draw();
     } }, 'Add badge');
@@ -2650,6 +2843,7 @@ const MHLA = (() => {
       badge.requirements = { ...badgeRequirementDefaults, ...(badge.requirements || {}) };
       badge.requireAllStats = badge.requireAllStats !== false;
       badge.manualPlayerIds = Array.isArray(badge.manualPlayerIds) ? badge.manualPlayerIds : [];
+      badge.playerGroupIds = Array.isArray(badge.playerGroupIds) ? badge.playerGroupIds : [];
       badge.scale = Math.max(0.1, Math.min(5, Number(badge.scale) || 1));
       const uploadInput = h('input', {
         type: 'file', accept: 'image/png', style: 'display:none',
@@ -2756,6 +2950,7 @@ const MHLA = (() => {
             onchange: event => { badge.season1Players = event.target.checked; touch(); },
           }), 'Auto-grant to Season 1 players')),
         h('p', { class: 'help', style: 'margin:0' }, 'Auto-grants bypass stat requirements; other players can still qualify by meeting them.'),
+        playerGroupRequirements(badge),
         manualAwards);
     });
     const defaultBadgeSelect = h('select', {
