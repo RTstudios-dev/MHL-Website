@@ -266,9 +266,13 @@
   };
   const renderPosePicker = () => {
     const poses = signup && Array.isArray(signup.bannerPoses) ? signup.bannerPoses : [];
+    const orderedPoses = [
+      ...poses.filter(pose => pose.unlocked !== false),
+      ...poses.filter(pose => pose.unlocked === false),
+    ];
     poseGrid.replaceChildren();
     posePicker.hidden = !poses.length;
-    poses.forEach(pose => {
+    orderedPoses.forEach(pose => {
       const poseName = String(pose.name || 'Pose');
       const option = document.createElement('button');
       option.type = 'button';
@@ -420,13 +424,17 @@
         action: { label: 'Clear', run: () => setTargetMode({ category: 'badges', itemId: '' }) },
       });
       const badges = signup.badges || [];
+      const orderedBadges = [
+        ...badges.filter(badge => badge.unlocked !== false),
+        ...badges.filter(badge => badge.unlocked === false),
+      ];
       if (!badges.length) {
         const empty = document.createElement('p');
         empty.className = 'banner-editor-status';
         empty.textContent = 'No collectible badges have been added yet.';
         inventoryGrid.append(empty);
       }
-      badges.forEach(badge => {
+      orderedBadges.forEach(badge => {
         const isEquipped = slots.includes(badge.id);
         itemCard({
           title: badge.unlocked ? badge.name || 'Badge' : `${badge.name || 'Badge'} — Locked`,
@@ -488,10 +496,13 @@
         run: selectDefault,
       },
     });
-    items
-      .filter(item => item.image && (item.unlocked === false
-        || (item.id !== defaultId && item.id !== (defaultItem && defaultItem.id))))
-      .forEach(item => {
+    const remainingItems = items.filter(item => item.image && (item.unlocked === false
+      || (item.id !== defaultId && item.id !== (defaultItem && defaultItem.id))));
+    const orderedItems = [
+      ...remainingItems.filter(item => item.unlocked !== false),
+      ...remainingItems.filter(item => item.unlocked === false),
+    ];
+    orderedItems.forEach(item => {
       const selected = selectedId === item.id;
       itemCard({
         title: item.unlocked === false
