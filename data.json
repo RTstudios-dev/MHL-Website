@@ -132,17 +132,11 @@
   ],
   "signups": [],
   "badges": [],
-  "draft": {
-    "active": false,
-    "manualOrder": false,
-    "order": [
-      "",
-      "",
-      ""
-    ],
-    "nextIndex": 0,
-    "picks": []
-  },
+  "bannedSteamIds": [],
+  "playerListExclusions": [],
+  "season1PlayerIds": [],
+  "playerGroups": [],
+  "bannerPoses": [],
   "bannerSprites": [],
   "backgroundSprites": [],
   "helmetSprites": [],
@@ -229,7 +223,22 @@
     ],
     "canvasVersion": 4
   },
+  "draft": {
+    "active": false,
+    "manualOrder": false,
+    "order": [
+      "",
+      "",
+      ""
+    ],
+    "nextIndex": 0,
+    "picks": []
+  },
   "playerStats": {},
   "modStatEventIds": [],
+  "season2PlayerStats": {},
+  "season2ModStatEventIds": [],
+  "trackedStatGames": [],
+  "trackedStatsMigrationVersion": 1,
   "statsImportLogs": []
 }

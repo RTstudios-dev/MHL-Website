@@ -20,27 +20,36 @@
 <div>
 <header class="mtop" id="mtop"></header>
 <main class="main" id="main">
-<div class="mast">
-  <div>
-    <h1>Miniature Hockey League</h1>
-    <p id="season">Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.</p>
-  </div>
-  <div class="mast-player-group">
-    <div class="facts" aria-label="League totals">
-      <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
-      <div><b id="fSeries" class="num">0</b><small>Series played</small></div>
-      <div><b id="fGoals" class="num">0</b><small>Goals</small></div>
-    </div>
-    <section class="mast-player-panel is-sign-in" id="homePlayerPanel" aria-label="Player banner">
-      <div class="mast-player-preview" id="homePlayerPreview" aria-label="Your player banner" hidden>
-        <div class="mast-player-canvas" id="homePlayerCanvas"></div>
-      </div>
-      <a class="btn mast-player-action" id="homePlayerAction" href="/player-login">Sign in to edit player banner</a>
-      <p class="mast-player-status" id="homePlayerStatus" role="status" hidden></p>
-    </section>
+<div class="home-mast">
+  <a class="home-mark" href="/" aria-label="MHL home"><span class="wm">M<i>H</i>L</span></a>
+  <h1>Miniature Hockey League</h1>
+  <p id="season">Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.</p>
+  <div class="facts" aria-label="League totals">
+    <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
+    <div><b id="fSeries" class="num">0</b><small>Games played</small></div>
+    <div><b id="fGoals" class="num">0</b><small>Goals</small></div>
   </div>
 </div>
 <div class="ticker" id="ticker" aria-label="Latest results" hidden></div>
+<section class="home-showcase" aria-label="Explore the league">
+  <section class="showcase-card mast-player-panel showcase-player is-sign-in" id="homePlayerPanel" aria-label="Player banner">
+    <div class="mast-player-preview" id="homePlayerPreview" aria-label="Your player banner" hidden>
+      <div class="mast-player-canvas" id="homePlayerCanvas"></div>
+    </div>
+    <a class="btn mast-player-action" id="homePlayerAction" href="/player-login">Sign in to edit player banner</a>
+    <p class="mast-player-status" id="homePlayerStatus" role="status" hidden></p>
+  </section>
+  <a class="showcase-card showcase-link showcase-season" href="/season-2">
+    <span class="showcase-art"><img src="/mhl-league.png" alt="MHL League"></span>
+    <h2>MHL Season 2</h2>
+    <p>Value Draft, Automated Player Tracking, 8 teams to playoffs.</p>
+  </a>
+  <a class="showcase-card showcase-link showcase-pugs" href="/players">
+    <span class="showcase-art"><img src="/mhl-pugs.png" alt="MHL Pugs"></span>
+    <h2>MHL Pickup games</h2>
+    <p>In-Game Player Banners, Automated Stat Tracking, Fully customisable</p>
+  </a>
+</section>
 <div class="home">
   <div>
     <section class="block" aria-labelledby="hNext">
@@ -79,7 +88,7 @@
   const { esc } = MHL, tb = D.table;
   if (D.site.season) $('season').textContent = D.site.season + '. Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.';
   $('fTeams').textContent = D.teams.length;
-  $('fSeries').textContent = tb.seriesPlayed;
+  $('fSeries').textContent = tb.gamesPlayed;
   $('fGoals').textContent = tb.goals;
 
   // latest results, newest first

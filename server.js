@@ -36,7 +36,7 @@ const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const MAX_TRACKED_STAT_GAMES = 20;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatGames: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], season2Rounds: [], season2Matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatGames: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -199,6 +199,7 @@ const STATIC = {
   '/standings': ['standings.html', HTML],
   '/teams': ['teams.html', HTML],
   '/players': ['players.html', HTML],
+  '/season-2': ['season-2.html', HTML],
   '/sign-up': ['sign-up.html', HTML],
   '/player-login': ['player-login.html', HTML],
   '/player-banner': ['player-banner.html', HTML],
@@ -214,6 +215,10 @@ const STATIC = {
   '/player-banner.js': ['player-banner.js', JS],
   '/robots.txt': ['robots.txt', 'text/plain; charset=utf-8'],
   '/bg.webp': ['bg.webp', 'image/webp'],
+  '/mhl-league.png': ['MHL League.png', 'image/png'],
+  '/mhl-pugs.png': ['MHL Pugs.png', 'image/png'],
+  '/sign-up-logo.png': ['Sign up Logo.png', 'image/png'],
+  '/players-logo.png': ['Players Logo.png', 'image/png'],
 };
 
 const sessions = new Map(); // token -> expiry
@@ -1082,7 +1087,7 @@ function sanitize(d) {
     seenSlugs.add(sl); t.slug = sl;
   }
   const ids = new Set(teams.map(t => t.id));
-  const rounds = (Array.isArray(d.rounds) ? d.rounds : []).slice(0, 100).map(r => {
+  const normalizeRounds = source => (Array.isArray(source) ? source : []).slice(0, 100).map(r => {
     const name = str(r.name, 40) || 'Round';
     return {
       id: str(r.id, 40) || crypto.randomUUID(),
@@ -1090,7 +1095,8 @@ function sanitize(d) {
       playoffStage: normalizePlayoffStage({ ...r, name }),
     };
   });
-  const roundIds = new Set(rounds.map(r => r.id));
+  const rounds = normalizeRounds(d.rounds);
+  const season2Rounds = normalizeRounds(d.season2Rounds);
   const players = (Array.isArray(d.players) ? d.players : []).slice(0, 5000).filter(p => !p.team || ids.has(p.team)).map(p => ({
     id: str(p.id, 40) || crypto.randomUUID(),
     signupId: str(p.signupId, 40),
@@ -1107,33 +1113,38 @@ function sanitize(d) {
   }));
   const pids = new Set(players.map(p => p.id));
   const pid = v => pids.has(v) ? v : '';
-  const matches = (Array.isArray(d.matches) ? d.matches : []).slice(0, 2000).filter(m => ids.has(m.a) && ids.has(m.b) && m.a !== m.b).map(m => {
-    // Playoff stages can use up to seven games; the standings logic applies the round's limit.
-    const games = (Array.isArray(m.games) ? m.games : []).slice(0, 7).map(g => ({ as: score(g && g.as), bs: score(g && g.bs) }));
-    // goal log: g = game index, t = 'a'/'b', n = which goal of that team in that game
-    // a goal can't be past the score, and empty slots aren't stored
-    const seen = new Set();
-    const goals = (Array.isArray(m.goals) ? m.goals : []).slice(0, 300).map(x => ({
-      g: num(x && x.g, 6), t: x && x.t === 'b' ? 'b' : 'a', n: num(x && x.n, 98),
-      s: pid(x && x.s), a1: pid(x && x.a1), a2: pid(x && x.a2),
-    })).filter(x => {
-      const game = games[x.g], max = game ? (x.t === 'a' ? game.as : game.bs) || 0 : 0;
-      const key = x.g + x.t + x.n;
-      if (x.n >= max || seen.has(key) || !(x.s || x.a1 || x.a2)) return false;
-      seen.add(key); return true;
-    }).map(x => {
-      if (x.a1 === x.s) x.a1 = '';
-      if (x.a2 === x.s || x.a2 === x.a1) x.a2 = '';
-      if (!x.a1 && x.a2) { x.a1 = x.a2; x.a2 = ''; }
-      return x;
+  const normalizeMatches = (source, matchRounds) => {
+    const roundIds = new Set(matchRounds.map(round => round.id));
+    return (Array.isArray(source) ? source : []).slice(0, 2000).filter(m => ids.has(m.a) && ids.has(m.b) && m.a !== m.b).map(m => {
+      // Playoff stages can use up to seven games; the standings logic applies the round's limit.
+      const games = (Array.isArray(m.games) ? m.games : []).slice(0, 7).map(g => ({ as: score(g && g.as), bs: score(g && g.bs) }));
+      // goal log: g = game index, t = 'a'/'b', n = which goal of that team in that game
+      // a goal can't be past the score, and empty slots aren't stored
+      const seen = new Set();
+      const goals = (Array.isArray(m.goals) ? m.goals : []).slice(0, 300).map(x => ({
+        g: num(x && x.g, 6), t: x && x.t === 'b' ? 'b' : 'a', n: num(x && x.n, 98),
+        s: pid(x && x.s), a1: pid(x && x.a1), a2: pid(x && x.a2),
+      })).filter(x => {
+        const game = games[x.g], max = game ? (x.t === 'a' ? game.as : game.bs) || 0 : 0;
+        const key = x.g + x.t + x.n;
+        if (x.n >= max || seen.has(key) || !(x.s || x.a1 || x.a2)) return false;
+        seen.add(key); return true;
+      }).map(x => {
+        if (x.a1 === x.s) x.a1 = '';
+        if (x.a2 === x.s || x.a2 === x.a1) x.a2 = '';
+        if (!x.a1 && x.a2) { x.a1 = x.a2; x.a2 = ''; }
+        return x;
+      });
+      return {
+        id: str(m.id, 40) || crypto.randomUUID(),
+        date: str(m.date, 25), a: m.a, b: m.b,
+        round: roundIds.has(m.round) ? m.round : '',
+        games, goals,
+      };
     });
-    return {
-      id: str(m.id, 40) || crypto.randomUUID(),
-      date: str(m.date, 25), a: m.a, b: m.b,
-      round: roundIds.has(m.round) ? m.round : '',
-      games, goals,
-    };
-  });
+  };
+  const matches = normalizeMatches(d.matches, rounds);
+  const season2Matches = normalizeMatches(d.season2Matches, season2Rounds);
   const news = (Array.isArray(d.news) ? d.news : []).slice(0, 300).map(n => ({
     id: str(n.id, 40) || crypto.randomUUID(),
     title: str(n.title, 120) || 'Untitled',
@@ -1442,7 +1453,7 @@ function sanitize(d) {
   draft.picks.forEach(pick => { signupById.get(pick.signupId).team = pick.teamId; });
   syncSignupPlayers({ players, signups });
   return {
-    site, teams, rounds, matches, players, news, rules, signups, badges, draft,
+    site, teams, rounds, matches, season2Rounds, season2Matches, players, news, rules, signups, badges, draft,
     bannedSteamIds, playerListExclusions, season1PlayerIds, playerGroups,
     bannerPoses, bannerSprites, backgroundSprites, helmetSprites, torsoSprites, stickSprites, puckSprites,
     bannerLayers, bannerDefaults,
@@ -1621,20 +1632,26 @@ const normalizeStatsReports = rawReports => {
         events.push({ eventId, type, steamId, count });
       } else if (type === 'game') {
         const steamId = str(raw.steamId, 17);
-        const savePercentageBasisPoints = raw.savePercentageBasisPoints;
+        const savePercentageBasisPoints = raw.savePercentageBasisPoints === undefined
+          ? -1
+          : raw.savePercentageBasisPoints;
         const goalsScored = raw.goalsScored === undefined ? 0 : raw.goalsScored;
         const savesInGame = raw.savesInGame === undefined ? 0 : raw.savesInGame;
         const shotsInGame = raw.shotsInGame === undefined ? 0 : raw.shotsInGame;
         const role = raw.role === undefined ? '' : raw.role;
-        if (!/^\d{17}$/.test(steamId) ||
-            !Number.isSafeInteger(savePercentageBasisPoints) ||
-            savePercentageBasisPoints < -1 || savePercentageBasisPoints > 10000 ||
-            !Number.isSafeInteger(goalsScored) || goalsScored < 0 || goalsScored > 1000 ||
-            !Number.isSafeInteger(savesInGame) || savesInGame < 0 || savesInGame > 1000 ||
-            !Number.isSafeInteger(shotsInGame) || shotsInGame < 0 || shotsInGame > 1000 ||
-            (role !== '' && role !== 'goalie' && role !== 'skater')) {
-          return { error: 'A game summary event is invalid.' };
-        }
+        if (!/^\d{17}$/.test(steamId))
+          return { error: 'A game summary event has an invalid Steam ID.' };
+        if (!Number.isSafeInteger(savePercentageBasisPoints) ||
+            savePercentageBasisPoints < -1 || savePercentageBasisPoints > 10000)
+          return { error: 'A game summary event has an invalid save-percentage value.' };
+        if (!Number.isSafeInteger(goalsScored) || goalsScored < 0 || goalsScored > 1000)
+          return { error: 'A game summary event has an invalid goal count.' };
+        if (!Number.isSafeInteger(savesInGame) || savesInGame < 0 || savesInGame > 1000)
+          return { error: 'A game summary event has an invalid save count.' };
+        if (!Number.isSafeInteger(shotsInGame) || shotsInGame < 0 || shotsInGame > 1000)
+          return { error: 'A game summary event has an invalid shot count.' };
+        if (role !== '' && role !== 'goalie' && role !== 'skater')
+          return { error: 'A game summary event has an invalid role.' };
         events.push({
           eventId, type, steamId, savePercentageBasisPoints, goalsScored, savesInGame,
           shotsInGame, role,
@@ -2728,6 +2745,9 @@ const server = http.createServer(async (req, res) => {
       data.rounds = Array.isArray(data.rounds)
         ? data.rounds.map(round => ({ ...round, playoffStage: normalizePlayoffStage(round) }))
         : [];
+      data.season2Rounds = Array.isArray(data.season2Rounds)
+        ? data.season2Rounds.map(round => ({ ...round, playoffStage: normalizePlayoffStage(round) }))
+        : [];
       data.draft = normalizeDraft(data.draft, data.teams, data.signups);
       const signupsById = new Map(data.signups.map(signup => [signup.id, signup]));
       data.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
@@ -2798,22 +2818,28 @@ const server = http.createServer(async (req, res) => {
            Object.keys(trackedGameStatsEdits).length > MAX_TRACKED_STAT_GAMES)) {
         return send(res, 400, { error: 'Tracked game stat edits are invalid.' });
       }
-      const playoffCounts = Object.fromEntries(PLAYOFF_STAGES.map(stage => [stage, 0]));
-      const incomingRounds = Array.isArray(incoming && incoming.rounds) ? incoming.rounds : [];
-      const incomingMatches = Array.isArray(incoming && incoming.matches) ? incoming.matches : [];
       const incomingTeams = new Set((Array.isArray(incoming && incoming.teams) ? incoming.teams : [])
         .filter(team => team && typeof team === 'object')
         .map(team => team.id));
-      const stagesByRound = new Map(incomingRounds.map(round => [round && round.id, normalizePlayoffStage(round)]));
-      for (const match of incomingMatches) {
-        if (!match || !incomingTeams.has(match.a) || !incomingTeams.has(match.b) || match.a === match.b) continue;
-        const stage = stagesByRound.get(match.round);
-        if (!stage) continue;
-        if (playoffCounts[stage] >= PLAYOFF_MATCH_LIMITS[stage]) {
-          const limit = PLAYOFF_MATCH_LIMITS[stage];
-          return send(res, 400, { error: `Maximum of ${limit} ${limit === 1 ? 'match' : 'matches'} allowed in ${PLAYOFF_STAGE_LABELS[stage]}.` });
+      const matchSeasons = [
+        [incoming && incoming.rounds, incoming && incoming.matches],
+        [incoming && incoming.season2Rounds, incoming && incoming.season2Matches],
+      ];
+      for (const [seasonRounds, seasonMatches] of matchSeasons) {
+        const playoffCounts = Object.fromEntries(PLAYOFF_STAGES.map(stage => [stage, 0]));
+        const rounds = Array.isArray(seasonRounds) ? seasonRounds : [];
+        const matches = Array.isArray(seasonMatches) ? seasonMatches : [];
+        const stagesByRound = new Map(rounds.map(round => [round && round.id, normalizePlayoffStage(round)]));
+        for (const match of matches) {
+          if (!match || !incomingTeams.has(match.a) || !incomingTeams.has(match.b) || match.a === match.b) continue;
+          const stage = stagesByRound.get(match.round);
+          if (!stage) continue;
+          if (playoffCounts[stage] >= PLAYOFF_MATCH_LIMITS[stage]) {
+            const limit = PLAYOFF_MATCH_LIMITS[stage];
+            return send(res, 400, { error: `Maximum of ${limit} ${limit === 1 ? 'match' : 'matches'} allowed in ${PLAYOFF_STAGE_LABELS[stage]}.` });
+          }
+          playoffCounts[stage]++;
         }
-        playoffCounts[stage]++;
       }
       const current = readData();
       const currentExclusions = new Set(Array.isArray(current.playerListExclusions) ? current.playerListExclusions : []);

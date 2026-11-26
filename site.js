@@ -5,11 +5,9 @@
 
   const NAV = [
     ['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Standings'], ['/teams', 'Teams'],
-    ['/players', 'player stats'], ['/news', 'News'], ['/rules', 'Rules'],
-    ['/season-2-players', 'Season 2 Player Sign Ups'], ['/sign-up', 'Sign Up Here'],
+    ['/players', 'Player Stats'], ['/news', 'News'], ['/rules', 'Rules'],
+    ['/season-2', 'Season 2'], ['/season-2-players', 'Season 2 Players'], ['/sign-up', 'Sign Up'], ['/admin', 'Admin'],
   ];
-  // phone tab bar: 4 pages + More
-  const TABS = [['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Table'], ['/teams', 'Teams']];
   const here = location.pathname.replace(/\/+$/, '') || '/';
   const current = here.startsWith('/team/') ? '/teams' : here;
   const draftBoard = '/season-2-players';
@@ -60,18 +58,16 @@
     }
   };
   function shell() {
-    const side = document.getElementById('side');
-    side.innerHTML = `
-      <a class="brand" href="/" aria-label="MHL home">${wordmark}<small>Miniature Hockey League</small></a>
-      <nav aria-label="Main">${NAV.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')}</nav>
-      <div class="side-foot"><span id="discordSlot"></span><a class="admin" href="/admin">Admin</a></div>`;
-    document.getElementById('mtop').innerHTML = `<a href="/" aria-label="MHL home">${wordmark}</a><span>Miniature Hockey League</span>`;
+    document.getElementById('mtop').innerHTML = `
+      <a class="top-brand" href="/" aria-label="MHL home">${wordmark}<span>Miniature Hockey League</span></a>
+      <nav class="top-nav" aria-label="Main">${NAV.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')}</nav>
+      <div class="top-actions"><span id="discordSlot"></span></div>`;
     steamLoginButton = document.createElement('a');
     steamLoginButton.className = 'btn steam-login-top';
     steamLoginButton.href = '/player-login';
     steamLoginButton.textContent = 'Steam Login in';
     steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
-    document.body.appendChild(steamLoginButton);
+    document.querySelector('.top-actions').appendChild(steamLoginButton);
     M.refreshPlayerButton().catch(error => console.error('Could not update the Steam profile button:', error));
     if (current !== draftBoard) {
       const checkDraftTurn = () => M.checkDraftTurn().catch(error => console.error('Could not check the draft turn:', error));
@@ -79,15 +75,6 @@
       window.setInterval(checkDraftTurn, 3000);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDraftTurn(); });
     }
-    const inMore = !TABS.some(([h]) => h === current);
-    document.getElementById('tabbar').innerHTML = TABS.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')
-      + `<button type="button" id="moreBtn" aria-expanded="false" aria-controls="more"${inMore ? ' aria-current="page"' : ''}>More</button>`;
-    const more = document.getElementById('more');
-    more.innerHTML = NAV.filter(([h]) => !TABS.some(([x]) => x === h)).map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')
-      + '<span id="discordSlotM"></span><a href="/admin">Admin</a>';
-    const btn = document.getElementById('moreBtn');
-    btn.onclick = () => { more.hidden = !more.hidden; btn.setAttribute('aria-expanded', String(!more.hidden)); };
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !more.hidden) { more.hidden = true; btn.setAttribute('aria-expanded', 'false'); btn.focus(); } });
     const main = document.getElementById('main');
     const foot = document.createElement('footer');
     foot.className = 'foot';
@@ -103,7 +90,6 @@
     const d = D.site && D.site.discord;
     if (d) {
       document.getElementById('discordSlot').outerHTML = `<a class="btn" href="${esc(d)}" target="_blank" rel="noopener">Join the Discord</a>`;
-      document.getElementById('discordSlotM').outerHTML = `<a href="${esc(d)}" target="_blank" rel="noopener">Discord</a>`;
     }
   }
 
