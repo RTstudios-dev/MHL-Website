@@ -156,6 +156,12 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .player-search input{font:inherit}
 .player-filter-controls .f{width:min(280px,100%)}
 .badge-admin-card{margin-top:14px}
+.banner-admin-card{gap:0;overflow:hidden;padding:0}
+.banner-admin-card>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding:12px 14px;cursor:pointer;color:var(--gold);list-style:none}
+.banner-admin-card>summary::-webkit-details-marker{display:none}
+.banner-admin-card>summary strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--disp);font-size:22px;font-weight:500}
+.banner-admin-card>summary span{flex:0 0 auto;font-size:20px}
+.banner-admin-card-content{display:grid;gap:12px;padding:14px;border-top:1px solid var(--line)}
 .reskin-admin-group{margin:10px 0;border:1px solid var(--line);background:var(--card)}
 .reskin-admin-group>summary{padding:10px 12px;color:var(--gold);cursor:pointer;font-weight:600}
 .reskin-admin-group>.badge-admin-card{margin:0 10px 10px}
@@ -176,9 +182,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .banner-component-properties[hidden]{display:none}
 .banner-component-properties strong{font-family:var(--disp);font-size:20px;font-weight:500}
 .banner-admin-section{margin-top:18px}
-.banner-admin-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.banner-admin-section-toggle{display:flex;align-items:center;gap:10px;flex:1;padding:0;border:0;background:none;color:var(--gold);cursor:pointer;text-align:left;font:inherit}
-.banner-admin-section-toggle strong{font-family:var(--disp);font-size:22px;font-weight:500}
+.banner-admin-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.banner-admin-section-toggle{display:flex;align-items:center;gap:10px;flex:1;min-width:0;padding:0;border:0;background:none;color:var(--gold);cursor:pointer;text-align:left;font:inherit}
+.banner-admin-section-toggle strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--disp);font-size:22px;font-weight:500}
 .banner-admin-section-toggle span:last-child{font-size:20px}
 .banner-admin-section-content{margin-top:12px}
 .banner-admin-section-content[hidden]{display:none}
@@ -245,7 +251,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 const MHLA = (() => {
   const root = document.getElementById('root');
   let D = null, dirty = false, tab = 'teams', playerFilter = '', playerSearch = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
-  const bannerSectionOpen = { editor: true, badges: true, poses: true };
+  const bannerSectionOpen = {};
+  const bannerCardOpen = new Map();
   let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
   const playoffMatchLimits = { quarterfinals: 4, semifinals: 2, finals: 1 };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -578,8 +585,7 @@ const MHLA = (() => {
             touch();
           },
         }), 'Require all stat requirements (otherwise any one)');
-        return h('section', { class: 'ed badge-admin-card' },
-          h('strong', {}, name),
+        return bannerAdminCard(`reskin:${key}:${representative.id}`, name,
           h('div', { class: 'badge-requirements' }, fields),
           requireAllStats,
           h('div', { class: 'badge-audiences' },
@@ -2349,7 +2355,7 @@ const MHLA = (() => {
   }
 
   function bannerComponentSection(key, title, action, ...content) {
-    const expanded = bannerSectionOpen[key] !== false;
+    const expanded = bannerSectionOpen[key] === true;
     const indicator = h('span', { 'aria-hidden': 'true' }, expanded ? '−' : '+');
     const body = h('div', { class: 'banner-admin-section-content', hidden: !expanded }, ...content);
     const toggle = h('button', {
@@ -2369,6 +2375,23 @@ const MHLA = (() => {
     return h('section', { class: 'banner-admin-section' },
       h('div', { class: 'banner-admin-section-heading' }, toggle, action),
       body);
+  }
+
+  function bannerAdminCard(key, title, ...content) {
+    const titleNode = title && title.nodeType ? title : h('strong', {}, title);
+    const indicator = h('span', { 'aria-hidden': 'true' },
+      bannerCardOpen.get(key) === true ? '−' : '+');
+    return h('details', {
+      class: 'ed badge-admin-card banner-admin-card',
+      open: bannerCardOpen.get(key) === true,
+      ontoggle: event => {
+        const isOpen = event.currentTarget.open;
+        bannerCardOpen.set(key, isOpen);
+        indicator.textContent = isOpen ? '−' : '+';
+      },
+    },
+      h('summary', {}, titleNode, indicator),
+      h('div', { class: 'banner-admin-card-content' }, ...content));
   }
 
   function playerBannerSpriteSection(key, title, defaultKey, pose = null, options = {}) {
@@ -2483,9 +2506,13 @@ const MHLA = (() => {
             },
           }), `${signup.name}${signup.team ? ` — ${teamName(signup.team)}` : ''}`))) :
           h('p', { class: 'help' }, 'No Season 2 signups are available.'));
-      return h('section', { class: 'ed badge-admin-card' },
+      const cardTitle = h('strong', {}, item.name || `New ${title}`);
+      return bannerAdminCard(`sprite:${key}:${item.id}`, cardTitle,
         h('div', { class: 'row', style: 'grid-template-columns:minmax(0,1fr) auto' },
-          field(`${title} name`, text(item, 'name', { maxlength: 80 })),
+          field(`${title} name`, text(item, 'name', {
+            maxlength: 80,
+            after: () => { cardTitle.textContent = item.name || `New ${title}`; },
+          })),
           h('button', { class: 'btn del sm', type: 'button', onclick: () => {
             if (!confirm(`Delete the ${title.toLowerCase()} "${item.name || title}"?`)) return;
             D[key] = D[key].filter(entry => entry !== item);
@@ -2914,9 +2941,13 @@ const MHLA = (() => {
             },
           }),
           `${signup.name}${signup.team ? ` — ${teamName(signup.team)}` : ''}`))) : h('p', { class: 'help' }, 'No Season 2 signups are available to award manually.'));
-      return h('section', { class: 'ed badge-admin-card' },
+      const cardTitle = h('strong', {}, badge.name || 'Badge');
+      return bannerAdminCard(`badge:${badge.id}`, cardTitle,
         h('div', { class: 'row', style: 'grid-template-columns:minmax(0,1fr) auto' },
-          field('Badge name', text(badge, 'name', { maxlength: 80 })),
+          field('Badge name', text(badge, 'name', {
+            maxlength: 80,
+            after: () => { cardTitle.textContent = badge.name || 'Badge'; },
+          })),
           h('div', { class: 'acts' },
             h('button', { class: 'btn del sm', type: 'button', onclick: () => {
               if (!confirm(`Delete the badge "${badge.name || 'Badge'}"?`)) return;
