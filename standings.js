@@ -39,7 +39,7 @@
     : (st.wa === 0 ? [0, 3] : [1, 2]);
 
   const playoffFinishOrder = {
-    Champion: 0,
+    Champions: 0,
     Finalist: 1,
     'In Finals': 1,
     'In Semi Finals': 3,
@@ -120,7 +120,7 @@
       const match = decided[decided.length - 1];
       const st = state(match, bestOf(D, match));
       const won = match.a === teamId ? st.wa > st.wb : st.wb > st.wa;
-      if (stage === 'finals') return won ? 'Champion' : 'Finalist';
+      if (stage === 'finals') return won ? 'Champions' : 'Finalist';
       if (stage === 'semifinals') return won ? 'Finalist' : 'Semi-finalist';
       return won ? 'Advanced to Semi Finals' : 'Quarter-finalist';
     }

@@ -91,6 +91,7 @@
   const savesPerPoint = requirement(rawPointRequirements.saves, 2);
   const pointRuleText = (value, singular, plural) =>
     `${value} ${value === 1 ? singular : plural} = 1 point`;
+  let key = 'p', direction = 'high', filter = 'all', source = 'pug', search = '';
   $('playerStatsPointKey').textContent = [
     `Skaters: ${pointRuleText(goalsPerPoint, 'Goal', 'Goals')} + ${pointRuleText(assistsPerPoint, 'Assist', 'Assists')}`,
     `Goalies: ${pointRuleText(savesPerPoint, 'Save', 'Saves')} + ${pointRuleText(assistsPerPoint, 'Assist', 'Assists')}`,
@@ -101,6 +102,8 @@
     const w = Number(stats.wins) || 0, l = Number(stats.losses) || 0;
     return {
       ...player, g, a, s, w, l,
+      pugStats: stats,
+      seasonTwoStats: player.season2TrackedStats || {},
       p: (player.position === 'Goalie' ? Math.floor(s / savesPerPoint) : Math.floor(g / goalsPerPoint))
         + Math.floor(a / assistsPerPoint),
       value: Number(player.position === 'Goalie' ? player.goalieValue : player.skaterValue) || 0,
@@ -174,7 +177,18 @@
       : euroFormat.format(value);
   };
   const NAMES = { p: 'Points', w: 'Wins', g: 'Goals', s: 'Saves', a: 'Assists', value: 'Value' };
-  let key = 'p', direction = 'high', filter = 'all', source = 'pug', search = '';
+  const applyStatsSource = () => {
+    for (const player of P) {
+      const stats = source === 'season2' ? player.seasonTwoStats : player.pugStats;
+      player.g = Number(stats.goals) || 0;
+      player.a = Number(stats.assists) || 0;
+      player.s = Number(stats.saves) || 0;
+      player.w = Number(stats.wins) || 0;
+      player.l = Number(stats.losses) || 0;
+      player.p = (player.goalie ? Math.floor(player.s / savesPerPoint) : Math.floor(player.g / goalsPerPoint))
+        + Math.floor(player.a / assistsPerPoint);
+    }
+  };
   let personalPlayer = null;
   const profileCard = $('playerStatsProfileCard');
   const showProfileMessage = (title, message, action = '') => {
@@ -183,13 +197,12 @@
   };
   function renderPersonalStats() {
     if (!personalPlayer) return;
-    const empty = source === 'season2';
     const stats = {
-      goals: empty ? '—' : personalPlayer.g,
-      assists: empty ? '—' : personalPlayer.a,
-      saves: empty ? '—' : personalPlayer.s,
-      points: empty ? '—' : personalPlayer.p,
-      record: empty ? '—' : `${personalPlayer.w}:${personalPlayer.l}`,
+      goals: personalPlayer.g,
+      assists: personalPlayer.a,
+      saves: personalPlayer.s,
+      points: personalPlayer.p,
+      record: `${personalPlayer.w}:${personalPlayer.l}`,
     };
     profileCard.innerHTML = `<div class="player-stats-profile-heading">
       <small>Your ${source === 'pug' ? 'Pug' : 'Season 2'} Stats</small>
@@ -272,7 +285,6 @@
           : key === 'a' ? player.a : valueForCurrentFilter(player);
   const rank = () => {
     const list = [...filtered()];
-    if (source === 'season2' && key !== 'value') return list.sort(compareName);
     return list.sort((x, y) => (direction === 'high' ? metricValue(y) - metricValue(x) : metricValue(x) - metricValue(y))
       || valueForCurrentFilter(y) - valueForCurrentFilter(x)
       || compareName(x, y));
@@ -283,10 +295,6 @@
       $('leaders').innerHTML = P.length
         ? MHL.empty('No players match your search', 'Try another player name, Discord username, position or team.')
         : MHL.empty('No Season 2 players yet', 'Season 2 signups appear here once they are added.');
-      return;
-    }
-    if (source === 'season2' && key !== 'value') {
-      $('leaders').innerHTML = MHL.empty('Season 2 stats are not available yet', 'Season 2 stats will be added later.');
       return;
     }
     if (direction === 'low') {
@@ -348,11 +356,11 @@
         <td class="l" data-label="Team"><span class="team">${player.t ? `${MHL.badge(player.t)}${MHL.teamLink(player.t)}` : '—'}</span></td>
         <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
         <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
-        <td class="player-stat-cell player-stat-value" data-label="W:L">${source === 'season2' ? '—' : `${player.w}:${player.l}`}</td>
-        <td class="player-stat-cell player-stat-value" data-label="A">${source === 'season2' ? '—' : player.a}</td>
-        ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="G">${source === 'season2' ? '—' : player.g}</td>` : ''}
-        ${showSaves ? `<td class="player-stat-cell player-stat-value" data-label="S">${source === 'season2' ? '—' : player.s}</td>` : ''}
-        <td class="player-stat-cell player-stat-value" data-label="P">${source === 'season2' ? '—' : player.p}</td></tr>`).join('')}</tbody>
+        <td class="player-stat-cell player-stat-value" data-label="W:L">${player.w}:${player.l}</td>
+        <td class="player-stat-cell player-stat-value" data-label="A">${player.a}</td>
+        ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="G">${player.g}</td>` : ''}
+        ${showSaves ? `<td class="player-stat-cell player-stat-value" data-label="S">${player.s}</td>` : ''}
+        <td class="player-stat-cell player-stat-value" data-label="P">${player.p}</td></tr>`).join('')}</tbody>
     </table></div>`;
   }
   $('statSelect').addEventListener('change', event => {
@@ -389,6 +397,7 @@
     const button = event.target.closest('button[data-source]');
     if (!button) return;
     source = button.dataset.source;
+    applyStatsSource();
     $('statsSource').querySelectorAll('button').forEach(item =>
       item.setAttribute('aria-pressed', String(item === button)));
     renderPersonalStats();

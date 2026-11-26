@@ -33,7 +33,7 @@ const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -636,9 +636,10 @@ const emptyTrackedStats = () => ({
 });
 const increaseTrackedStat = (value, amount = 1) =>
   Math.min(Number.MAX_SAFE_INTEGER, num(value, Number.MAX_SAFE_INTEGER) + amount);
-const trackedStatsFor = (data, signupId) => {
-  const raw = data.playerStats && Object.prototype.hasOwnProperty.call(data.playerStats, signupId)
-    ? data.playerStats[signupId]
+const trackedStatsFor = (data, signupId, seasonTwo = false) => {
+  const statsBySignup = seasonTwo ? data.season2PlayerStats : data.playerStats;
+  const raw = statsBySignup && Object.prototype.hasOwnProperty.call(statsBySignup, signupId)
+    ? statsBySignup[signupId]
     : null;
   return {
     goals: num(raw && raw.goals, Number.MAX_SAFE_INTEGER),
@@ -666,6 +667,7 @@ const attachTrackedStats = data => {
   data.signups = data.signups.map(signup => ({
     ...signup,
     trackedStats: trackedStatsFor(data, signup.id),
+    season2TrackedStats: trackedStatsFor(data, signup.id, true),
   }));
   data.signups.forEach(signup => {
     signup.statRanks = bannerStatRankings(data, signup);
@@ -674,6 +676,7 @@ const attachTrackedStats = data => {
   data.players = data.players.map(player => ({
     ...player,
     trackedStats: statsBySignupId.get(player.signupId) || emptyTrackedStats(),
+    season2TrackedStats: trackedStatsFor(data, player.signupId, true),
   }));
   return data;
 };
@@ -1400,7 +1403,9 @@ const normalizeStatsReports = rawReports => {
 
     const rawGameId = String(rawReport.gameId ?? '').trim();
     const gameId = str(rawGameId, 120);
+    const target = rawReport.target === undefined ? 'pug' : rawReport.target;
     if (rawGameId.length > 120 || !/^[a-zA-Z0-9._:-]{1,120}$/.test(gameId) ||
+        !['pug', 'season2', 'both'].includes(target) ||
         !Array.isArray(rawReport.events) || rawReport.events.length > 2000) {
       return { error: 'The stats payload is invalid.' };
     }
@@ -1466,14 +1471,14 @@ const normalizeStatsReports = rawReports => {
       }
     }
 
-    reports.push({ gameId, events });
+    reports.push({ gameId, target, events });
   }
 
   if (totalEvents === 0)
     return { error: 'The stats payload contains no events.' };
   return { reports };
 };
-const applyStatsReports = (data, reports) => {
+const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
   const signupBySteamId = new Map();
   for (const signup of data.signups) {
     const steamId = signupSteamId(signup);
@@ -1483,11 +1488,13 @@ const applyStatsReports = (data, reports) => {
     signupBySteamId.set(steamId, signup);
   }
 
-  const playerStats = data.playerStats && typeof data.playerStats === 'object'
-    ? data.playerStats
+  const statsKey = seasonTwo ? 'season2PlayerStats' : 'playerStats';
+  const eventIdsKey = seasonTwo ? 'season2ModStatEventIds' : 'modStatEventIds';
+  const playerStats = data[statsKey] && typeof data[statsKey] === 'object'
+    ? data[statsKey]
     : {};
-  const trackedIds = Array.isArray(data.modStatEventIds)
-    ? data.modStatEventIds.filter(id => typeof id === 'string')
+  const trackedIds = Array.isArray(data[eventIdsKey])
+    ? data[eventIdsKey].filter(id => typeof id === 'string')
     : [];
   const seen = new Set(trackedIds);
   let accepted = 0;
@@ -1602,10 +1609,27 @@ const applyStatsReports = (data, reports) => {
   }
 
   if (accepted > 0) {
-    data.playerStats = playerStats;
-    data.modStatEventIds = [...seen];
+    data[statsKey] = playerStats;
+    data[eventIdsKey] = [...seen];
   }
   return { accepted, ignored, credited, unmatched };
+};
+const applyStatsReports = (data, reports) => {
+  const combined = { accepted: 0, ignored: 0, credited: 0, unmatched: 0 };
+  for (const seasonTwo of [false, true]) {
+    const target = seasonTwo ? 'season2' : 'pug';
+    const bucketReports = reports.filter(report =>
+      report.target === target || report.target === 'both');
+    if (!bucketReports.length) continue;
+
+    const result = applyStatsReportsToBucket(data, bucketReports, seasonTwo);
+    if (result.error) return result;
+    combined.accepted += result.accepted;
+    combined.ignored += result.ignored;
+    combined.credited += result.credited;
+    combined.unmatched += result.unmatched;
+  }
+  return combined;
 };
 
 const importStatsReports = (rawReports, logContext = null) => {
@@ -2356,7 +2380,11 @@ const server = http.createServer(async (req, res) => {
       const payload = JSON.parse(await readBody(req, 500_000) || '{}');
       if (!payload || typeof payload !== 'object' || Array.isArray(payload))
         return send(res, 400, { error: 'The stats payload is invalid.' });
-      const normalized = normalizeStatsReports([{ gameId: payload.gameId, events: payload.events }]);
+      const normalized = normalizeStatsReports([{
+        gameId: payload.gameId,
+        target: payload.target,
+        events: payload.events,
+      }]);
       if (normalized.error) return send(res, 400, { error: normalized.error });
 
       const data = readData();
@@ -2416,7 +2444,10 @@ const server = http.createServer(async (req, res) => {
         delete data.playerListExclusions;
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
-      const { playerStats, modStatEventIds, statsImportLogs, ...responseData } = data;
+      const {
+        playerStats, modStatEventIds, season2PlayerStats, season2ModStatEventIds,
+        statsImportLogs, ...responseData
+      } = data;
       return send(res, 200, { ...responseData, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/me') return send(res, 200, { admin: isAdmin(req) });
@@ -2490,6 +2521,12 @@ const server = http.createServer(async (req, res) => {
       if (!Array.isArray(incoming.badges)) clean.badges = current.badges;
       clean.playerStats = current.playerStats && typeof current.playerStats === 'object' ? { ...current.playerStats } : {};
       clean.modStatEventIds = Array.isArray(current.modStatEventIds) ? current.modStatEventIds : [];
+      clean.season2PlayerStats = current.season2PlayerStats && typeof current.season2PlayerStats === 'object'
+        ? { ...current.season2PlayerStats }
+        : {};
+      clean.season2ModStatEventIds = Array.isArray(current.season2ModStatEventIds)
+        ? current.season2ModStatEventIds
+        : [];
       clean.statsImportLogs = Array.isArray(current.statsImportLogs)
         ? current.statsImportLogs.slice(0, MAX_STATS_IMPORT_LOGS)
         : [];
@@ -2525,6 +2562,8 @@ const server = http.createServer(async (req, res) => {
       const remainingSignupIds = new Set(clean.signups.map(signup => signup.id));
       for (const signupId of Object.keys(clean.playerStats))
         if (!remainingSignupIds.has(signupId)) delete clean.playerStats[signupId];
+      for (const signupId of Object.keys(clean.season2PlayerStats))
+        if (!remainingSignupIds.has(signupId)) delete clean.season2PlayerStats[signupId];
       const badgeIds = new Set(clean.badges.map(badge => badge.id));
       for (const signup of clean.signups) {
         const usedBadges = new Set();
@@ -2576,7 +2615,10 @@ const server = http.createServer(async (req, res) => {
       for (const f of fs.readdirSync(UPLOAD_DIR)) if (!used.has(f)) fs.unlink(path.join(UPLOAD_DIR, f), () => {});
       const logo = findLogo();
       attachTrackedStats(clean);
-      const { playerStats, modStatEventIds, ...responseData } = clean;
+      const {
+        playerStats, modStatEventIds, season2PlayerStats, season2ModStatEventIds,
+        ...responseData
+      } = clean;
       return send(res, 200, { ...responseData, hasLogo: !!logo, logoUrl: logo ? logo.url : '' });
     }
     if (p === '/api/sign-up' && req.method === 'POST') {
