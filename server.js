@@ -34,8 +34,9 @@ const findLogo = () => { for (const ext of Object.keys(LOGO_TYPES)) { const file
 const PROD = process.env.NODE_ENV === 'production';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
+const MAX_TRACKED_STAT_GAMES = 20;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatGames: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -641,6 +642,33 @@ const emptyTrackedStats = () => ({
   gamesWith100PercentSavePercentage: 0,
   gamesWith10Saves: 0, gamesWith20Saves: 0, gamesWith30Saves: 0,
 });
+const TRACKED_STAT_KEYS = new Set(Object.keys(emptyTrackedStats()));
+const ensureTrackedStatsGame = (data, report) => {
+  data.trackedStatGames = Array.isArray(data.trackedStatGames)
+    ? data.trackedStatGames
+    : [];
+  let game = data.trackedStatGames.find(entry => entry && entry.id === report.gameId);
+  if (!game) {
+    game = {
+      id: report.gameId,
+      target: report.target,
+      playedAt: report.playedAt || '',
+      recordedAt: new Date().toISOString(),
+      playerStats: {},
+      playerNames: {},
+    };
+    data.trackedStatGames.unshift(game);
+  } else if (game.target !== report.target) {
+    game.target = 'both';
+  }
+  if (!game.playedAt && report.playedAt) game.playedAt = report.playedAt;
+  game.playerStats = game.playerStats && typeof game.playerStats === 'object'
+    && !Array.isArray(game.playerStats) ? game.playerStats : {};
+  game.playerNames = game.playerNames && typeof game.playerNames === 'object'
+    && !Array.isArray(game.playerNames) ? game.playerNames : {};
+  data.trackedStatGames = data.trackedStatGames.slice(0, MAX_TRACKED_STAT_GAMES);
+  return game;
+};
 const increaseTrackedStat = (value, amount = 1) =>
   Math.min(Number.MAX_SAFE_INTEGER, num(value, Number.MAX_SAFE_INTEGER) + amount);
 const trackedStatsFor = (data, signupId, seasonTwo = false) => {
@@ -1543,6 +1571,17 @@ const normalizeStatsReports = rawReports => {
     const rawGameId = String(rawReport.gameId ?? '').trim();
     const gameId = str(rawGameId, 120);
     const target = rawReport.target === undefined ? 'pug' : rawReport.target;
+    const rawPlayedAt = rawReport.playedAt == null ? '' : rawReport.playedAt;
+    let playedAt = '';
+    if (rawPlayedAt !== '') {
+      if (typeof rawPlayedAt !== 'string' || rawPlayedAt.length > 40) {
+        return { error: 'A stats report has an invalid game date.' };
+      }
+      const timestamp = Date.parse(rawPlayedAt);
+      if (!Number.isFinite(timestamp))
+        return { error: 'A stats report has an invalid game date.' };
+      playedAt = new Date(timestamp).toISOString();
+    }
     if (rawGameId.length > 120 || !/^[a-zA-Z0-9._:-]{1,120}$/.test(gameId) ||
         !['pug', 'season2', 'both'].includes(target) ||
         !Array.isArray(rawReport.events) || rawReport.events.length > 2000) {
@@ -1620,7 +1659,7 @@ const normalizeStatsReports = rawReports => {
       }
     }
 
-    reports.push({ gameId, target, events });
+    reports.push({ gameId, playedAt, target, events });
   }
 
   if (totalEvents === 0)
@@ -1656,8 +1695,34 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
       playerStats[signupId] = emptyTrackedStats();
     return playerStats[signupId];
   };
+  const signupById = new Map(data.signups.map(signup => [signup.id, signup]));
 
   for (const report of reports) {
+    const trackGameStats = !seasonTwo || report.target === 'season2';
+    let game = null;
+    const gameStatsFor = signupId => {
+      if (!trackGameStats) return null;
+      if (!game) game = ensureTrackedStatsGame(data, report);
+      if (!game.playerStats[signupId] || typeof game.playerStats[signupId] !== 'object')
+        game.playerStats[signupId] = emptyTrackedStats();
+      const signup = signupById.get(signupId);
+      if (signup) game.playerNames[signupId] = str(signup.name, 80);
+      return game.playerStats[signupId];
+    };
+    const increaseForSignup = (signupId, key, amount = 1) => {
+      const stats = countsFor(signupId);
+      stats[key] = increaseTrackedStat(stats[key], amount);
+      const gameStats = gameStatsFor(signupId);
+      if (gameStats) gameStats[key] = increaseTrackedStat(gameStats[key], amount);
+    };
+    const decreaseForSignup = (signupId, key, amount) => {
+      const stats = countsFor(signupId);
+      stats[key] = Math.max(0, num(stats[key], Number.MAX_SAFE_INTEGER) - amount);
+      const gameStats = gameStatsFor(signupId);
+      if (gameStats)
+        gameStats[key] = Math.max(0, num(gameStats[key], Number.MAX_SAFE_INTEGER) - amount);
+    };
+
     for (const event of report.events) {
       if (seen.has(event.eventId)) {
         ignored++;
@@ -1670,10 +1735,9 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
         let eventCredited = false;
         const scorer = signupBySteamId.get(event.scorerSteamId);
         if (scorer) {
-          const stats = countsFor(scorer.id);
-          stats.goals = increaseTrackedStat(stats.goals);
+          increaseForSignup(scorer.id, 'goals');
           if (event.volleyGoal)
-            stats.volleyGoals = increaseTrackedStat(stats.volleyGoals);
+            increaseForSignup(scorer.id, 'volleyGoals');
           eventCredited = true;
         }
         const creditedAssists = new Set([event.assist1SteamId, event.assist2SteamId]
@@ -1681,8 +1745,7 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
         for (const steamId of creditedAssists) {
           const signup = signupBySteamId.get(steamId);
           if (signup) {
-            const stats = countsFor(signup.id);
-            stats.assists = increaseTrackedStat(stats.assists);
+            increaseForSignup(signup.id, 'assists');
             eventCredited = true;
           }
         }
@@ -1692,7 +1755,6 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
           event.type === 'bodySave' || event.type === 'pass' || event.type === 'shots') {
         const signup = signupBySteamId.get(event.steamId);
         if (signup) {
-          const stats = countsFor(signup.id);
           const key = event.type === 'stickSave'
             ? 'stickSaves'
             : event.type === 'bodySave'
@@ -1702,42 +1764,38 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
                 : event.type === 'shots'
                   ? 'shots'
                 : 'saves';
-          stats[key] = increaseTrackedStat(stats[key], event.count);
+          increaseForSignup(signup.id, key, event.count);
           credited++;
         } else unmatched++;
       } else if (event.type === 'game') {
         const signup = signupBySteamId.get(event.steamId);
         if (signup) {
-          const stats = countsFor(signup.id);
-          stats.gamesPlayed = increaseTrackedStat(stats.gamesPlayed);
+          increaseForSignup(signup.id, 'gamesPlayed');
           if (event.role === 'goalie')
-            stats.goalieGames = increaseTrackedStat(stats.goalieGames);
+            increaseForSignup(signup.id, 'goalieGames');
           else if (event.role === 'skater')
-            stats.skaterGames = increaseTrackedStat(stats.skaterGames);
+            increaseForSignup(signup.id, 'skaterGames');
           if (event.goalsScored >= 1)
-            stats.gamesScoredIn = increaseTrackedStat(stats.gamesScoredIn);
+            increaseForSignup(signup.id, 'gamesScoredIn');
           if (event.goalsScored >= 3)
-            stats.gamesWith3Goals = increaseTrackedStat(stats.gamesWith3Goals);
+            increaseForSignup(signup.id, 'gamesWith3Goals');
           if (event.goalsScored >= 5)
-            stats.gamesWith5Goals = increaseTrackedStat(stats.gamesWith5Goals);
+            increaseForSignup(signup.id, 'gamesWith5Goals');
           if (event.goalsScored >= 10)
-            stats.gamesWith10Goals = increaseTrackedStat(stats.gamesWith10Goals);
+            increaseForSignup(signup.id, 'gamesWith10Goals');
           if (event.goalsScored >= 2 && event.shotsInGame === event.goalsScored)
-            stats.gamesWith100PercentGoalPercentage = increaseTrackedStat(
-              stats.gamesWith100PercentGoalPercentage);
+            increaseForSignup(signup.id, 'gamesWith100PercentGoalPercentage');
           if (event.savesInGame >= 10)
-            stats.gamesWith10Saves = increaseTrackedStat(stats.gamesWith10Saves);
+            increaseForSignup(signup.id, 'gamesWith10Saves');
           if (event.savesInGame >= 20)
-            stats.gamesWith20Saves = increaseTrackedStat(stats.gamesWith20Saves);
+            increaseForSignup(signup.id, 'gamesWith20Saves');
           if (event.savesInGame >= 30)
-            stats.gamesWith30Saves = increaseTrackedStat(stats.gamesWith30Saves);
+            increaseForSignup(signup.id, 'gamesWith30Saves');
           if (event.savePercentageBasisPoints >= 0) {
-            stats.savePercentageTotalBasisPoints = increaseTrackedStat(
-              stats.savePercentageTotalBasisPoints, event.savePercentageBasisPoints);
-            stats.savePercentageGames = increaseTrackedStat(stats.savePercentageGames);
+            increaseForSignup(signup.id, 'savePercentageTotalBasisPoints', event.savePercentageBasisPoints);
+            increaseForSignup(signup.id, 'savePercentageGames');
             if (event.savePercentageBasisPoints === 10000) {
-              stats.gamesWith100PercentSavePercentage = increaseTrackedStat(
-                stats.gamesWith100PercentSavePercentage);
+              increaseForSignup(signup.id, 'gamesWith100PercentSavePercentage');
             }
           }
           credited++;
@@ -1745,7 +1803,6 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
       } else if (event.type === 'statAdjustment') {
         const signup = signupBySteamId.get(event.steamId);
         if (signup) {
-          const stats = countsFor(signup.id);
           const key = event.stat === 'stickSave'
             ? 'stickSaves'
             : event.stat === 'bodySave'
@@ -1755,15 +1812,14 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
                 : event.stat === 'shots'
                   ? 'shots'
                 : 'saves';
-          stats[key] = Math.max(0, num(stats[key], Number.MAX_SAFE_INTEGER) - event.count);
+          decreaseForSignup(signup.id, key, event.count);
           credited++;
         } else unmatched++;
       } else {
         const signup = signupBySteamId.get(event.steamId);
         if (signup) {
-          const stats = countsFor(signup.id);
           const key = event.type === 'win' ? 'wins' : 'losses';
-          stats[key] = increaseTrackedStat(stats[key]);
+          increaseForSignup(signup.id, key);
           credited++;
         } else unmatched++;
       }
@@ -1773,6 +1829,9 @@ const applyStatsReportsToBucket = (data, reports, seasonTwo) => {
   if (accepted > 0) {
     data[statsKey] = playerStats;
     data[eventIdsKey] = [...seen];
+    data.trackedStatGames = Array.isArray(data.trackedStatGames)
+      ? data.trackedStatGames.slice(0, MAX_TRACKED_STAT_GAMES)
+      : [];
   }
   return { accepted, ignored, credited, unmatched };
 };
@@ -2622,6 +2681,7 @@ const server = http.createServer(async (req, res) => {
         return send(res, 400, { error: 'The stats payload is invalid.' });
       const normalized = normalizeStatsReports([{
         gameId: payload.gameId,
+        playedAt: payload.playedAt,
         target: payload.target,
         events: payload.events,
       }]);
@@ -2683,6 +2743,11 @@ const server = http.createServer(async (req, res) => {
         delete data.playerGroups;
         delete data.bannedSteamIds;
         delete data.playerListExclusions;
+        delete data.trackedStatGames;
+      } else {
+        data.trackedStatGames = Array.isArray(data.trackedStatGames)
+          ? data.trackedStatGames.slice(0, MAX_TRACKED_STAT_GAMES)
+          : [];
       }
       data.signups = data.signups.map(signup => ({ ...signup, ...signupValues(signup) }));
       const {
@@ -2718,10 +2783,20 @@ const server = http.createServer(async (req, res) => {
       const incoming = JSON.parse(await readBody(req, 10_000_000));
       const clearAllAssignments = !!(incoming && incoming.draft && incoming.draft.clearAllAssignments);
       const trackedStatsEdits = incoming && incoming.trackedStatsEdits;
-      if (trackedStatsEdits !== undefined &&
-          (!trackedStatsEdits || typeof trackedStatsEdits !== 'object' || Array.isArray(trackedStatsEdits) ||
-           Object.keys(trackedStatsEdits).length > 5000)) {
-        return send(res, 400, { error: 'Tracked stat edits are invalid.' });
+      const season2TrackedStatsEdits = incoming && incoming.season2TrackedStatsEdits;
+      const trackedGameStatsEdits = incoming && incoming.trackedGameStatsEdits;
+      for (const edits of [trackedStatsEdits, season2TrackedStatsEdits]) {
+        if (edits !== undefined &&
+            (!edits || typeof edits !== 'object' || Array.isArray(edits) ||
+             Object.keys(edits).length > 5000)) {
+          return send(res, 400, { error: 'Tracked stat edits are invalid.' });
+        }
+      }
+      if (trackedGameStatsEdits !== undefined &&
+          (!trackedGameStatsEdits || typeof trackedGameStatsEdits !== 'object' ||
+           Array.isArray(trackedGameStatsEdits) ||
+           Object.keys(trackedGameStatsEdits).length > MAX_TRACKED_STAT_GAMES)) {
+        return send(res, 400, { error: 'Tracked game stat edits are invalid.' });
       }
       const playoffCounts = Object.fromEntries(PLAYOFF_STAGES.map(stage => [stage, 0]));
       const incomingRounds = Array.isArray(incoming && incoming.rounds) ? incoming.rounds : [];
@@ -2771,23 +2846,75 @@ const server = http.createServer(async (req, res) => {
       clean.statsImportLogs = Array.isArray(current.statsImportLogs)
         ? current.statsImportLogs.slice(0, MAX_STATS_IMPORT_LOGS)
         : [];
-      const trackedStatKeys = new Set([
-        'goals', 'volleyGoals', 'assists', 'saves', 'wins', 'losses', 'stickSaves', 'bodySaves', 'passes',
-        'shots', 'goalieGames', 'skaterGames', 'gamesWith100PercentGoalPercentage',
-      ]);
+      clean.trackedStatGames = Array.isArray(current.trackedStatGames)
+        ? current.trackedStatGames.slice(0, MAX_TRACKED_STAT_GAMES)
+        : [];
       const currentSignupIds = new Set(current.signups.map(signup => signup.id));
-      for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
-        if (!currentSignupIds.has(signupId) || !stats || typeof stats !== 'object' || Array.isArray(stats) ||
-            Object.keys(stats).some(key => !trackedStatKeys.has(key)) ||
-            Object.values(stats).some(value => !Number.isSafeInteger(value) || value < 0)) {
-          return send(res, 400, { error: 'Tracked stat edits are invalid.' });
+      const validStatEdits = edits => Object.entries(edits || {}).every(([signupId, stats]) =>
+        currentSignupIds.has(signupId) && stats && typeof stats === 'object' && !Array.isArray(stats) &&
+        Object.keys(stats).every(key => TRACKED_STAT_KEYS.has(key)) &&
+        Object.values(stats).every(value => Number.isSafeInteger(value) && value >= 0));
+      if (!validStatEdits(trackedStatsEdits) || !validStatEdits(season2TrackedStatsEdits)) {
+        return send(res, 400, { error: 'Tracked stat edits are invalid.' });
+      }
+
+      const trackedGamesById = new Map(clean.trackedStatGames
+        .filter(game => game && typeof game.id === 'string')
+        .map(game => [game.id, game]));
+      for (const [gameId, playerEdits] of Object.entries(trackedGameStatsEdits || {})) {
+        const game = trackedGamesById.get(gameId);
+        if (!game) return send(res, 409, { error: 'A tracked game has expired. Reload the admin page and try again.' });
+        if (!playerEdits || typeof playerEdits !== 'object' || Array.isArray(playerEdits) ||
+            Object.keys(playerEdits).length > 5000) {
+          return send(res, 400, { error: 'Tracked game stat edits are invalid.' });
+        }
+        for (const [signupId, stats] of Object.entries(playerEdits)) {
+          if (!game.playerStats || !Object.prototype.hasOwnProperty.call(game.playerStats, signupId) ||
+              !game.playerStats[signupId] || typeof game.playerStats[signupId] !== 'object' ||
+              Array.isArray(game.playerStats[signupId]) ||
+              !stats || typeof stats !== 'object' || Array.isArray(stats) ||
+              Object.keys(stats).some(key => !TRACKED_STAT_KEYS.has(key)) ||
+              Object.values(stats).some(value => !Number.isSafeInteger(value) || value < 0)) {
+            return send(res, 400, { error: 'Tracked game stat edits are invalid.' });
+          }
         }
       }
-      for (const [signupId, stats] of Object.entries(trackedStatsEdits || {})) {
-        const trackedStats = trackedStatsFor(current, signupId);
-        delete trackedStats.goalPercentage;
-        clean.playerStats[signupId] = { ...trackedStats, ...stats };
+
+      for (const [gameId, playerEdits] of Object.entries(trackedGameStatsEdits || {})) {
+        const game = trackedGamesById.get(gameId);
+        const targets = game.target === 'both' ? [false, true] : [game.target === 'season2'];
+        for (const [signupId, stats] of Object.entries(playerEdits)) {
+          const previousGameStats = game.playerStats[signupId];
+          if (currentSignupIds.has(signupId)) {
+            for (const seasonTwo of targets) {
+              const bucket = seasonTwo ? clean.season2PlayerStats : clean.playerStats;
+              const currentStats = trackedStatsFor(current, signupId, seasonTwo);
+              delete currentStats.goalPercentage;
+              for (const [key, value] of Object.entries(stats)) {
+                const previousValue = num(previousGameStats[key], Number.MAX_SAFE_INTEGER);
+                const currentValue = num(currentStats[key], Number.MAX_SAFE_INTEGER);
+                const difference = value - previousValue;
+                currentStats[key] = difference >= 0
+                  ? Math.min(Number.MAX_SAFE_INTEGER, currentValue + difference)
+                  : Math.max(0, currentValue + difference);
+              }
+              bucket[signupId] = currentStats;
+            }
+          }
+          game.playerStats[signupId] = { ...previousGameStats, ...stats };
+        }
       }
+
+      const applyTrackedStatEdits = (edits, seasonTwo) => {
+        const bucket = seasonTwo ? clean.season2PlayerStats : clean.playerStats;
+        for (const [signupId, stats] of Object.entries(edits || {})) {
+          const trackedStats = trackedStatsFor(current, signupId, seasonTwo);
+          delete trackedStats.goalPercentage;
+          bucket[signupId] = { ...trackedStats, ...stats };
+        }
+      };
+      applyTrackedStatEdits(trackedStatsEdits, false);
+      applyTrackedStatEdits(season2TrackedStatsEdits, true);
       const byId = new Map(current.signups.map(signup => [signup.id, signup]));
       const incomingSignups = new Map(requestedSignups
         .filter(signup => signup && typeof signup === 'object')

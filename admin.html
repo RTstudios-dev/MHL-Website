@@ -125,6 +125,19 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 .log-status.failed{color:var(--danger)}
 .filter{max-width:280px;margin-bottom:14px}
 .signup-sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.player-stat-picker{min-width:220px}
+.tracked-game-list{display:grid;gap:12px}
+.tracked-game-row{display:block;padding:0;overflow:hidden}
+.tracked-game-summary{display:flex;align-items:center;gap:10px;min-height:42px;padding:8px 12px;cursor:pointer;list-style:none}
+.tracked-game-summary::-webkit-details-marker{display:none}
+.tracked-game-summary::before{content:"+";width:16px;flex:none;color:var(--gold);font-weight:700;text-align:center}
+.tracked-game-row[open]>.tracked-game-summary::before{content:"-"}
+.tracked-game-summary strong{font-weight:600}
+.tracked-game-summary span{color:var(--muted);font-size:13px}
+.tracked-game-content{display:grid;gap:12px;padding:12px;border-top:1px solid var(--line)}
+.tracked-game-player{max-width:520px}
+.tracked-game-editor{display:grid;gap:10px}
+.tracked-game-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .signup-sortbar label{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
 .signup-sortbar select{width:auto;min-width:220px}
 .signup-sortbar .signup-search{display:grid;flex:1;max-width:300px;gap:4px}
@@ -241,6 +254,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
   .signup-sortbar label{width:100%;align-items:flex-start;flex-direction:column}
   .signup-sortbar select{width:100%}
   .caps-edit{grid-template-columns:1fr}
+  .tracked-game-summary{flex-wrap:wrap}
+  .tracked-game-summary span{margin-left:0;text-align:left}
 }
 </style>
 </head>
@@ -250,11 +265,49 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', playerFilter = '', playerSearch = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
+  let D = null, dirty = false, tab = 'teams', playerFilter = '', playerSearch = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, season2TrackedStatsEdits = {}, trackedGameStatsEdits = {}, playerStatField = 'pug:goals', statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
   const bannerSectionOpen = {};
   const bannerCardOpen = new Map();
+  const trackedGamePlayerSelections = new Map();
+  const trackedGameOpenStates = new Map();
   let statsImportLogs = null, statsImportLogsLoading = false, statsImportLogsError = '';
   const playoffMatchLimits = { quarterfinals: 4, semifinals: 2, finals: 1 };
+  const PLAYER_TRACKED_STATS = [
+    { key: 'goals', label: 'Goals' },
+    { key: 'volleyGoals', label: 'Volley goals' },
+    { key: 'assists', label: 'Assists' },
+    { key: 'saves', label: 'Saves' },
+    { key: 'wins', label: 'Wins' },
+    { key: 'losses', label: 'Losses' },
+    { key: 'stickSaves', label: 'Stick saves' },
+    { key: 'bodySaves', label: 'Body saves' },
+    { key: 'passes', label: 'Passes' },
+    { key: 'gamesPlayed', label: 'Games played' },
+    { key: 'shots', label: 'Shots' },
+    { key: 'goalPercentage', label: 'Goal percentage' },
+    { key: 'savePercentage', label: 'Save percentage' },
+    { key: 'goalieGames', label: 'Goalie games' },
+    { key: 'skaterGames', label: 'Skater games' },
+    { key: 'gamesWith100PercentGoalPercentage', label: '100% goal percentage games' },
+    { key: 'gamesScoredIn', label: 'Games scored in' },
+    { key: 'gamesWith3Goals', label: '3-goal games' },
+    { key: 'gamesWith5Goals', label: '5-goal games' },
+    { key: 'gamesWith10Goals', label: '10-goal games' },
+    { key: 'gamesWith100PercentSavePercentage', label: '100% save percentage games' },
+    { key: 'gamesWith10Saves', label: '10-save games' },
+    { key: 'gamesWith20Saves', label: '20-save games' },
+    { key: 'gamesWith30Saves', label: '30-save games' },
+  ];
+  const GAME_TRACKED_STATS = PLAYER_TRACKED_STATS.filter(stat =>
+    stat.key !== 'goalPercentage' && stat.key !== 'savePercentage');
+  const shotsForGoalPercentage = (goals, currentShots, percentage) => {
+    if (goals === 0) return percentage === 0 ? currentShots : null;
+    if (percentage <= 0) return null;
+    const shots = Math.round(goals * 100 / percentage);
+    if (!Number.isSafeInteger(shots) || shots < goals ||
+        (goals / shots * 100).toFixed(1) !== percentage.toFixed(1)) return null;
+    return shots;
+  };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
   const defaultPoseId = () => {
     if (D.bannerDefaults && D.bannerDefaults.poseId) return D.bannerDefaults.poseId;
@@ -653,7 +706,12 @@ const MHLA = (() => {
     D.backgroundSprites = Array.isArray(D.backgroundSprites) ? D.backgroundSprites : [];
     D.bannerDefaults = D.bannerDefaults && typeof D.bannerDefaults === 'object'
       ? D.bannerDefaults : {};
+    D.trackedStatGames = Array.isArray(D.trackedStatGames) ? D.trackedStatGames : [];
     trackedStatsEdits = {};
+    season2TrackedStatsEdits = {};
+    trackedGameStatsEdits = {};
+    trackedGamePlayerSelections.clear();
+    trackedGameOpenStates.clear();
     dirty = false;
     draw();
   }
@@ -684,8 +742,15 @@ const MHLA = (() => {
   async function save() {
     const b = document.getElementById('saveBtn'), s = document.getElementById('status');
     b.disabled = true; s.textContent = 'Saving...'; s.className = 'status';
-    const body = { ...D }; delete body.hasLogo; delete body.logoUrl;
+    const body = { ...D };
+    delete body.hasLogo;
+    delete body.logoUrl;
+    delete body.trackedStatGames;
     if (Object.keys(trackedStatsEdits).length) body.trackedStatsEdits = trackedStatsEdits;
+    if (Object.keys(season2TrackedStatsEdits).length)
+      body.season2TrackedStatsEdits = season2TrackedStatsEdits;
+    if (Object.keys(trackedGameStatsEdits).length)
+      body.trackedGameStatsEdits = trackedGameStatsEdits;
     const r = await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (r.status === 401) { dirty = false; return login('Your session ended. Log in again, then redo the last changes.'); }
     if (!r.ok) {
@@ -693,7 +758,11 @@ const MHLA = (() => {
       s.textContent = result.error || 'Saving failed. Try again.';
       s.className = 'status dirty'; b.disabled = false; return;
     }
-    D = await r.json(); trackedStatsEdits = {}; dirty = false;
+    D = await r.json();
+    trackedStatsEdits = {};
+    season2TrackedStatsEdits = {};
+    trackedGameStatsEdits = {};
+    dirty = false;
     draw();
     const s2 = document.getElementById('status'); s2.textContent = 'Saved. The site is updated.';
   }
@@ -771,6 +840,8 @@ const MHLA = (() => {
     if (dirty && !confirm('Importing stats will discard your unsaved admin changes. Continue?')) return;
     dirty = false;
     trackedStatsEdits = {};
+    season2TrackedStatsEdits = {};
+    trackedGameStatsEdits = {};
     statsImportMessage = 'Importing stats...';
     const status = document.getElementById('statsImportStatus');
     if (status) status.textContent = statsImportMessage;
@@ -796,7 +867,7 @@ const MHLA = (() => {
   }
 
   // frame
-  const TABS = [['teams', 'Teams'], ['matches', 'Matches'], ['players', 'Players'], ['season1', 'Player Groups'], ['signups', 'Season 2 Player Sign Ups'], ['badges', 'Player Banners'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
+  const TABS = [['teams', 'Teams'], ['schedule', 'Schedule'], ['matches', 'Matches'], ['players', 'Players'], ['season1', 'Player Groups'], ['signups', 'Season 2 Player Sign Ups'], ['badges', 'Player Banners'], ['news', 'News'], ['rules', 'Rules'], ['logs', 'Logs'], ['settings', 'Settings']];
   function draw() {
     const y = scrollY;
     const seg = h('div', { class: 'seg', role: 'tablist', 'aria-label': 'Sections' },
@@ -816,7 +887,7 @@ const MHLA = (() => {
           if (dirty && !confirm('You have unsaved changes. Log out anyway?')) return;
           dirty = false; await fetch('/api/logout', { method: 'POST' }); login();
         } }, 'Log out'))));
-    const panel = h('main', { class: 'panel wrap' }, ({ teams, matches, players, season1, signups, badges, news, rules, logs, settings })[tab]());
+    const panel = h('main', { class: 'panel wrap' }, ({ teams, schedule: scheduledMatches, matches, players, season1, signups, badges, news, rules, logs, settings })[tab]());
     root.replaceChildren(bar, panel);
     scrollTo(0, y);
   }
@@ -1075,7 +1146,7 @@ const MHLA = (() => {
     D.matches.push({ id: uid(), date: '', a: a.id, b: b.id, round, goals: [], games: [{ as: null, bs: null }, { as: null, bs: null }, { as: null, bs: null }] });
     touch(); draw();
   }
-  function matches() {
+  function scheduledMatches() {
     if (D.teams.length < 2) return [head('Matches'), h('div', { class: 'empty' }, h('b', {}, 'Add teams first'), 'You need at least two teams before you can add matches.')];
     const playoffStages = [
       { id: 'quarterfinals', name: 'Quarter Finals', maxMatches: playoffMatchLimits.quarterfinals },
@@ -1134,11 +1205,135 @@ const MHLA = (() => {
     ];
   }
 
+  function matches() {
+    D.trackedStatGames = Array.isArray(D.trackedStatGames) ? D.trackedStatGames : [];
+    const games = D.trackedStatGames.slice(0, 20);
+    const editGameStat = (game, signupId, key, value) => {
+      const current = game.playerStats[signupId];
+      current[key] = value;
+      trackedGameStatsEdits[game.id] = {
+        ...trackedGameStatsEdits[game.id],
+        [signupId]: {
+          ...(trackedGameStatsEdits[game.id] || {})[signupId],
+          [key]: value,
+        },
+      };
+      touch();
+    };
+    const playerEditor = (game, signupId) => {
+      const stats = game.playerStats[signupId] || {};
+      const goals = Number(stats.goals) || 0;
+      const shots = Number(stats.shots) || 0;
+      const goalPercentage = shots ? goals / shots * 100 : 0;
+      const countInput = stat => field(stat.label, h('input', {
+        type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1,
+        'aria-label': `${stat.label} in this match`,
+        value: stats[stat.key] || 0,
+        oninput: event => {
+          const value = Number(event.target.value);
+          if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
+          editGameStat(game, signupId, stat.key, value);
+        },
+      }));
+      const savePercentageGames = Number(stats.savePercentageGames) || 0;
+      const savePercentage = savePercentageGames
+        ? Number(stats.savePercentageTotalBasisPoints) / savePercentageGames / 100
+        : 0;
+      return h('div', { class: 'tracked-game-editor' },
+        h('div', { class: 'tracked-game-stat-grid' },
+          GAME_TRACKED_STATS.map(countInput),
+          field('Goal percentage', h('input', {
+            type: 'number', min: 0, max: 100, step: 0.1,
+            'aria-label': 'Goal percentage in this match',
+            value: goalPercentage.toFixed(1),
+            oninput: event => {
+              const percentage = Number(event.target.value);
+              if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return;
+              const updatedShots = shotsForGoalPercentage(goals, shots, percentage);
+              if (updatedShots === null) {
+                event.target.setCustomValidity("Use a percentage reachable with this player's whole-number goal and shot counts.");
+                event.target.reportValidity();
+                return;
+              }
+              event.target.setCustomValidity('');
+              editGameStat(game, signupId, 'shots', updatedShots);
+            },
+          })),
+          field('Save percentage', h('input', {
+            type: 'number', min: 0, max: 100, step: 0.1,
+            'aria-label': 'Save percentage in this match',
+            value: savePercentage.toFixed(1),
+            oninput: event => {
+              const value = Number(event.target.value);
+              if (!Number.isFinite(value) || value < 0 || value > 100) return;
+              const sampleCount = Math.max(1, savePercentageGames);
+              const totalBasisPoints = Math.round(value * 100 * sampleCount);
+              if (!Number.isSafeInteger(totalBasisPoints)) return;
+              editGameStat(game, signupId, 'savePercentageTotalBasisPoints', totalBasisPoints);
+              editGameStat(game, signupId, 'savePercentageGames', sampleCount);
+            },
+          }))),
+        h('p', { class: 'help', style: 'margin:0' },
+          'Goal percentage changes the shot count to keep it consistent with goals. Save percentage is the tracked average.'));
+    };
+    const gameRows = games.map((game, index) => {
+      const playerStats = game.playerStats && typeof game.playerStats === 'object'
+        ? game.playerStats
+        : {};
+      const playerIds = Object.keys(playerStats).filter(signupId =>
+        playerStats[signupId] && typeof playerStats[signupId] === 'object');
+      let selectedId = trackedGamePlayerSelections.get(game.id);
+      if (!playerIds.includes(selectedId)) {
+        selectedId = playerIds[0] || '';
+        trackedGamePlayerSelections.set(game.id, selectedId);
+      }
+      const playedAt = Date.parse(game.playedAt || '');
+      const recordedAt = Date.parse(game.recordedAt || '');
+      const dateLabel = Number.isFinite(playedAt)
+        ? new Date(playedAt).toLocaleString()
+        : Number.isFinite(recordedAt)
+          ? `Stats recorded ${new Date(recordedAt).toLocaleString()}`
+          : 'Game time unavailable';
+      const targetLabel = game.target === 'season2' ? 'Season 2' : game.target === 'both' ? 'Pug + Season 2' : 'Pug';
+      return h('details', {
+        class: 'ed tracked-game-row',
+        open: trackedGameOpenStates.get(game.id) === true,
+        ontoggle: event => trackedGameOpenStates.set(game.id, event.target.open),
+      },
+        h('summary', { class: 'tracked-game-summary' },
+          h('strong', {}, `Game ${index + 1}`),
+          h('span', {}, `${dateLabel} · ${targetLabel}`)),
+        h('div', { class: 'tracked-game-content' },
+          playerIds.length
+            ? h('label', { class: 'f tracked-game-player' }, 'Player stats',
+              h('select', { 'aria-label': `Player stats for game ${index + 1}`, onchange: event => {
+                trackedGamePlayerSelections.set(game.id, event.target.value);
+                draw();
+              } }, playerIds.map(signupId => {
+                const signup = D.signups.find(item => item.id === signupId);
+                const name = signup && signup.name || game.playerNames && game.playerNames[signupId] || signupId;
+                return h('option', { value: signupId, selected: signupId === selectedId }, name);
+              })))
+            : h('p', { class: 'help', style: 'margin:0' }, 'No linked player stats are available for this game.'),
+          selectedId ? playerEditor(game, selectedId) : null));
+    });
+    return [
+      head('Matches'),
+      h('p', { class: 'help' }, `Only games with stats credited to a linked player appear here. The newest ${games.length} tracked game(s) are retained (maximum 20); older game records are discarded. Editing a match updates the corresponding Pug or Season 2 totals.`),
+      gameRows.length ? h('div', { class: 'tracked-game-list' }, gameRows)
+        : h('div', { class: 'empty' }, h('b', {}, 'No tracked games yet'),
+          'Games appear here after the game stats are imported or received by the site.'),
+    ];
+  }
+
   // players
   function players() {
     const list = D.players.filter(p =>
       !D.playerListExclusions.includes(p.signupId) && (!playerFilter || p.team === playerFilter));
     const tot = MHL.playerTotals(D);
+    const [selectedStatsSource, selectedStatsKey] = playerStatField.split(':');
+    const selectedStat = PLAYER_TRACKED_STATS.find(stat => stat.key === selectedStatsKey) || PLAYER_TRACKED_STATS[0];
+    const selectedStatsProperty = selectedStatsSource === 'season2' ? 'season2TrackedStats' : 'trackedStats';
     const signupForPlayer = player => player.signupId && D.signups.find(signup => signup.id === player.signupId);
     const editablePlayerData = player => signupForPlayer(player) || player;
     const updatePlayerTeam = (player, team) => {
@@ -1156,38 +1351,80 @@ const MHLA = (() => {
       }
       touch();
     };
-    const trackedStatInput = (signup, key, label) => {
-      const stats = signup.trackedStats || (signup.trackedStats = {
-        goals: 0, volleyGoals: 0, assists: 0, saves: 0, wins: 0, losses: 0,
-        stickSaves: 0, bodySaves: 0, passes: 0, shots: 0, goalieGames: 0,
-        skaterGames: 0, gamesWith100PercentGoalPercentage: 0,
-      });
-      return h('input', {
-        type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
-        'aria-label': `${label} for ${signup.name}`,
-        value: stats[key] || 0,
-        oninput: e => {
-          const value = Number(e.target.value);
-          if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
-          stats[key] = value;
-          trackedStatsEdits[signup.id] = { ...trackedStatsEdits[signup.id], [key]: value };
-          touch();
-        },
-      });
-    };
-    const playerStatCell = (player, key, label) => {
-      const signup = signupForPlayer(player);
-      if (signup) return h('td', {}, trackedStatInput(signup, key, label));
-      const stats = tot[player.id] || { g: 0, a: 0 };
-      return h('td', { class: 'tot' }, key === 'goals' ? stats.g : key === 'assists' ? stats.a : '—');
-    };
-    const playerGoalPercentageCell = player => {
+    const playerStatCell = player => {
       const signup = signupForPlayer(player);
       if (!signup) return h('td', { class: 'tot' }, '—');
-      const stats = signup.trackedStats || {};
-      const goals = Number(stats.goals) || 0;
-      const shots = Number(stats.shots) || 0;
-      return h('td', { class: 'tot' }, `${(shots ? goals / shots * 100 : 0).toFixed(1)}%`);
+      const stats = signup[selectedStatsProperty] || (signup[selectedStatsProperty] = {});
+      if (selectedStat.key === 'goalPercentage') {
+        const goals = Number(stats.goals) || 0;
+        const shots = Number(stats.shots) || 0;
+        return h('td', {}, h('input', {
+          type: 'number', min: 0, max: 100, step: 0.1, class: 'n',
+          'aria-label': `${selectedStat.label} for ${signup.name}`,
+          value: (shots ? goals / shots * 100 : 0).toFixed(1),
+          oninput: event => {
+            const percentage = Number(event.target.value);
+            if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return;
+            const updatedShots = shotsForGoalPercentage(goals, shots, percentage);
+            if (updatedShots === null) {
+              event.target.setCustomValidity("Use a percentage reachable with this player's whole-number goal and shot counts.");
+              event.target.reportValidity();
+              return;
+            }
+            event.target.setCustomValidity('');
+            stats.shots = updatedShots;
+            const edits = selectedStatsSource === 'season2'
+              ? season2TrackedStatsEdits
+              : trackedStatsEdits;
+            edits[signup.id] = { ...edits[signup.id], shots: updatedShots };
+            touch();
+          },
+        }));
+      }
+      if (selectedStat.key === 'savePercentage') {
+        const games = Number(stats.savePercentageGames) || 0;
+        const value = games
+          ? Number(stats.savePercentageTotalBasisPoints) / games / 100
+          : 0;
+        return h('td', {}, h('input', {
+          type: 'number', min: 0, max: 100, step: 0.1, class: 'n',
+          'aria-label': `${selectedStat.label} for ${signup.name}`,
+          value: value.toFixed(1),
+          oninput: event => {
+            const percentage = Number(event.target.value);
+            if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return;
+            const sampleCount = Math.max(1, Number(stats.savePercentageGames) || 0);
+            const totalBasisPoints = Math.round(percentage * 100 * sampleCount);
+            if (!Number.isSafeInteger(totalBasisPoints)) return;
+            stats.savePercentageTotalBasisPoints = totalBasisPoints;
+            stats.savePercentageGames = sampleCount;
+            const edits = selectedStatsSource === 'season2'
+              ? season2TrackedStatsEdits
+              : trackedStatsEdits;
+            edits[signup.id] = {
+              ...edits[signup.id],
+              savePercentageTotalBasisPoints: totalBasisPoints,
+              savePercentageGames: sampleCount,
+            };
+            touch();
+          },
+        }));
+      }
+      return h('td', {}, h('input', {
+        type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
+        'aria-label': `${selectedStat.label} for ${signup.name}`,
+        value: stats[selectedStat.key] || 0,
+        oninput: event => {
+          const value = Number(event.target.value);
+          if (!Number.isSafeInteger(value) || value < 0 || value > Number.MAX_SAFE_INTEGER) return;
+          stats[selectedStat.key] = value;
+          const edits = selectedStatsSource === 'season2'
+            ? season2TrackedStatsEdits
+            : trackedStatsEdits;
+          edits[signup.id] = { ...edits[signup.id], [selectedStat.key]: value };
+          touch();
+        },
+      }));
     };
     const playerValue = (player, key, label) => h('input', {
       type: 'number', min: 0, max: Number.MAX_SAFE_INTEGER, step: 1, class: 'n',
@@ -1232,12 +1469,23 @@ const MHLA = (() => {
       class: 'help',
       hidden: list.some(matchesPlayerSearch),
     }, 'No players match your search.');
+    const statSelector = h('label', { class: 'f player-stat-picker' }, 'Tracked stat to show',
+      h('select', { 'aria-label': 'Tracked stat to show', onchange: event => {
+        playerStatField = event.target.value;
+        draw();
+      } }, ['pug', 'season2'].map(source => PLAYER_TRACKED_STATS.map(stat =>
+        h('option', {
+          value: `${source}:${stat.key}`,
+          selected: playerStatField === `${source}:${stat.key}`,
+        }, `${source === 'pug' ? 'Pug' : 'Season 2'} — ${stat.label}`)))));
     return [
-      head('Players', h('button', { class: 'btn sm', type: 'button', onclick: () => {
-        playerSearch = '';
-        D.players.push({ id: uid(), name: '', team: playerFilter || (D.teams[0] && D.teams[0].id) || '', role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
-        const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
-      } }, 'Add player')),
+      head('Players',
+        statSelector,
+        h('button', { class: 'btn sm', type: 'button', onclick: () => {
+          playerSearch = '';
+          D.players.push({ id: uid(), name: '', team: playerFilter || (D.teams[0] && D.teams[0].id) || '', role: 'skater', number: '', discord: '', hours: 0, skaterValue: 0, goalieValue: 0 }); touch(); draw();
+          const ins = document.querySelectorAll('.ptable tbody tr:last-child input'); if (ins[0]) ins[0].focus();
+        } }, 'Add player')),
       (() => {
         const status = h('p', { id: 'statsImportStatus', class: 'help', role: 'status' },
           statsImportMessage || 'Choose the pending JSON file produced by the game server.');
@@ -1278,13 +1526,13 @@ const MHLA = (() => {
           h('p', {}, 'Select the pending stats file from the game server. The file is read automatically; review the preview, then import.'),
           fileInput, ' ', importButton, status);
       })(),
-      h('p', { class: 'help' }, 'All Season 2 signups appear here automatically, including unassigned players. Remove hides a signup-linked player from the Players list without deleting the signup; remove the signup separately in Season 2 Player Sign Ups. Edit team, position, name, Discord username, number, values, and tracked stats here. Game mod events continue adding to tracked stats. Point requirements are set independently under Settings.'),
+      h('p', { class: 'help' }, 'Choose one Pug or Season 2 tracked stat to edit for each player. Goal percentage is derived from goals and shots; save percentage is edited as the tracked average. Signup-linked players are listed automatically, including unassigned players.'),
       h('div', { class: 'player-filter-controls' },
         h('label', { class: 'player-search' }, 'Search players', searchInput),
         h('label', { class: 'f filter' }, 'Show team', h('select', { onchange: e => { playerFilter = e.target.value; draw(); } },
           h('option', { value: '' }, 'All teams'), D.teams.map(t => h('option', { value: t.id, selected: t.id === playerFilter }, t.name))))),
       list.length ? h('div', { class: 'pwrap' }, h('table', { class: 'ptable player-table' },
-        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', 'Goals', 'Volley goals', 'Assists', 'Saves', 'Shots', 'Goal %', 'Goalie games', 'Skater games', '100% goal% games', 'Stick saves', 'Body saves', 'Passes', 'Wins', 'Losses', ''].map(x => h('th', { scope: 'col' }, x)))),
+        h('thead', {}, h('tr', {}, ['In-game name', 'Discord username', 'Team', 'Number', 'Position', 'Skater value (€)', 'Goalie value (€)', `${selectedStatsSource === 'pug' ? 'Pug' : 'Season 2'} — ${selectedStat.label}`, ''].map(x => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, list.map(p => h('tr', {
           hidden: !matchesPlayerSearch(p),
           'data-player-search': playerSearchText(p),
@@ -1299,20 +1547,7 @@ const MHLA = (() => {
             p.signupId ? h('small', {}, `Signup: ${p.signupPosition || 'Unassigned'}`) : null),
           h('td', {}, playerValue(p, 'skaterValue', 'Skater value')),
           h('td', {}, playerValue(p, 'goalieValue', 'Goalie value')),
-            playerStatCell(p, 'goals', 'Goals'),
-            playerStatCell(p, 'volleyGoals', 'Volley goals'),
-            playerStatCell(p, 'assists', 'Assists'),
-            playerStatCell(p, 'saves', 'Saves'),
-            playerStatCell(p, 'shots', 'Shots'),
-            playerGoalPercentageCell(p),
-            playerStatCell(p, 'goalieGames', 'Goalie games'),
-            playerStatCell(p, 'skaterGames', 'Skater games'),
-            playerStatCell(p, 'gamesWith100PercentGoalPercentage', 'Games with 100% goal percentage'),
-            playerStatCell(p, 'stickSaves', 'Stick saves'),
-            playerStatCell(p, 'bodySaves', 'Body saves'),
-            playerStatCell(p, 'passes', 'Passes'),
-            playerStatCell(p, 'wins', 'Wins'),
-            playerStatCell(p, 'losses', 'Losses'),
+          playerStatCell(p),
           h('td', {}, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
             if (p.signupId) {
               if (!confirm(`Remove ${p.name || 'this player'} from the Players list? Their Season 2 signup will remain. To remove the signup too, use its separate action in Season 2 Player Sign Ups. Press Save changes to apply.`)) return;
