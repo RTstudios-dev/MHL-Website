@@ -471,7 +471,7 @@
           image: badge.image,
           description: badge.unlocked
             ? badge.description || itemRequirementsText(badge) || 'Unlocked badge.'
-            : itemRequirementsText(badge) || 'Contact league staff.',
+            : badge.description || itemRequirementsText(badge) || 'Contact league staff.',
           selected: isEquipped,
           componentId: badge.id,
           locked: badge.unlocked === false,
