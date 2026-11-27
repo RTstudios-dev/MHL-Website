@@ -1,6 +1,7 @@
 {
   "site": {
     "season": "Season 1",
+    "activeSeason": "season1",
     "discord": "https://discord.gg/HUABf9zJSy",
     "iceCap": 0,
     "teamCap": 0,

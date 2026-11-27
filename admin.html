@@ -541,6 +541,7 @@ const MHLA = (() => {
     addSprite('helmetSprites', 'Helmet');
     addSprite('torsoSprites', 'Torso');
     addSprite('stickSprites', 'Stick');
+    addSprite('borderSprites', 'Border');
     D.badges.forEach(badge => {
       if (badge.image) entries.push({
         label: `${badge.name || 'Badge'} — Badge`,
@@ -610,6 +611,7 @@ const MHLA = (() => {
       ['helmetSprites', 'Helmet'],
       ['torsoSprites', 'Torso'],
       ['stickSprites', 'Stick'],
+      ['borderSprites', 'Border'],
     ]) {
       const items = D[key] || [];
       const reskins = new Map();
@@ -713,6 +715,7 @@ const MHLA = (() => {
     D.badges = Array.isArray(D.badges) ? D.badges : [];
     D.bannerPoses = Array.isArray(D.bannerPoses) ? D.bannerPoses : [];
     D.bannerSprites = Array.isArray(D.bannerSprites) ? D.bannerSprites : [];
+    D.borderSprites = Array.isArray(D.borderSprites) ? D.borderSprites : [];
     D.helmetSprites = Array.isArray(D.helmetSprites) ? D.helmetSprites : [];
     D.torsoSprites = Array.isArray(D.torsoSprites) ? D.torsoSprites : [];
     D.stickSprites = Array.isArray(D.stickSprites) ? D.stickSprites : [];
@@ -1668,6 +1671,7 @@ const MHLA = (() => {
               ...(D.bannerSprites || []), ...(D.backgroundSprites || []),
               ...(D.helmetSprites || []), ...(D.torsoSprites || []),
               ...(D.stickSprites || []), ...(D.puckSprites || []),
+              ...(D.borderSprites || []),
             ]) {
               const ids = Array.isArray(component.playerGroupIds) ? component.playerGroupIds : [];
               component.playerGroupIds = ids.filter(id => id !== group.id);
@@ -1971,6 +1975,7 @@ const MHLA = (() => {
     let showEditorGuides = true;
     const hiddenEditorLayers = new Set();
     const categoryMap = {
+      border: ['borderSprites', 'Borders'],
       background: ['backgroundSprites', 'Background'],
       badges: ['badges', 'Badges'],
       stick: ['stickSprites', 'Stick'],
@@ -2067,7 +2072,7 @@ const MHLA = (() => {
       canvas.append(element);
       if (showEditorGuides) makeDraggable(element, transform, key, name, scaleKey);
     };
-    const defaultLayerOrder = ['badges', 'stick', 'torso', 'background', 'helmet'];
+    const defaultLayerOrder = ['border', 'badges', 'stick', 'torso', 'background', 'helmet'];
     const getLayerOrder = () => {
       const validKeys = new Set([
         ...Object.keys(categoryMap),
@@ -2076,7 +2081,8 @@ const MHLA = (() => {
       const order = Array.isArray(D.bannerDefaults.layerOrder)
         ? D.bannerDefaults.layerOrder.filter((key, index, values) => validKeys.has(key) && values.indexOf(key) === index)
         : [];
-      for (const key of defaultLayerOrder)
+      if (!order.includes('border')) order.unshift('border');
+      for (const key of defaultLayerOrder.slice(1))
         if (!order.includes(key)) order.push(key);
       for (const item of D.bannerLayers) {
         const key = 'custom:' + item.id;
@@ -2117,6 +2123,7 @@ const MHLA = (() => {
       const defaultKey = layer === 'background' ? 'background'
         : layer === 'helmet' ? 'helmet'
         : layer === 'torso' ? 'torso'
+        : layer === 'border' ? 'border'
         : 'stick';
       const defaultPoseItems = items.filter(item => item.poseId === defaultPoseId());
       const selected = defaultPoseItems.find(item => item.id === D.bannerDefaults[defaultKey] && item.image)
@@ -2305,7 +2312,8 @@ const MHLA = (() => {
         const items = (D[key] = Array.isArray(D[key]) ? D[key] : [])
           .filter(item => item.poseId === defaultPoseId());
         const defaultId = D.bannerDefaults[
-          layerKey === 'background' ? 'background'
+          layerKey === 'border' ? 'border'
+          : layerKey === 'background' ? 'background'
           : layerKey === 'helmet' ? 'helmet'
           : layerKey === 'torso' ? 'torso'
           : layerKey === 'stick' ? 'stick'
@@ -2313,7 +2321,7 @@ const MHLA = (() => {
         ];
         const selected = items.find(item => item.id === defaultId && item.image)
           || items.find(item => item.image);
-        if (selected) renderLayerImage(selected, zIndex);
+        if (selected) renderLayerImage(selected, layerKey === 'border' ? 250 : zIndex);
       });
       const defaultBadge = D.badges.find(item => item.id === D.bannerDefaults.badge && item.image);
       if (defaultBadge && (!showEditorGuides || !hiddenEditorLayers.has('badges'))) {
@@ -2554,6 +2562,7 @@ const MHLA = (() => {
       const defaultKey = activeLayer === 'background' ? 'background'
         : activeLayer === 'helmet' ? 'helmet'
         : activeLayer === 'torso' ? 'torso'
+        : activeLayer === 'border' ? 'border'
         : 'stick';
       items.forEach(item => {
         layerTransform(item);
@@ -2804,6 +2813,10 @@ const MHLA = (() => {
             if (!confirm(`Delete the ${title.toLowerCase()} "${item.name || title}"?`)) return;
             D[key] = D[key].filter(entry => entry !== item);
             if (D.bannerDefaults[defaultKey] === item.id) D.bannerDefaults[defaultKey] = '';
+            if (key === 'borderSprites') D.signups.forEach(signup => {
+              if (signup.bannerConfig && signup.bannerConfig.borderSpriteId === item.id)
+                signup.bannerConfig.borderSpriteId = '';
+            });
             touch();
             draw();
           } }, `Delete ${title}`)),
@@ -2897,6 +2910,7 @@ const MHLA = (() => {
       gamesWith30Saves: 'Games with 30+ saves',
     };
     const componentMap = {
+      border: ['borderSprites', 'Border'],
       torso: ['torsoSprites', 'Torso'],
       stick: ['stickSprites', 'Stick'],
       background: ['backgroundSprites', 'Background'],
@@ -2906,9 +2920,9 @@ const MHLA = (() => {
       let imported = 0;
       const errors = [];
       for (const file of Array.from(files || [])) {
-        const match = file.name.match(/^(.+)_([^_]+)_(background|torso|stick|helmet)\.png$/i);
+        const match = file.name.match(/^(.+)_([^_]+)_(background|torso|stick|helmet|border)\.png$/i);
         if (!match) {
-          errors.push(`${file.name}: expected Reskin_Pose_Component.png`);
+          errors.push(`${file.name}: expected Reskin_Pose_Component.png (component: Background, Torso, Stick, Helmet, or Border)`);
           continue;
         }
         if (file.size > 8_000_000) {
@@ -2980,7 +2994,7 @@ const MHLA = (() => {
         importPngs(event.dataTransfer.files);
       },
     },
-      h('p', {}, 'Drop multiple PNGs here or select files. Name each file Reskin_Pose_Component.png, for example Goldman_Flying_Torso.png.'),
+      h('p', {}, 'Drop multiple PNGs here or select files. Name each file Reskin_Pose_Component.png, for example Goldman_Flying_Torso.png or Goldman_Flying_Border.png.'),
       h('button', { type: 'button', class: 'btn sm', onclick: () => importInput.click() }, 'Choose PNGs'),
       importInput);
     const importSection = bannerComponentSection('pose-import', 'Batch PNG upload', null,
@@ -3060,19 +3074,19 @@ const MHLA = (() => {
         class: 'btn del sm', type: 'button', onclick: () => {
           if (!confirm(`Delete pose "${pose.name || 'Pose'}" and its reskins?`)) return;
           const removed = new Set();
-          for (const key of ['bannerSprites', 'backgroundSprites', 'helmetSprites', 'torsoSprites', 'stickSprites', 'puckSprites']) {
+          for (const key of ['bannerSprites', 'backgroundSprites', 'helmetSprites', 'torsoSprites', 'stickSprites', 'puckSprites', 'borderSprites']) {
             D[key] = (D[key] || []).filter(item => {
               if (item.poseId !== pose.id) return true;
               removed.add(item.id);
               return false;
             });
           }
-          for (const key of ['banner', 'background', 'helmet', 'torso', 'stick', 'puck'])
+          for (const key of ['banner', 'background', 'helmet', 'torso', 'stick', 'puck', 'border'])
             if (removed.has(D.bannerDefaults[key])) D.bannerDefaults[key] = '';
           D.signups.forEach(signup => {
             if (signup.bannerConfig && signup.bannerConfig.poseId === pose.id)
               signup.bannerConfig.poseId = defaultPoseId();
-            for (const key of ['bannerSpriteId', 'backgroundSpriteId', 'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'puckSpriteId'])
+            for (const key of ['bannerSpriteId', 'backgroundSpriteId', 'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'puckSpriteId', 'borderSpriteId'])
               if (signup.bannerConfig && removed.has(signup.bannerConfig[key])) signup.bannerConfig[key] = '';
           });
           D.bannerPoses = D.bannerPoses.filter(item => item !== pose);
@@ -3133,7 +3147,7 @@ const MHLA = (() => {
     return [
       importSection,
       head('Poses', addPose),
-      h('p', { class: 'help' }, 'Each pose has its own Torso, Stick, Background, and Helmet reskins. Use matching Torso and Background reskin names to display them together on player banners. The Default pose contains all legacy PNGs.'),
+      h('p', { class: 'help' }, 'Each pose has its own Torso, Stick, Background, Helmet, and Border reskins. Use matching Torso and Background reskin names to display them together on player banners. The Default pose contains all legacy PNGs.'),
       poses.length ? poses : h('div', { class: 'empty' }, h('b', {}, 'No poses'), 'Add a pose to begin.'),
     ];
   }
@@ -3292,7 +3306,7 @@ const MHLA = (() => {
       }, badge.name || 'Badge')));
     return [
       head('Player Banners'),
-      h('p', { class: 'help' }, 'Players choose an unlocked pose before browsing its available components and reskins. Badges remain independent of poses; global sprite defaults apply to the Default pose.'),
+      h('p', { class: 'help' }, 'Players choose an unlocked pose before browsing its available components and reskins. Borders are drawn over the other banner components. Badges remain independent of poses; global sprite defaults apply to the Default pose.'),
       ...bannerPoseManager(),
       bannerComponentSection('editor', 'Banner Layer Editor', null,
         h('p', { class: 'help' }, 'Pose sprite PNGs and custom card-layer PNGs start at native pixel size, centered on the 849 × 1200 canvas. The editor previews Default-pose sprites. Only the selected component shows a box and X/Y coordinates at its top-left pixel, with the canvas top-left as (0, 0). Select a component to enter exact X/Y and scale values. Drag layers to position and reorder them; use Show/Hide for editor-only visibility. Turn off editor guides for a clean card preview.'),
@@ -3398,6 +3412,7 @@ const MHLA = (() => {
   // settings
   function settings() {
     D.site = D.site || { season: '', discord: '' };
+    D.site.activeSeason = D.site.activeSeason === 'season2' ? 'season2' : 'season1';
     D.site.statsPointRequirements = D.site.statsPointRequirements || { goals: 1, assists: 1, saves: 2 };
     const requirements = D.site.statsPointRequirements;
     const requirementInput = (key, label) => field(label, h('input', {
@@ -3418,7 +3433,14 @@ const MHLA = (() => {
     return [
       head('Settings'),
       h('div', { class: 'ed', style: 'max-width:640px' },
-        field('Season name', text(D.site, 'season', { maxlength: 40, placeholder: 'Season 1' }), 'Shows on the home page.'),
+        field('Active season', h('select', {
+          value: D.site.activeSeason,
+          onchange: e => { D.site.activeSeason = e.target.value; touch(); },
+        },
+          h('option', { value: 'season1', selected: D.site.activeSeason === 'season1' }, 'Season 1'),
+          h('option', { value: 'season2', selected: D.site.activeSeason === 'season2' }, 'Season 2')),
+        'Controls the home-page fixtures, results, standings and top scorers.'),
+        field('Season 1 name', text(D.site, 'season', { maxlength: 40, placeholder: 'Season 1' }), 'Shows on the home page when Season 1 is active.'),
         field('Discord invite link', text(D.site, 'discord', { maxlength: 300, placeholder: 'https://discord.gg/...' }), 'Must start with https://. Leave empty to hide the Join the Discord button.'),
         h('div', { class: 'point-requirements' },
           requirementInput('goals', 'Goals per point'),

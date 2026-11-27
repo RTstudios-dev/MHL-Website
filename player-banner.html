@@ -130,6 +130,7 @@
         <button type="button" class="banner-inventory-tab" data-category="helmet" aria-selected="false">Helmets</button>
         <button type="button" class="banner-inventory-tab" data-category="torso" aria-selected="false">Torso</button>
         <button type="button" class="banner-inventory-tab" data-category="stick" aria-selected="false">Stick</button>
+        <button type="button" class="banner-inventory-tab" data-category="border" aria-selected="false">Borders</button>
         <button type="button" class="banner-inventory-tab" data-category="stats" aria-selected="false">Stats</button>
       </div>
       <h2 id="inventoryTitle">Collectible Badges</h2>
@@ -178,6 +179,7 @@
       items: signup => signup.torsoSprites || [],
     },
     stick: { title: 'Stick', field: 'stickSpriteId', items: signup => signup.stickSprites || [] },
+    border: { title: 'Borders', field: 'borderSpriteId', items: signup => signup.borderSprites || [] },
     stats: { title: 'Stats', field: '', items: () => [] },
   };
   const stats = [
@@ -320,11 +322,12 @@
         if (config.poseId === pose.id) return;
         config.poseId = pose.id;
         for (const field of [
-          'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'bannerSpriteId',
+          'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'bannerSpriteId', 'borderSpriteId',
         ]) {
           const items = [
             ...(signup.helmetSprites || []), ...(signup.torsoSprites || []),
             ...(signup.stickSprites || []), ...(signup.bannerSprites || []),
+            ...(signup.borderSprites || []),
           ];
           if (!items.some(item => item.id === config[field] && item.poseId === pose.id))
             config[field] = '';

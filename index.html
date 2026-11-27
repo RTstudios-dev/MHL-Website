@@ -26,19 +26,17 @@
   <p id="season">Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.</p>
   <div class="facts" aria-label="League totals">
     <div><b id="fTeams" class="num">0</b><small>Teams</small></div>
-    <div><b id="fSeries" class="num">0</b><small>Games played</small></div>
-    <div><b id="fGoals" class="num">0</b><small>Goals</small></div>
+    <div><b id="fActivePlayers" class="num">0</b><small>Active players</small></div>
+    <div><b id="fGoals" class="num">0</b><small>Goals tracked</small></div>
   </div>
 </div>
-<div class="ticker" id="ticker" aria-label="Latest results" hidden></div>
 <section class="home-showcase" aria-label="Explore the league">
-  <section class="showcase-card mast-player-panel showcase-player is-sign-in" id="homePlayerPanel" aria-label="Player banner">
+  <a class="showcase-card showcase-player is-sign-in" id="homePlayerPanel" href="/player-login" aria-label="Player banner">
     <div class="mast-player-preview" id="homePlayerPreview" aria-label="Your player banner" hidden>
       <div class="mast-player-canvas" id="homePlayerCanvas"></div>
     </div>
-    <a class="btn mast-player-action" id="homePlayerAction" href="/player-login">Sign in to edit player banner</a>
-    <p class="mast-player-status" id="homePlayerStatus" role="status" hidden></p>
-  </section>
+    <p class="mast-player-status" id="homePlayerStatus" role="status">Sign in to edit your player banner</p>
+  </a>
   <a class="showcase-card showcase-link showcase-season" href="/season-2">
     <span class="showcase-art"><img src="/mhl-league.png" alt="MHL League"></span>
     <h2>MHL Season 2</h2>
@@ -50,6 +48,7 @@
     <p>In-Game Player Banners, Automated Stat Tracking, Fully customisable</p>
   </a>
 </section>
+<div class="ticker" id="ticker" aria-label="Latest results" hidden></div>
 <div class="home">
   <div>
     <section class="block" aria-labelledby="hNext">
@@ -85,27 +84,40 @@
   const $ = id => document.getElementById(id);
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('next'), 'the league data'); }
-  const { esc } = MHL, tb = D.table;
-  if (D.site.season) $('season').textContent = D.site.season + '. Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.';
+  const seasonTwoActive = D.site.activeSeason === 'season2';
+  const activeData = seasonTwoActive ? {
+    ...D,
+    rounds: D.season2Rounds,
+    matches: D.season2Matches,
+    R: Object.fromEntries(D.season2Rounds.map(round => [round.id, round])),
+  } : D;
+  const tb = seasonTwoActive ? MHL.compute(activeData) : D.table;
+  const activeTotals = seasonTwoActive ? MHL.playerTotals(activeData) : null;
+  const activePlayers = seasonTwoActive
+    ? D.players.map(player => ({ ...player, ...activeTotals[player.id] }))
+    : D.players;
+  const { esc } = MHL;
+  const seasonName = seasonTwoActive ? 'Season 2' : D.site.season || 'Season 1';
+  $('season').textContent = seasonName + '. Regular-season and Quarter Finals are best-of-3; Semi Finals are best-of-5 and Finals are best-of-7.';
   $('fTeams').textContent = D.teams.length;
-  $('fSeries').textContent = tb.gamesPlayed;
+  $('fActivePlayers').textContent = D.activePlayerCount;
   $('fGoals').textContent = tb.goals;
 
   // latest results, newest first
-  const done = D.matches.filter(m => MHL.played(m, D)).sort(MHL.byDate).reverse().slice(0, 12);
+  const done = activeData.matches.filter(m => MHL.played(m, activeData)).sort(MHL.byDate).reverse().slice(0, 12);
   if (done.length) {
     $('ticker').hidden = false;
     $('ticker').innerHTML = done.map(m => {
-      const st = MHL.state(m, MHL.bestOf(D, m)), A = D.T[m.a], B = D.T[m.b], aw = st.wa > st.wb;
-      const r = D.R[m.round];
+      const st = MHL.state(m, MHL.bestOf(activeData, m)), A = D.T[m.a], B = D.T[m.b], aw = st.wa > st.wb;
+      const r = activeData.R[m.round];
       return `<a class="tk" href="/matches"><span class="lab">${esc(r ? r.name : MHL.fmtDate(m.date))}</span>
         <span class="t${aw ? ' w' : ''}">${esc(MHL.code(A))}</span><span class="n${aw ? ' w' : ''}">${st.wa}</span>
         <span class="t${aw ? '' : ' w'}">${esc(MHL.code(B))}</span><span class="n${aw ? '' : ' w'}">${st.wb}</span></a>`;
     }).join('');
   }
 
-  const next = D.matches.filter(m => !MHL.played(m, D)).sort(MHL.byDate).slice(0, 4);
-  $('next').innerHTML = next.length ? `<div class="sbs">${next.map(m => MHL.scoreboard(m, D)).join('')}</div>`
+  const next = activeData.matches.filter(m => !MHL.played(m, activeData)).sort(MHL.byDate).slice(0, 4);
+  $('next').innerHTML = next.length ? `<div class="sbs">${next.map(m => MHL.scoreboard(m, activeData)).join('')}</div>`
     : MHL.empty('No matches scheduled', done.length ? 'Every series so far is finished. New fixtures appear here.' : 'Fixtures appear here once they are added.');
 
   const post = [...D.news].sort((x, y) => (y.pinned - x.pinned) || y.date.localeCompare(x.date))[0];
@@ -115,14 +127,14 @@
     $('news').innerHTML = `<article class="newsbox"><time datetime="${esc(post.date)}">${esc(MHL.fmtDate(post.date))}</time><h3>${esc(post.title)}</h3><div class="prose">${MHL.prose(first)}</div></article>`;
   }
 
-  const playoffFinishes = Object.fromEntries(tb.sorted.map(r => [r.t.id, MHL.playoffFinish(D, r.t.id)]));
+  const playoffFinishes = Object.fromEntries(tb.sorted.map(r => [r.t.id, MHL.playoffFinish(activeData, r.t.id)]));
   const homeRows = tb.sorted.filter((r, i) => i < 6 || playoffFinishes[r.t.id]);
   $('table').innerHTML = tb.sorted.length ? `<div class="tbl-wrap"><table class="tbl mini">
     <thead><tr><th class="pos" scope="col">#</th><th class="l" scope="col">Team</th><th scope="col" title="Regular-season series played">SP</th><th scope="col">PTS</th><th scope="col">Playoff</th></tr></thead>
     <tbody>${homeRows.map(r => `<tr><td class="pos" data-label="#">${r.place}</td><td class="l" data-label="Team"><span class="team">${MHL.badge(r.t)}${MHL.teamLink(r.t)}</span></td><td data-label="SP">${r.sp}</td><td class="pts" data-label="PTS">${r.pts}</td><td data-label="Playoff">${esc(playoffFinishes[r.t.id] || '—')}</td></tr>`).join('')}</tbody>
   </table></div>` : MHL.empty('No teams yet', 'The table fills in as teams are added.');
 
-  const top = [...D.players].sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name)).filter(p => p.g + p.a > 0).slice(0, 5);
+  const top = [...activePlayers].sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name)).filter(p => p.g + p.a > 0).slice(0, 5);
   $('scorers').innerHTML = top.length ? `<div class="lead-mini">${top.map((p, i) => `<div class="lm"><span class="r">${i + 1}</span>${MHL.badge(D.T[p.team])}<span class="nm">${esc(p.name)}<small>${p.g} G, ${p.a} A</small></span><span class="v">${p.g + p.a}</span></div>`).join('')}</div>`
     : MHL.empty('No points yet', 'Goals and assists show here once they are entered.');
 })();
@@ -133,22 +145,22 @@
   const preview = document.getElementById('homePlayerPreview');
   const viewport = preview;
   const canvas = document.getElementById('homePlayerCanvas');
-  const action = document.getElementById('homePlayerAction');
   const status = document.getElementById('homePlayerStatus');
   const showSignIn = () => {
     panel.classList.add('is-sign-in');
     preview.hidden = true;
-    status.hidden = true;
-    action.href = '/player-login';
-    action.textContent = 'Sign in to edit player banner';
+    status.hidden = false;
+    status.textContent = 'Sign in to edit your player banner';
+    panel.href = '/player-login';
+    panel.setAttribute('aria-label', 'Sign in to edit your player banner');
   };
   const showError = message => {
     panel.classList.remove('is-sign-in');
     preview.hidden = true;
     status.hidden = false;
     status.textContent = message;
-    action.href = '/player-login';
-    action.textContent = 'Open Player Profile';
+    panel.href = '/player-login';
+    panel.setAttribute('aria-label', message);
   };
 
   try {
@@ -170,8 +182,8 @@
       panel.classList.remove('is-sign-in');
       status.hidden = false;
       status.textContent = 'Link a player signup to display your banner.';
-      action.href = '/player-banner';
-      action.textContent = 'Edit Player Banner';
+      panel.href = '/player-banner';
+      panel.setAttribute('aria-label', 'Link a player signup to display your banner');
       return;
     }
     if (!signupResponse.ok) throw new Error(result.error || 'Could not load your player banner.');
@@ -179,8 +191,8 @@
     panel.classList.remove('is-sign-in');
     preview.hidden = false;
     status.hidden = true;
-    action.href = '/player-banner';
-    action.textContent = 'Edit Player Banner';
+    panel.href = '/player-banner';
+    panel.setAttribute('aria-label', 'Your player banner. Open to edit.');
     window.MHLPlayerBanner.render(viewport, canvas, result.signup);
     const fitBanner = () => window.MHLPlayerBanner.fit(viewport, canvas);
     window.addEventListener('resize', fitBanner);

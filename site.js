@@ -4,12 +4,11 @@
   const esc = M.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const NAV = [
-    ['/', 'Home'], ['/matches', 'Matches'], ['/standings', 'Standings'], ['/teams', 'Teams'],
-    ['/players', 'Player Stats'], ['/news', 'News'], ['/rules', 'Rules'],
-    ['/season-2', 'Season 2'], ['/season-2-players', 'Season 2 Players'], ['/sign-up', 'Sign Up'], ['/admin', 'Admin'],
+    ['/', 'Home'], ['/league', 'League'], ['/players', 'Player Stats'], ['/news', 'News'], ['/rules', 'Rules'],
+    ['/season-2-players', 'Season 2 Players'],
   ];
   const here = location.pathname.replace(/\/+$/, '') || '/';
-  const current = here.startsWith('/team/') ? '/teams' : here;
+  const current = here.startsWith('/team/') || ['/matches', '/standings', '/teams'].includes(here) ? '/league' : here;
   const draftBoard = '/season-2-players';
   const cur = href => href === current ? ' aria-current="page"' : '';
   let checkingDraftTurn = false;
@@ -31,7 +30,7 @@
     const session = await sessionResponse.json();
     if (!session.authenticated) {
       steamLoginButton.classList.remove('is-profile');
-      steamLoginButton.textContent = 'Steam Login in';
+      steamLoginButton.innerHTML = '<img class="header-service-logo" src="/steam-logo.png" alt="">';
       steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
       steamLoginButton.removeAttribute('title');
       return;
@@ -59,13 +58,16 @@
   };
   function shell() {
     document.getElementById('mtop').innerHTML = `
-      <a class="top-brand" href="/" aria-label="MHL home">${wordmark}<span>Miniature Hockey League</span></a>
+      <a class="top-brand" href="/" aria-label="MHL home">
+        <span class="top-brand-mark">${wordmark}</span>
+        <span class="top-brand-title"><span>Miniature</span><span>Hockey League</span></span>
+      </a>
       <nav class="top-nav" aria-label="Main">${NAV.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')}</nav>
-      <div class="top-actions"><span id="discordSlot"></span></div>`;
+      <div class="top-actions"><a class="btn top-signup" href="/sign-up">Sign Up</a><span id="discordSlot"></span></div>`;
     steamLoginButton = document.createElement('a');
-    steamLoginButton.className = 'btn steam-login-top';
+    steamLoginButton.className = 'header-icon-link steam-login-top';
     steamLoginButton.href = '/player-login';
-    steamLoginButton.textContent = 'Steam Login in';
+    steamLoginButton.innerHTML = '<img class="header-service-logo" src="/steam-logo.png" alt="">';
     steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
     document.querySelector('.top-actions').appendChild(steamLoginButton);
     M.refreshPlayerButton().catch(error => console.error('Could not update the Steam profile button:', error));
@@ -89,7 +91,7 @@
     }
     const d = D.site && D.site.discord;
     if (d) {
-      document.getElementById('discordSlot').outerHTML = `<a class="btn" href="${esc(d)}" target="_blank" rel="noopener">Join the Discord</a>`;
+      document.getElementById('discordSlot').outerHTML = `<a class="header-icon-link" href="${esc(d)}" target="_blank" rel="noopener" aria-label="Join the Discord" title="Join the Discord"><img class="header-service-logo" src="/discord-logo.png" alt=""></a>`;
     }
   }
 

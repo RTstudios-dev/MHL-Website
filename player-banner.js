@@ -126,6 +126,7 @@
       helmet: { items: signup.helmetSprites || [], configKey: 'helmetSpriteId' },
       torso: { items: signup.torsoSprites || [], configKey: 'torsoSpriteId' },
       stick: { items: signup.stickSprites || [], configKey: 'stickSpriteId' },
+      border: { items: signup.borderSprites || [], configKey: 'borderSpriteId' },
     };
     if (activePoseId) {
       Object.values(collections).forEach(collection => {
@@ -133,11 +134,12 @@
       });
     }
     const customLayers = Array.isArray(signup.bannerLayers) ? signup.bannerLayers : [];
-    const defaultOrder = ['badges', 'stick', 'torso', 'helmet'];
-    const validKeys = new Set(['helmet', 'torso', 'stick', 'badges', ...customLayers.map(layer => `custom:${layer.id}`)]);
+    const defaultOrder = ['border', 'badges', 'stick', 'torso', 'helmet'];
+    const validKeys = new Set(['border', 'helmet', 'torso', 'stick', 'badges', ...customLayers.map(layer => `custom:${layer.id}`)]);
     const layerOrder = Array.isArray(defaults.layerOrder)
       ? defaults.layerOrder.filter((key, index, order) => validKeys.has(key) && order.indexOf(key) === index)
       : [];
+    if (!layerOrder.includes('border')) layerOrder.unshift('border');
     defaultOrder.forEach(key => { if (!layerOrder.includes(key)) layerOrder.push(key); });
     customLayers.forEach(layer => {
       const key = `custom:${layer.id}`;
@@ -172,7 +174,7 @@
         const background = pairedBackgroundFor(item);
         addImage(background, `sprite:${background && background.id || 'background'}`, zIndex);
       }
-      addImage(item, `sprite:${item && item.id || key}`, zIndex,
+      addImage(item, `sprite:${item && item.id || key}`, key === 'border' ? 250 : zIndex,
         ['helmet', 'torso', 'stick', 'puck'].includes(key) ? key : '');
     });
 
