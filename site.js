@@ -132,7 +132,9 @@
         if (notification.poseId) query.set('pose', notification.poseId);
       }
       link.href = `/player-banner?${query.toString()}`;
-      link.textContent = `${categories[notification.category] || 'Component'} unlocked: ${notification.title}`;
+      link.textContent = notification.campaignId
+        ? notification.title
+        : `${categories[notification.category] || 'Component'} unlocked: ${notification.title}`;
       if (!notification.read) {
         const indicator = document.createElement('span');
         indicator.className = 'notification-unread-indicator';
@@ -168,6 +170,12 @@
         });
       });
       item.append(link);
+      if (notification.description) {
+        const description = document.createElement('p');
+        description.className = 'notification-description';
+        description.textContent = notification.description;
+        item.append(description);
+      }
       list.append(item);
     });
   };

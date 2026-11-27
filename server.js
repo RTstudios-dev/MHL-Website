@@ -477,6 +477,10 @@ const modRosterSnapshot = data => {
       const badge = badgesById.get(id);
       return badge ? badge.image : '';
     });
+    const notifications = signup.bannerNotificationState
+      && Array.isArray(signup.bannerNotificationState.notifications)
+      ? signup.bannerNotificationState.notifications
+      : [];
     const defaultBadge = data.badges.find(badge => badge.id === defaults.badge);
     if (!selectedBadges[0] && defaultBadge && defaultBadge.image)
       selectedBadges[0] = defaultBadge.image;
@@ -490,6 +494,8 @@ const modRosterSnapshot = data => {
     players.push({
       steamId,
       name: signup.name,
+      unreadNotificationCount: notifications.filter(
+        notification => notification && notification.read !== true).length,
       position: signup.position,
       teamName: team ? team.name : '',
       photo: okImage(signup.photo) ? signup.photo : '',
@@ -1110,6 +1116,20 @@ const sanitizeBannerConfig = value => {
   };
 };
 const BANNER_NOTIFICATION_CATEGORIES = new Set(['badges', 'pose', 'helmet', 'torso', 'stick', 'border']);
+const BANNER_NOTIFICATION_COLLECTIONS = {
+  badges: 'badges',
+  pose: 'bannerPoses',
+  helmet: 'helmetSprites',
+  torso: 'torsoSprites',
+  stick: 'stickSprites',
+  border: 'borderSprites',
+};
+const sanitizeBannerItemNotification = item => ({
+  notificationTitle: str(item.notificationTitle, 120),
+  notificationDescription: String(item.notificationDescription ?? '').trim().slice(0, 500),
+  notificationCampaignId: str(item.notificationCampaignId, 40),
+  notificationSentAt: str(item.notificationSentAt, 40),
+});
 const sanitizeBannerNotificationState = value => {
   const state = value && typeof value === 'object' ? value : {};
   const notifications = (Array.isArray(state.notifications) ? state.notifications : [])
@@ -1126,6 +1146,8 @@ const sanitizeBannerNotificationState = value => {
         category,
         componentId,
         title,
+        description: String(notification.description ?? '').trim().slice(0, 500),
+        campaignId: str(notification.campaignId, 40),
         poseId: str(notification.poseId, 40),
         createdAt: str(notification.createdAt, 40),
         read: notification.read === true,
@@ -1140,6 +1162,47 @@ const sanitizeBannerNotificationState = value => {
     observedUnlocks,
     notifications,
   };
+};
+const bannerNotificationCampaignFor = (data, component) => {
+  const collection = BANNER_NOTIFICATION_COLLECTIONS[component.category];
+  const item = collection && (data[collection] || []).find(entry =>
+    entry.id === component.componentId);
+  if (!item || !item.notificationCampaignId || !item.notificationSentAt ||
+      !item.notificationTitle || !item.notificationDescription)
+    return null;
+  return {
+    campaignId: item.notificationCampaignId,
+    title: item.notificationTitle,
+    description: item.notificationDescription,
+  };
+};
+const appendBannerCampaignNotification = (signup, component, campaign) => {
+  const state = signup.bannerNotificationState;
+  if (state.notifications.some(notification =>
+    notification.campaignId === campaign.campaignId)) return false;
+  state.notifications.push({
+    id: crypto.randomUUID(),
+    category: component.category,
+    componentId: component.componentId,
+    title: campaign.title,
+    description: campaign.description,
+    campaignId: campaign.campaignId,
+    poseId: component.poseId,
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+  state.notifications = state.notifications.slice(-MAX_BANNER_NOTIFICATIONS);
+  return true;
+};
+const deliverBannerCampaignsForSignup = (data, signup, components = unlockedBannerComponentsFor(data, signup)) => {
+  signup.bannerNotificationState = sanitizeBannerNotificationState(signup.bannerNotificationState);
+  let changed = false;
+  for (const component of components) {
+    const campaign = bannerNotificationCampaignFor(data, component);
+    if (campaign && appendBannerCampaignNotification(signup, component, campaign))
+      changed = true;
+  }
+  return changed;
 };
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
@@ -1318,6 +1381,7 @@ function sanitize(d) {
       id,
       name: str(source.name, 80) || 'Badge',
       description: str(source.description, 240),
+      ...sanitizeBannerItemNotification(source),
       image: okBadgeImage(source.image) ? source.image : '',
       scale: Math.max(0.1, Math.min(5, Number.isFinite(Number(source.scale)) ? Number(source.scale) : 1)),
       requirements: {
@@ -1373,6 +1437,7 @@ function sanitize(d) {
     return {
       id,
       name: str(source.name, 80) || 'Pose',
+      ...sanitizeBannerItemNotification(source),
       previewImage: okSpriteImage(source.previewImage) ? source.previewImage : '',
       requirements: Object.fromEntries(poseRequirementKeys.map(key =>
         [key, num(requirements[key], Number.MAX_SAFE_INTEGER)])),
@@ -1424,6 +1489,7 @@ function sanitize(d) {
       return {
         id,
         name: str(source.name, 80) || 'Sprite',
+        ...sanitizeBannerItemNotification(source),
         poseId: poseIndependent ? '' : poseIds.has(str(source.poseId, 40)) ? str(source.poseId, 40) : defaultPose.id,
         description: str(source.description, 240),
         image: okSpriteImage(source.image) ? source.image : '',
@@ -2549,33 +2615,18 @@ const server = http.createServer(async (req, res) => {
       const data = readData();
       const signup = signupForPlayer(data, player);
       if (!signup) return send(res, 404, { error: 'Could not find one signup linked to this Steam profile.' });
-      const state = signup.bannerNotificationState;
       const unlocked = unlockedBannerComponentsFor(data, signup);
+      const campaignChanged = deliverBannerCampaignsForSignup(data, signup, unlocked);
+      const state = signup.bannerNotificationState;
       const observed = new Set(state.observedUnlocks);
-      let changed = false;
+      let changed = campaignChanged;
       if (!state.initialized) {
         unlocked.forEach(component => observed.add(component.key));
         state.initialized = true;
         changed = true;
-      } else {
-        unlocked.forEach(component => {
-          if (observed.has(component.key)) return;
-          observed.add(component.key);
-          state.notifications.push({
-            id: crypto.randomUUID(),
-            category: component.category,
-            componentId: component.componentId,
-            title: component.title,
-            poseId: component.poseId,
-            createdAt: new Date().toISOString(),
-            read: false,
-          });
-          changed = true;
-        });
       }
       if (changed) {
         state.observedUnlocks = [...observed].slice(-MAX_OBSERVED_BANNER_UNLOCKS);
-        state.notifications = state.notifications.slice(-MAX_BANNER_NOTIFICATIONS);
         writeData(data);
       }
       return send(res, 200, {
@@ -2812,7 +2863,13 @@ const server = http.createServer(async (req, res) => {
         return send(res, 429, { error: 'Too many roster requests. Try again shortly.' });
       }
 
-      const roster = modRosterSnapshot(readData());
+      const data = readData();
+      let campaignsChanged = false;
+      data.signups.forEach(signup => {
+        if (deliverBannerCampaignsForSignup(data, signup)) campaignsChanged = true;
+      });
+      if (campaignsChanged) writeData(data);
+      const roster = modRosterSnapshot(data);
       if (roster.error) return send(res, 409, { error: roster.error });
       return send(res, 200, roster);
     }
@@ -2830,7 +2887,13 @@ const server = http.createServer(async (req, res) => {
         return send(res, 401, { error: 'A valid mod API key is required.' });
       }
 
-      const roster = modRosterSnapshot(readData());
+      const data = readData();
+      let campaignsChanged = false;
+      data.signups.forEach(signup => {
+        if (deliverBannerCampaignsForSignup(data, signup)) campaignsChanged = true;
+      });
+      if (campaignsChanged) writeData(data);
+      const roster = modRosterSnapshot(data);
       if (roster.error) return send(res, 409, { error: roster.error });
       return send(res, 200, roster);
     }
@@ -2864,6 +2927,52 @@ const server = http.createServer(async (req, res) => {
       if (result.error) return send(res, 409, { error: result.error });
       if (result.accepted > 0) writeData(data);
       return send(res, 200, result);
+    }
+    if (p === '/api/admin/banner-notifications/send' && req.method === 'POST') {
+      if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
+      const payload = JSON.parse(await readBody(req, 10_000) || '{}');
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+        return send(res, 400, { error: 'The notification request is invalid.' });
+      const category = str(payload.category, 20);
+      const collection = BANNER_NOTIFICATION_COLLECTIONS[category];
+      const itemId = str(payload.itemId, 40);
+      if (!collection || !itemId)
+        return send(res, 400, { error: 'Choose a valid banner item.' });
+
+      const data = readData();
+      const item = (data[collection] || []).find(entry => entry.id === itemId);
+      if (!item) return send(res, 404, { error: 'That banner item could not be found.' });
+      if (item.notificationCampaignId)
+        return send(res, 409, { error: 'A notification has already been sent for this item.' });
+      const title = str(item.notificationTitle, 120);
+      const description = String(item.notificationDescription ?? '').trim().slice(0, 500);
+      if (!title || !description)
+        return send(res, 400, { error: 'Add a notification title and description before sending.' });
+
+      const campaign = {
+        campaignId: crypto.randomUUID(),
+        title,
+        description,
+      };
+      item.notificationTitle = title;
+      item.notificationDescription = description;
+      item.notificationCampaignId = campaign.campaignId;
+      item.notificationSentAt = new Date().toISOString();
+      let recipientCount = 0;
+      data.signups.forEach(signup => {
+        signup.bannerNotificationState = sanitizeBannerNotificationState(signup.bannerNotificationState);
+        const component = unlockedBannerComponentsFor(data, signup).find(entry =>
+          entry.category === category && entry.componentId === itemId);
+        if (component && appendBannerCampaignNotification(signup, component, campaign))
+          recipientCount++;
+      });
+      writeData(data);
+      return send(res, 200, {
+        ok: true,
+        campaignId: campaign.campaignId,
+        sentAt: item.notificationSentAt,
+        recipientCount,
+      });
     }
     if (p === '/api/admin/import-stats' && req.method === 'POST') {
       if (!isAdmin(req)) return send(res, 401, { error: 'Not logged in' });
@@ -2930,6 +3039,15 @@ const server = http.createServer(async (req, res) => {
         data.signups = data.signups.map(({ steam, steamId, bannerNotificationState, ...signup }) => signup);
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
         data.players = data.players.map(({ steam, ...player }) => player);
+        for (const collection of Object.values(BANNER_NOTIFICATION_COLLECTIONS)) {
+          data[collection] = data[collection].map(({
+            notificationTitle,
+            notificationDescription,
+            notificationCampaignId,
+            notificationSentAt,
+            ...item
+          }) => item);
+        }
         data.badges = data.badges.map(({ manualPlayerIds, ...badge }) => badge);
         delete data.playerGroups;
         delete data.bannedSteamIds;
@@ -3027,6 +3145,17 @@ const server = http.createServer(async (req, res) => {
         players: incomingPlayers.filter(player =>
           !(player && removedExcludedSignupIds.has(player.signupId))),
       });
+      for (const collection of Object.values(BANNER_NOTIFICATION_COLLECTIONS)) {
+        const existingById = new Map((current[collection] || []).map(item => [item.id, item]));
+        (clean[collection] || []).forEach(item => {
+          const existing = existingById.get(item.id);
+          if (!existing || !existing.notificationCampaignId) return;
+          item.notificationTitle = existing.notificationTitle;
+          item.notificationDescription = existing.notificationDescription;
+          item.notificationCampaignId = existing.notificationCampaignId;
+          item.notificationSentAt = existing.notificationSentAt;
+        });
+      }
       const existingBans = Array.isArray(current.bannedSteamIds)
         ? current.bannedSteamIds.filter(value => /^\d{17}$/.test(String(value)))
         : [];
@@ -3125,6 +3254,8 @@ const server = http.createServer(async (req, res) => {
           signup.cardArtwork = previous.cardArtwork || '';
         if (previous && (!rawSignup || !Object.prototype.hasOwnProperty.call(rawSignup, 'bannerConfig')))
           signup.bannerConfig = previous.bannerConfig || sanitizeBannerConfig(null);
+        if (previous)
+          signup.bannerNotificationState = sanitizeBannerNotificationState(previous.bannerNotificationState);
       });
       clean.signups = clean.signups.slice(0, 5000);
       const remainingSignupIds = new Set(clean.signups.map(signup => signup.id));

@@ -195,6 +195,11 @@
     skaterGames: 'Skater Games', goalPerfectGames: 'Games With 100% Goal Percentage',
     value: 'Value',
   };
+  const SHORT_NAMES = {
+    p: 'P', w: 'W', g: 'G', vg: 'VG', s: 'S', a: 'A', shots: 'Shots',
+    goalPercentage: 'Goal %', goalieGames: 'Goalie Games', skaterGames: 'Skater Games',
+    goalPerfectGames: '100% Goal% Games', value: 'Value',
+  };
   const applyStatsSource = () => {
     for (const player of P) {
       const stats = source === 'season2' ? player.seasonTwoStats : player.pugStats;
@@ -232,21 +237,24 @@
     return filter === 'goalie' ? goalieValue
       : filter === 'skater' ? skaterValue : Math.max(skaterValue, goalieValue);
   };
-  const metricValue = player => key === 'p' ? player.p
-    : key === 'w' ? player.w
-      : key === 'g' ? player.g
-        : key === 'vg' ? player.vg
-        : key === 's' ? player.s
-          : key === 'a' ? player.a
-            : key === 'shots' ? player.shots
-              : key === 'goalPercentage' ? player.goalPercentage
-                : key === 'goalieGames' ? player.goalieGames
-                  : key === 'skaterGames' ? player.skaterGames
-                    : key === 'goalPerfectGames' ? player.goalPerfectGames
-                      : valueForCurrentFilter(player);
-  const formattedMetricValue = player => key === 'goalPercentage'
-    ? `${metricValue(player).toFixed(1)}%`
-    : metricValue(player);
+  const metricValueFor = (player, metric) => metric === 'p' ? player.p
+    : metric === 'w' ? player.w
+      : metric === 'g' ? player.g
+        : metric === 'vg' ? player.vg
+          : metric === 's' ? player.s
+            : metric === 'a' ? player.a
+              : metric === 'shots' ? player.shots
+                : metric === 'goalPercentage' ? player.goalPercentage
+                  : metric === 'goalieGames' ? player.goalieGames
+                    : metric === 'skaterGames' ? player.skaterGames
+                      : metric === 'goalPerfectGames' ? player.goalPerfectGames
+                        : valueForCurrentFilter(player);
+  const metricValue = player => metricValueFor(player, key);
+  const formattedMetricValue = (player, metric = key) => {
+    const value = metricValueFor(player, metric);
+    return metric === 'goalPercentage' ? `${value.toFixed(1)}%`
+      : metric === 'value' ? formatValue(value) : value;
+  };
   const rank = () => {
     const list = [...filtered()];
     return list.sort((x, y) => (direction === 'high' ? metricValue(y) - metricValue(x) : metricValue(x) - metricValue(y))
@@ -310,11 +318,11 @@
         : MHL.empty('No Season 2 players yet', 'Season 2 signups appear here once they are added.');
       return;
     }
-    const showGoals = filter !== 'goalie';
-    const showSaves = filter !== 'skater';
+    const statColumns = [...new Set([key, 'a', 'w'])];
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
-        <th class="l" scope="col">Team</th><th scope="col">Skater Value (€)</th><th scope="col">Goalie Value (€)</th><th scope="col">W:L</th><th scope="col">A</th>${showGoals ? '<th scope="col">G</th><th scope="col">VG</th>' : ''}${showSaves ? '<th scope="col">S</th>' : ''}<th scope="col">Shots</th><th scope="col">Goal %</th><th scope="col">Goalie Games</th><th scope="col">Skater Games</th><th scope="col">100% Goal% Games</th><th scope="col">P</th></tr></thead>
+        <th class="l" scope="col">Team</th>${statColumns.map(stat =>
+          `<th scope="col">${esc(SHORT_NAMES[stat])}</th>`).join('')}</tr></thead>
       <tbody>${rows.map(player => `<tr data-player-id="${esc(player.id)}"><td class="l player-name-cell" data-label="Player"><span class="signup-person">${player.photo
         ? `<img src="${esc(player.photo)}" alt="">`
         : `<span class="avatar" aria-hidden="true">${esc((player.name || '?').slice(0, 1).toUpperCase())}</span>`}
@@ -322,19 +330,7 @@
         <td class="l" data-label="Discord username">${esc(player.discord || '—')}</td>
         <td data-label="Position">${esc(player.position || 'Unassigned')}</td>
         <td class="l" data-label="Team"><span class="team">${player.t ? `${MHL.badge(player.t)}${MHL.teamLink(player.t)}` : '—'}</span></td>
-        <td class="value-cell" data-label="Skater Value (€)">${formatValue(player.skaterValue)}</td>
-        <td class="value-cell" data-label="Goalie Value (€)">${formatValue(player.goalieValue)}</td>
-        <td class="player-stat-cell player-stat-value" data-label="W:L">${player.w}:${player.l}</td>
-        <td class="player-stat-cell player-stat-value" data-label="A">${player.a}</td>
-        ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="G">${player.g}</td>` : ''}
-        ${showGoals ? `<td class="player-stat-cell player-stat-value" data-label="Volley Goals">${player.vg}</td>` : ''}
-        ${showSaves ? `<td class="player-stat-cell player-stat-value" data-label="S">${player.s}</td>` : ''}
-        <td class="player-stat-cell player-stat-value" data-label="Shots">${player.shots}</td>
-        <td class="player-stat-cell player-stat-value" data-label="Goal Percentage">${player.goalPercentage.toFixed(1)}%</td>
-        <td class="player-stat-cell player-stat-value" data-label="Goalie Games">${player.goalieGames}</td>
-        <td class="player-stat-cell player-stat-value" data-label="Skater Games">${player.skaterGames}</td>
-        <td class="player-stat-cell player-stat-value" data-label="Games With 100% Goal Percentage">${player.goalPerfectGames}</td>
-        <td class="player-stat-cell player-stat-value" data-label="P">${player.p}</td></tr>`).join('')}</tbody>
+        ${statColumns.map(stat => `<td class="player-stat-cell player-stat-value" data-label="${esc(NAMES[stat])}">${formattedMetricValue(player, stat)}</td>`).join('')}</tr>`).join('')}</tbody>
     </table></div>`;
   }
   $('statSelect').addEventListener('change', event => {
