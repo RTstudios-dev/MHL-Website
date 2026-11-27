@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#111013">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -24,6 +24,7 @@
   <h1>Teams</h1>
   <p>Open a team for its roster, results and upcoming matches.</p>
 </div>
+<div id="seasons" class="seg" role="group" aria-label="Team season"></div>
 <div id="list"><div class="sk"></div></div>
 </main>
 </div>
@@ -37,22 +38,52 @@
   const $ = id => document.getElementById(id);
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('list'), 'the teams'); }
-  const { esc } = MHL, S = D.table.S;
-  if (!D.teams.length) { $('list').innerHTML = MHL.empty('No teams yet', 'Teams appear here once they are added.'); return; }
+  const { esc } = MHL;
+  let season = new URLSearchParams(location.search).get('season') === 'season2' ? 'season2' : 'season1';
   const ord = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
-  const roster = id => D.players.filter(p => p.team === id).length;
   const cap = Number(D.site && D.site.teamCap) || 0;
-  const spentByTeam = new Map();
-  (Array.isArray(D.draft && D.draft.picks) ? D.draft.picks : []).forEach(pick => {
-    spentByTeam.set(pick.teamId, (spentByTeam.get(pick.teamId) || 0) + (Number(pick.price) || 0));
-  });
   const formatEuro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-  $('list').innerHTML = `<div class="tgrid">${[...D.teams].sort((x, y) => x.name.localeCompare(y.name)).map(t => {
-    const r = S[t.id], n = roster(t.id), budget = Math.max(0, cap - (spentByTeam.get(t.id) || 0));
-    return `<a class="tile" href="${MHL.teamUrl(t)}" style="--c:${esc(t.color)}">${MHL.badge(t, 'md')}<div><h2>${esc(t.name)}</h2>
-      <p>${ord(r.place)} place, ${r.pts} pts</p><p>Series ${r.sw}-${r.sl}${n ? `, ${n} player${n > 1 ? 's' : ''}` : ''}</p>
-      <p>Draft budget ${formatEuro.format(budget)} remaining</p></div></a>`;
-  }).join('')}</div>`;
+  const render = () => {
+    const isSeason2 = season === 'season2';
+    const view = isSeason2 ? D.season2View : D;
+    const teams = view.teams;
+    document.body.classList.toggle('season2-theme', isSeason2);
+    $('seasons').innerHTML = [
+      ['season1', 'Season 1 Teams'],
+      ['season2', 'Season 2 Teams'],
+    ].map(([value, label]) => `<button type="button" data-season="${value}" aria-pressed="${value === season}">${label}</button>`).join('');
+    if (!teams.length) {
+      $('list').innerHTML = MHL.empty(`No ${isSeason2 ? 'Season 2 ' : ''}teams yet`, 'Teams appear here once they are added.');
+      return;
+    }
+    const spentByTeam = new Map();
+    (Array.isArray(D.draft && D.draft.picks) ? D.draft.picks : []).forEach(pick => {
+      spentByTeam.set(pick.teamId, (spentByTeam.get(pick.teamId) || 0) + (Number(pick.price) || 0));
+    });
+    $('list').innerHTML = `<div class="tgrid">${[...teams].sort((x, y) => x.name.localeCompare(y.name)).map(team => {
+      const record = view.table.S[team.id];
+      const rosterCount = isSeason2
+        ? D.signups.filter(signup => signup.team === team.id).length
+        : D.players.filter(player => player.team === team.id).length;
+      const roster = rosterCount ? `, ${rosterCount} player${rosterCount === 1 ? '' : 's'}` : '';
+      const budget = Math.max(0, cap - (spentByTeam.get(team.id) || 0));
+      const seasonBudget = isSeason2 ? `<p>Draft budget ${formatEuro.format(budget)} remaining</p>` : '';
+      return `<a class="tile" href="${MHL.teamUrl(team, season)}" style="--c:${esc(team.color)}">${MHL.badge(team, 'md')}<div><h2>${esc(team.name)}</h2>
+        <p>${ord(record.place)} place, ${record.pts} pts</p><p>Series ${record.sw}-${record.sl}${roster}</p>
+        ${seasonBudget}</div></a>`;
+    }).join('')}</div>`;
+  };
+  $('seasons').addEventListener('click', event => {
+    const button = event.target.closest('button[data-season]');
+    if (!button) return;
+    season = button.dataset.season;
+    const url = new URL(location.href);
+    if (season === 'season2') url.searchParams.set('season', season);
+    else url.searchParams.delete('season');
+    history.replaceState(null, '', url.pathname + url.search);
+    render();
+  });
+  render();
 })();
 </script>
 </body>

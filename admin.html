@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/site.css">
 <style>
 :root{--danger:#e08474}
@@ -265,7 +265,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:1px soli
 <script>
 const MHLA = (() => {
   const root = document.getElementById('root');
-  let D = null, dirty = false, tab = 'teams', matchSeason = 'season1', playerFilter = '', playerSearch = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, season2TrackedStatsEdits = {}, trackedGameStatsEdits = {}, playerStatField = 'pug:goals', statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
+  let D = null, dirty = false, tab = 'teams', teamSeason = 'season1', matchSeason = 'season1', playerFilter = '', playerSearch = '', signupSort = 'value-desc', signupSearch = '', trackedStatsEdits = {}, season2TrackedStatsEdits = {}, trackedGameStatsEdits = {}, playerStatField = 'pug:goals', statsImportReports = null, statsImportMessage = '', bannerImportMessage = '';
   const bannerSectionOpen = {};
   const bannerCardOpen = new Map();
   const trackedGamePlayerSelections = new Map();
@@ -447,10 +447,18 @@ const MHLA = (() => {
       h('small', {}, 'Sets the size used on player cards. The circle is an editor-only 400 × 400 guide.'));
   };
   const text = (obj, key, attrs = {}) => h('input', { type: 'text', value: obj[key] ?? '', ...attrs, oninput: e => { obj[key] = e.target.value; touch(); attrs.after && attrs.after(); } });
-  const teamName = id => (D.teams.find(t => t.id === id) || {}).name || 'Unknown team';
+  const teamsForMatchSeason = () => matchSeason === 'season2' ? D.season2Teams : D.teams;
+  const teamName = (id, season = 'season1') => ((season === 'season2' ? D.season2Teams : D.teams).find(t => t.id === id) || {}).name || 'Unknown team';
   const matchRounds = () => matchSeason === 'season2' ? D.season2Rounds : D.rounds;
   const matchList = () => matchSeason === 'season2' ? D.season2Matches : D.matches;
-  const matchData = () => ({ ...D, rounds: matchRounds(), matches: matchList() });
+  const matchData = () => ({
+    ...D,
+    seasonKey: matchSeason,
+    teams: teamsForMatchSeason(),
+    T: Object.fromEntries(teamsForMatchSeason().map(team => [team.id, team])),
+    rounds: matchRounds(),
+    matches: matchList(),
+  });
   const matchSeasonToggle = () => h('div', { class: 'seg', role: 'group', 'aria-label': 'Match season' },
     [['season1', 'Season 1 matches'], ['season2', 'Season 2 matches']].map(([value, label]) =>
       h('button', { type: 'button', 'aria-pressed': String(matchSeason === value), onclick: () => {
@@ -910,6 +918,8 @@ const MHLA = (() => {
           dirty = false; await fetch('/api/logout', { method: 'POST' }); login();
         } }, 'Log out'))));
     const panel = h('main', { class: 'panel wrap' }, ({ teams, schedule: scheduledMatches, matches, players, season1, signups, badges, news, rules, logs, settings })[tab]());
+    document.body.classList.toggle('season2-theme',
+      (tab === 'teams' && teamSeason === 'season2') || (tab === 'matches' && matchSeason === 'season2') || tab === 'signups');
     root.replaceChildren(bar, panel);
     scrollTo(0, y);
   }
@@ -931,9 +941,48 @@ const MHLA = (() => {
         file));
   }
   function teams() {
+    D.season2Teams = Array.isArray(D.season2Teams) ? D.season2Teams : D.teams.map(team => ({ ...team }));
+    const seasonToggle = h('div', { class: 'seg', role: 'group', 'aria-label': 'Team season' },
+      [['season1', 'Season 1 Teams'], ['season2', 'Season 2 Teams']].map(([value, label]) =>
+        h('button', { type: 'button', 'aria-pressed': String(teamSeason === value), onclick: () => {
+          teamSeason = value;
+          draw();
+        } }, label)));
+    if (teamSeason === 'season1') {
+      const addSeason1Team = h('button', { class: 'btn sm', type: 'button', onclick: () => {
+        D.teams.push({ id: uid(), name: 'New team', short: '', color: '#c8102e', logo: '', photo: '', slug: '', captainSignupId: '' });
+        touch(); draw();
+      } }, 'Add team');
+      const cards = D.teams.length ? D.teams.map(team => h('div', { class: 'ed' },
+        h('div', { class: 'row teams-row' },
+          field('Team name', text(team, 'name', { maxlength: 40 })),
+          field('Short code', text(team, 'short', { maxlength: 4, style: 'text-transform:uppercase' })),
+          field('Colour', h('input', { type: 'color', value: team.color, oninput: e => { team.color = e.target.value; touch(); } })),
+          field('Page address', text(team, 'slug', { maxlength: 40, placeholder: 'made from the name' }))),
+        h('div', { class: 'imgs' }, imgPicker(team, 'logo', 'Logo'), imgPicker(team, 'photo', 'Team photo (landscape)'),
+          h('div', { class: 'acts', style: 'margin-left:auto' }, h('button', {
+            class: 'btn del sm', type: 'button',
+            onclick: () => {
+              const matches = D.matches.filter(match => match.a === team.id || match.b === team.id).length;
+              const players = D.players.filter(player => player.team === team.id).length;
+              if (!confirm(`Delete ${team.name}?` + (matches || players ? ` Its ${matches} Season 1 match(es) and ${players} roster player(s) are removed or unassigned.` : ''))) return;
+              D.teams = D.teams.filter(item => item !== team);
+              D.matches = D.matches.filter(match => match.a !== team.id && match.b !== team.id);
+              D.players = D.players.filter(player => player.signupId || player.team !== team.id);
+              D.players.forEach(player => { if (player.team === team.id) player.team = ''; });
+              touch(); draw();
+            },
+          }, 'Delete team'))))) : h('div', { class: 'empty' }, h('b', {}, 'No teams yet'), 'Press Add team to create the first one.');
+      return [
+        head('Teams', addSeason1Team),
+        seasonToggle,
+        h('p', { class: 'help' }, 'Season 1 teams are managed independently from Season 2 teams.'),
+        h('div', { class: 'team-list' }, cards),
+      ];
+    }
     D.draft = D.draft || { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] };
     const savedOrder = Array.isArray(D.draft.order) ? D.draft.order : [];
-    D.draft.order = D.teams.map((team, index) => D.teams.some(item => item.id === savedOrder[index]) ? savedOrder[index] : '');
+    D.draft.order = D.season2Teams.map((team, index) => D.season2Teams.some(item => item.id === savedOrder[index]) ? savedOrder[index] : '');
     D.draft.picks = Array.isArray(D.draft.picks) ? D.draft.picks : [];
     const formatEuro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
     const teamCap = Number(D.site && D.site.teamCap) || 0;
@@ -944,12 +993,12 @@ const MHLA = (() => {
     };
     const orderedTeams = D.draft.order.filter(Boolean);
     const missingCaptain = orderedTeams.some(id => {
-      const team = D.teams.find(item => item.id === id);
+      const team = D.season2Teams.find(item => item.id === id);
       return !team || !team.captainSignupId;
     });
     const add = h('button', { class: 'btn sm', type: 'button', disabled: D.draft.active, onclick: () => {
       const team = { id: uid(), name: 'New team', short: '', color: '#c8102e', logo: '', photo: '', slug: '', captainSignupId: '' };
-      D.teams.push(team); D.draft.order.push(''); touch(); draw();
+      D.season2Teams.push(team); D.draft.order.push(''); touch(); draw();
     } }, 'Add team');
     const toggleDraft = h('button', {
       class: 'btn sm', type: 'button',
@@ -966,13 +1015,13 @@ const MHLA = (() => {
           onchange: e => { D.draft.order[index] = e.target.value; D.draft.manualOrder = true; touch(); draw(); },
         },
           h('option', { value: '', selected: !teamId }, 'Choose team'),
-          D.teams.map(team => h('option', {
+          D.season2Teams.map(team => h('option', {
             value: team.id,
             selected: team.id === teamId,
             disabled: usedElsewhere(team.id),
           }, team.name))));
     });
-    const teamCards = D.teams.length ? D.teams.map(t => {
+    const teamCards = D.season2Teams.length ? D.season2Teams.map(t => {
       const teamPicks = D.draft.picks.filter(pick => pick.teamId === t.id);
       const spent = teamPicks.reduce((sum, pick) => sum + (Number(pick.price) || 0), 0);
       const assigned = D.signups.filter(signup => signup.team === t.id);
@@ -982,7 +1031,7 @@ const MHLA = (() => {
       },
         h('option', { value: '', selected: !t.captainSignupId }, 'Choose captain'),
         D.signups.map(signup => {
-          const usedByOther = D.teams.some(other => other !== t && other.captainSignupId === signup.id);
+          const usedByOther = D.season2Teams.some(other => other !== t && other.captainSignupId === signup.id);
           const accountLabel = signup.steamId ? '' : ' (Steam sign-in required)';
           return h('option', {
             value: signup.id,
@@ -1013,21 +1062,18 @@ const MHLA = (() => {
           h('div', { class: 'acts', style: 'margin-left:auto' }, h('button', {
             class: 'btn del sm', type: 'button', disabled: D.draft.active,
             onclick: () => {
-              const nm = [...D.matches, ...D.season2Matches].filter(m => m.a === t.id || m.b === t.id).length;
-              const np = D.players.filter(p => p.team === t.id).length;
+              const nm = D.season2Matches.filter(m => m.a === t.id || m.b === t.id).length;
+              const np = D.signups.filter(signup => signup.team === t.id).length;
               const picks = D.draft.picks.filter(pick => pick.teamId === t.id);
-              if (!confirm(`Delete ${t.name}?` + (nm || np || picks.length ? ` Its ${nm} match(es), ${np} roster player(s), and ${picks.length} draft pick(s) are removed too.` : ''))) return;
+              if (!confirm(`Delete ${t.name}?` + (nm || np || picks.length ? ` Its ${nm} Season 2 match(es), ${np} roster assignment(s), and ${picks.length} draft pick(s) are removed too.` : ''))) return;
               picks.forEach(pick => {
                 const signup = D.signups.find(item => item.id === pick.signupId);
                 if (signup && signup.team === t.id) signup.team = '';
               });
-              D.teams = D.teams.filter(x => x !== t);
-              D.draft.order = D.draft.order.map(id => id === t.id ? '' : id).slice(0, D.teams.length);
+              D.season2Teams = D.season2Teams.filter(x => x !== t);
+              D.draft.order = D.draft.order.map(id => id === t.id ? '' : id).slice(0, D.season2Teams.length);
               D.draft.picks = D.draft.picks.filter(pick => pick.teamId !== t.id);
-              D.matches = D.matches.filter(m => m.a !== t.id && m.b !== t.id);
               D.season2Matches = D.season2Matches.filter(m => m.a !== t.id && m.b !== t.id);
-              D.players = D.players.filter(p => p.signupId || p.team !== t.id);
-              D.players.forEach(player => { if (player.team === t.id) player.team = ''; });
               D.signups.forEach(signup => { if (signup.team === t.id) signup.team = ''; });
               touch(); draw();
             },
@@ -1035,6 +1081,7 @@ const MHLA = (() => {
     }) : h('div', { class: 'empty' }, h('b', {}, 'No teams yet'), 'Press Add team to create the first one.');
     return [
       head('Teams', add, toggleDraft),
+      seasonToggle,
       h('p', { class: 'help' }, 'The short code (2 to 4 letters) shows on scoreboards. The page address is the end of the team page link, for example /team/ice-giants. Captains must sign in with Steam. Fill the numbered draft slots manually; blank slots are skipped. Draft changes take effect after Save changes.'),
       !D.draft.active && !orderedTeams.length ? h('p', { class: 'help', role: 'status' }, 'Choose at least one team in the draft order before starting.') : null,
       !D.draft.active && orderedTeams.length && missingCaptain ? h('p', { class: 'help', role: 'status' }, 'Assign a Season 2 captain to each team selected in the draft order.') : null,
@@ -1042,7 +1089,7 @@ const MHLA = (() => {
         h('aside', { class: 'draft-order-panel ed' },
           h('h3', {}, 'Draft pick order'),
           h('p', {}, D.draft.active || D.draft.picks.length ? 'The order is fixed while the draft is active or has picks.' : 'Choose a team for each numbered slot.'),
-          D.teams.length ? h('ol', { class: 'draft-order' }, orderList) : h('p', {}, 'Add teams to set the draft order.')),
+          D.season2Teams.length ? h('ol', { class: 'draft-order' }, orderList) : h('p', {}, 'Add teams to set the draft order.')),
         h('div', { class: 'team-list' }, teamCards)),
     ];
   }
@@ -1053,7 +1100,7 @@ const MHLA = (() => {
     const round = data.rounds.find(item => item.id === m.round);
     const bestOf = MHL.bestOf(data, m);
     const st = MHL.state(m, bestOf), pts = MHL.points(st), g = MHL.gamesOf(m, bestOf);
-    const A = teamName(m.a), B = teamName(m.b);
+    const A = teamName(m.a, matchSeason), B = teamName(m.b, matchSeason);
     const ties = g.filter(x => x && x.as != null && x.bs != null && x.as === x.bs).length;
     const extra = st.decidedAt >= 0 && g.slice(st.decidedAt + 1).some(game => game && (game.as != null || game.bs != null));
     const extraText = ' Games after the series ended are ignored.';
@@ -1082,7 +1129,7 @@ const MHLA = (() => {
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   function teamSelect(m, key) {
     return h('select', { onchange: e => { m[key] = e.target.value; touch(); draw(); } },
-      D.teams.map(t => h('option', { value: t.id, selected: t.id === m[key] }, t.name)));
+      teamsForMatchSeason().map(t => h('option', { value: t.id, selected: t.id === m[key] }, t.name)));
   }
   function matchEd(m) {
     const bestOf = MHL.bestOf(matchData(), m);
@@ -1102,7 +1149,7 @@ const MHLA = (() => {
         h('div', { class: 'games' }, m.games.slice(0, bestOf).map((g, i) => h('div', { class: 'game' }, `Game ${i + 1}  (A - B)`,
           h('div', {}, scoreIn(g, 'as', `Game ${i + 1} goals for team A`), '-', scoreIn(g, 'bs', `Game ${i + 1} goals for team B`)))))),
       h('div', { class: 'acts' }, h('button', { class: 'btn del sm', type: 'button', onclick: () => {
-        if (!confirm(`Delete ${teamName(m.a)} vs ${teamName(m.b)}?`)) return;
+        if (!confirm(`Delete ${teamName(m.a, matchSeason)} vs ${teamName(m.b, matchSeason)}?`)) return;
         const matches = matchList();
         matches.splice(matches.indexOf(m), 1); touch(); draw();
       } }, 'Delete')),
@@ -1119,7 +1166,7 @@ const MHLA = (() => {
     const counted = games.map(g => st.counted.includes(g));
     const find = (g, t, n) => m.goals.find(x => x.g === g && x.t === t && x.n === n);
     const get = (g, t, n) => find(g, t, n) || (m.goals.push({ g, t, n, s: '', a1: '', a2: '' }), m.goals[m.goals.length - 1]);
-    const code = t => { const tm = D.teams.find(x => x.id === t) || {}; return tm.short || (tm.name || '?').slice(0, 3).toUpperCase(); };
+    const code = t => { const tm = teamsForMatchSeason().find(x => x.id === t) || {}; return tm.short || (tm.name || '?').slice(0, 3).toUpperCase(); };
     const pname = p => p.name + (p.number ? ' #' + p.number : '');
     // every goal slot that counts right now
     const slots = [];
@@ -1143,12 +1190,14 @@ const MHLA = (() => {
     if (!slots.length) body.append(h('p', { class: 'help', style: 'margin:10px 0 0' }, 'Type in the game scores above. A row appears here for every goal, so you can pick who scored it and who assisted.'));
     games.forEach((g, gi) => {
       if (g.as == null || g.bs == null || (!g.as && !g.bs)) return;
-      body.append(h('h4', {}, h('span', {}, `Game ${gi + 1}`), h('small', {}, `${teamName(m.a)} ${g.as} - ${g.bs} ${teamName(m.b)}`)));
+      body.append(h('h4', {}, h('span', {}, `Game ${gi + 1}`), h('small', {}, `${teamName(m.a, matchSeason)} ${g.as} - ${g.bs} ${teamName(m.b, matchSeason)}`)));
       if (!counted[gi]) { body.append(h('p', { class: 'help', style: 'margin:0' }, g.as === g.bs ? 'Tied game, it does not count. Enter the final score after overtime.' : 'This game does not count (the series was already over).')); return; }
       body.append(h('div', { class: 'grow hd' }, h('span', {}, ''), h('span', {}, 'Scorer'), h('span', {}, 'Assist'), h('span', {}, 'Second assist')));
       ['a', 'b'].forEach(t => {
         const tid = t === 'a' ? m.a : m.b, total = t === 'a' ? g.as : g.bs;
-        const roster = D.players.filter(p => p.team === tid).sort((x, y) => (Number(x.number) || 999) - (Number(y.number) || 999) || x.name.localeCompare(y.name));
+        const roster = D.players.filter(player => matchSeason === 'season2'
+          ? D.signups.some(signup => signup.id === player.signupId && signup.team === tid)
+          : player.team === tid).sort((x, y) => (Number(x.number) || 999) - (Number(y.number) || 999) || x.name.localeCompare(y.name));
         for (let n = 0; n < total; n++) {
           const x = find(gi, t, n), slot = [gi, t, n], tag = `Game ${gi + 1}, ${code(tid)} goal ${n + 1}`;
           body.append(h('div', { class: 'grow' }, h('span', { class: 'who' }, h('b', {}, code(tid)), `goal ${n + 1}`),
@@ -1156,7 +1205,7 @@ const MHLA = (() => {
             pick(x, 'a1', roster, 'No assist', slot, tag + ', assist'),
             pick(x, 'a2', roster, 'No assist', slot, tag + ', second assist')));
         }
-        if (!roster.length && total) body.append(h('p', { class: 'check' }, `${teamName(tid)} has no players yet. Add them in the Players tab.`));
+        if (!roster.length && total) body.append(h('p', { class: 'check' }, `${teamName(tid, matchSeason)} has no players yet. Add them in the ${matchSeason === 'season2' ? 'Season 2 Player Sign Ups' : 'Players'} tab.`));
       });
     });
     updSummary();
@@ -1167,13 +1216,13 @@ const MHLA = (() => {
   }
   function addMatch(round, playoffStage = '') {
     if (playoffStage && playoffMatchCount(playoffStage) >= playoffMatchLimits[playoffStage]) return;
-    const [a, b] = D.teams;
+    const [a, b] = teamsForMatchSeason();
     matchList().push({ id: uid(), date: '', a: a.id, b: b.id, round, goals: [], games: [{ as: null, bs: null }, { as: null, bs: null }, { as: null, bs: null }] });
     touch(); draw();
   }
   function scheduledMatches() {
     const rounds = matchRounds(), matches = matchList();
-    if (D.teams.length < 2) return [
+    if (teamsForMatchSeason().length < 2) return [
       head('Matches'),
       h('p', { class: 'help' }, 'Manage fixtures and results separately for each season.'),
       matchSeasonToggle(),
@@ -1214,7 +1263,7 @@ const MHLA = (() => {
     const groups = [...rounds.map(r => ({ id: r.id, name: r.name, playoffStage: r.playoffStage })), { id: '', name: rounds.length ? 'Matches without a round' : 'Matches' }];
     return [
       head('Matches'),
-      h('p', { class: 'help' }, 'Manage fixtures and results separately for each season. Each season has its own rounds, scores and goal logs; both use the same teams and player roster.'),
+      h('p', { class: 'help' }, 'Manage fixtures and results separately for each season. Each season has its own teams, rounds, scores and goal logs; Season 1 uses the Players tab and Season 2 uses player signups.'),
       matchSeasonToggle(),
       head('Rounds',
         h('button', { class: 'btn line sm', type: 'button', onclick: addRound }, 'Add round'),
@@ -1711,7 +1760,7 @@ const MHLA = (() => {
     const allSignups = [...D.signups];
     const normalizedSearch = signupSearch.trim().toLocaleLowerCase();
     const signupSearchText = signup => [
-      signup.name, signup.discord, signup.steam, signup.position, teamName(signup.team),
+      signup.name, signup.discord, signup.steam, signup.position, teamName(signup.team, 'season2'),
     ].join(' ').toLocaleLowerCase();
     const matchesSearch = signup => !normalizedSearch || signupSearchText(signup).includes(normalizedSearch);
     const list = [...allSignups];
@@ -1785,7 +1834,7 @@ const MHLA = (() => {
         });
       }
       D.signups = D.signups.filter(item => item.id !== signup.id);
-      D.teams.forEach(team => {
+      D.season2Teams.forEach(team => {
         if (team.captainSignupId === signup.id) team.captainSignupId = '';
       });
       D.draft.picks = D.draft.picks.filter(pick => pick.signupId !== signup.id);
@@ -1888,7 +1937,7 @@ const MHLA = (() => {
             'aria-label': `Team for ${signup.name}`,
             onchange: e => { signup.team = e.target.value; touch(); },
           }, [h('option', { value: '', selected: !signup.team }, 'Unassigned'),
-            D.teams.map(team => h('option', { value: team.id, selected: team.id === signup.team }, team.name))])),
+            D.season2Teams.map(team => h('option', { value: team.id, selected: team.id === signup.team }, team.name))])),
           h('td', {}, valueInput(signup, 'skaterValue', 'Skater Value')),
           h('td', {}, valueInput(signup, 'goalieValue', 'Goalie Value')),
           h('td', {}, imgPicker(signup, 'photo', '')),
@@ -2880,7 +2929,7 @@ const MHLA = (() => {
               } else item.manualPlayerIds = item.manualPlayerIds.filter(id => id !== signup.id);
               touch();
             },
-          }), `${signup.name}${signup.team ? ` — ${teamName(signup.team)}` : ''}`))) :
+          }), `${signup.name}${signup.team ? ` — ${teamName(signup.team, 'season2')}` : ''}`))) :
           h('p', { class: 'help' }, 'No Season 2 signups are available.'));
       const cardTitle = h('strong', {}, item.name || `New ${title}`);
       const notificationCategory = {
@@ -3162,7 +3211,7 @@ const MHLA = (() => {
               event.target.closest('details').querySelector('summary').textContent =
                 `Manual awards (${pose.manualPlayerIds.length})`;
             },
-          }), `${signup.name}${signup.team ? ` — ${teamName(signup.team)}` : ''}`))) :
+          }), `${signup.name}${signup.team ? ` — ${teamName(signup.team, 'season2')}` : ''}`))) :
           h('p', { class: 'help' }, 'No Season 2 signups are available to award manually.'));
       const removePose = pose.id === defaultPoseId() ? null : h('button', {
         class: 'btn del sm', type: 'button', onclick: () => {
@@ -3348,7 +3397,7 @@ const MHLA = (() => {
               summary.textContent = `Manual awards (${badge.manualPlayerIds.length})`;
             },
           }),
-          `${signup.name}${signup.team ? ` — ${teamName(signup.team)}` : ''}`))) : h('p', { class: 'help' }, 'No Season 2 signups are available to award manually.'));
+          `${signup.name}${signup.team ? ` — ${teamName(signup.team, 'season2')}` : ''}`))) : h('p', { class: 'help' }, 'No Season 2 signups are available to award manually.'));
       const cardTitle = h('strong', {}, badge.name || 'Badge');
       return bannerAdminCard(`badge:${badge.id}`, cardTitle,
         h('div', { class: 'row', style: 'grid-template-columns:minmax(0,1fr) auto' },

@@ -39,7 +39,7 @@ const MAX_TRACKED_STAT_GAMES = 20;
 const MAX_BANNER_NOTIFICATIONS = 100;
 const MAX_OBSERVED_BANNER_UNLOCKS = 5000;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
-const EMPTY = { site: { season: 'Season 1', activeSeason: 'season1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], season2Rounds: [], season2Matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], borderSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', border: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatGames: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
+const EMPTY = { site: { season: 'Season 1', activeSeason: 'season1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], season2Teams: [], rounds: [], matches: [], season2Rounds: [], season2Matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], borderSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', border: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatGames: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
 
 // first run: copy the bundled data.json + uploads into DATA_DIR
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -221,6 +221,9 @@ const STATIC = {
   '/bg.webp': ['bg.webp', 'image/webp'],
   '/mhl-league.png': ['MHL League.png', 'image/png'],
   '/mhl-pugs.png': ['MHL Pugs.png', 'image/png'],
+  '/mtaches-logo.png': ['Mtaches logo.png', 'image/png'],
+  '/teams-logo.png': ['Teams Logo.png', 'image/png'],
+  '/standings-logo.png': ['Standings Logo.png', 'image/png'],
   '/sign-up-logo.png': ['Sign up Logo.png', 'image/png'],
   '/players-logo.png': ['Players Logo.png', 'image/png'],
   '/discord-logo.png': ['discord-logo.png', 'image/png'],
@@ -463,7 +466,7 @@ const modRosterSnapshot = data => {
     if (seenSteamIds.has(steamId))
       return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
     seenSteamIds.add(steamId);
-    const team = data.teams.find(item => item.id === signup.team);
+    const team = data.season2Teams.find(item => item.id === signup.team);
     const config = playerBannerConfigFor(data, signup);
     const poseId = config.poseId || defaults.poseId;
     const resolvedSprite = (type, id, defaultId) => {
@@ -479,6 +482,14 @@ const modRosterSnapshot = data => {
       && Array.isArray(signup.bannerNotificationState.notifications)
       ? signup.bannerNotificationState.notifications
       : [];
+    const unreadBannerNotificationCounts = {};
+    for (const notification of notifications) {
+      if (!notification || notification.read === true
+          || !BANNER_NOTIFICATION_CATEGORIES.has(notification.category))
+        continue;
+      unreadBannerNotificationCounts[notification.category] =
+        (unreadBannerNotificationCounts[notification.category] || 0) + 1;
+    }
     const defaultBadge = data.badges.find(badge => badge.id === defaults.badge);
     if (!selectedBadges[0] && defaultBadge && defaultBadge.image)
       selectedBadges[0] = defaultBadge.image;
@@ -494,6 +505,7 @@ const modRosterSnapshot = data => {
       name: signup.name,
       unreadNotificationCount: notifications.filter(
         notification => notification && notification.read !== true).length,
+      unreadBannerNotificationCounts,
       position: signup.position,
       teamName: team ? team.name : '',
       photo: okImage(signup.photo) ? signup.photo : '',
@@ -563,7 +575,6 @@ function syncSignupPlayers(data) {
     const values = {
       signupId: signup.id,
       name: signup.name,
-      team: signup.team || '',
       role: signup.position === 'Goalie' ? 'goalie' : 'skater',
       discord: signup.discord,
       steam: signup.steam,
@@ -616,13 +627,13 @@ const draftBudget = (data, draft, teamId) => Math.max(0,
 const currentDraftTurn = (data, draft) => {
   if (!draft.active || !draft.order.length) return null;
   const picked = new Set(draft.picks.map(pick => pick.signupId));
-  const captains = new Set(data.teams.map(team => team.captainSignupId).filter(Boolean));
+  const captains = new Set(data.season2Teams.map(team => team.captainSignupId).filter(Boolean));
   const available = data.signups.filter(signup => !picked.has(signup.id) && !captains.has(signup.id));
   if (!available.length) return null;
   const cheapest = Math.min(...available.map(draftPrice));
   for (let offset = 0; offset < draft.order.length; offset++) {
     const index = (draft.nextIndex + offset) % draft.order.length;
-    const team = data.teams.find(item => item.id === draft.order[index]);
+    const team = data.season2Teams.find(item => item.id === draft.order[index]);
     if (team && team.captainSignupId && draftBudget(data, draft, team.id) >= cheapest) return { team, index };
   }
   return null;
@@ -685,7 +696,7 @@ const playerBannerPosesFor = (data, signup) => (data.bannerPoses || []).map(pose
 }));
 const playerBannerSignupPayload = (data, signup) => {
   const stats = trackedStatsFor(data, signup.id);
-  const team = data.teams.find(item => item.id === signup.team);
+  const team = data.season2Teams.find(item => item.id === signup.team);
   const values = signupValues(signup);
   const bannerConfig = playerBannerConfigFor(data, signup);
   return {
@@ -1354,25 +1365,36 @@ function sanitize(d) {
     teamCap: num(s.teamCap, Number.MAX_SAFE_INTEGER),
     statsPointRequirements: normalizeStatsPointRequirements(s.statsPointRequirements),
   };
-  const teams = (Array.isArray(d.teams) ? d.teams : []).slice(0, 64).map(t => ({
+  const normalizeTeams = source => (Array.isArray(source) ? source : []).slice(0, 64).map(t => ({
     id: str(t.id, 40) || crypto.randomUUID(),
     name: str(t.name, 40) || 'Unnamed team',
-    short: str(t.short, 4).toUpperCase().replace(/[^A-Z0-9]/g, ''),   // 2-4 letters, shown on scoreboards
+    short: str(t.short, 4).toUpperCase().replace(/[^A-Z0-9]/g, ''),
     color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#c8102e',
     logo: okImage(t.logo) ? t.logo : '',
-    photo: okImage(t.photo) ? t.photo : '',   // optional team photo
+    photo: okImage(t.photo) ? t.photo : '',
     captainSignupId: str(t.captainSignupId, 40),
-    slug: str(t.slug, 40),   // /team/<slug>, fixed up below
+    slug: str(t.slug, 40),
   }));
-  // slug doesn't change on rename so shared links keep working
-  const seenSlugs = new Set();
-  for (const t of teams) {
-    const base = slugify(t.slug) || slugify(t.name) || 'team';
-    let sl = base, n = 2;
-    while (seenSlugs.has(sl)) { const suffix = '-' + n++; sl = base.slice(0, 40 - suffix.length) + suffix; }
-    seenSlugs.add(sl); t.slug = sl;
-  }
+  const normalizeTeamSlugs = teams => {
+    const seenSlugs = new Set();
+    for (const team of teams) {
+      const base = slugify(team.slug) || slugify(team.name) || 'team';
+      let slug = base, suffixNumber = 2;
+      while (seenSlugs.has(slug)) {
+        const suffix = '-' + suffixNumber++;
+        slug = base.slice(0, 40 - suffix.length) + suffix;
+      }
+      seenSlugs.add(slug);
+      team.slug = slug;
+    }
+  };
+  const teams = normalizeTeams(d.teams);
+  const season2Teams = normalizeTeams(Array.isArray(d.season2Teams) ? d.season2Teams : d.teams);
+  if (!Array.isArray(d.season2Teams)) teams.forEach(team => { team.captainSignupId = ''; });
+  normalizeTeamSlugs(teams);
+  normalizeTeamSlugs(season2Teams);
   const ids = new Set(teams.map(t => t.id));
+  const season2Ids = new Set(season2Teams.map(team => team.id));
   const normalizeRounds = source => (Array.isArray(source) ? source : []).slice(0, 100).map(r => {
     const name = str(r.name, 40) || 'Round';
     return {
@@ -1399,9 +1421,9 @@ function sanitize(d) {
   }));
   const pids = new Set(players.map(p => p.id));
   const pid = v => pids.has(v) ? v : '';
-  const normalizeMatches = (source, matchRounds) => {
+  const normalizeMatches = (source, matchRounds, teamIds) => {
     const roundIds = new Set(matchRounds.map(round => round.id));
-    return (Array.isArray(source) ? source : []).slice(0, 2000).filter(m => ids.has(m.a) && ids.has(m.b) && m.a !== m.b).map(m => {
+    return (Array.isArray(source) ? source : []).slice(0, 2000).filter(m => teamIds.has(m.a) && teamIds.has(m.b) && m.a !== m.b).map(m => {
       // Playoff stages can use up to seven games; the standings logic applies the round's limit.
       const games = (Array.isArray(m.games) ? m.games : []).slice(0, 7).map(g => ({ as: score(g && g.as), bs: score(g && g.bs) }));
       // goal log: g = game index, t = 'a'/'b', n = which goal of that team in that game
@@ -1429,8 +1451,8 @@ function sanitize(d) {
       };
     });
   };
-  const matches = normalizeMatches(d.matches, rounds);
-  const season2Matches = normalizeMatches(d.season2Matches, season2Rounds);
+  const matches = normalizeMatches(d.matches, rounds, ids);
+  const season2Matches = normalizeMatches(d.season2Matches, season2Rounds, season2Ids);
   const news = (Array.isArray(d.news) ? d.news : []).slice(0, 300).map(n => ({
     id: str(n.id, 40) || crypto.randomUUID(),
     title: str(n.title, 120) || 'Untitled',
@@ -1453,7 +1475,7 @@ function sanitize(d) {
     position: ['Goalie', 'Attacker', 'Defender', 'Flexible'].includes(p.position) ? p.position : '',
     captain: ['Yes', 'No', 'Maybe'].includes(p.captain) ? p.captain : 'No',
     europeanLeagueAcknowledgement: p.europeanLeagueAcknowledgement === true,
-    team: ids.has(p.team) ? p.team : '',
+    team: season2Ids.has(p.team) ? p.team : '',
     photo: okImage(p.photo) ? p.photo : '',
     cardArtwork: okImage(p.cardArtwork) ? p.cardArtwork : '',
     badgeSlots: Array.isArray(p.badgeSlots) ? p.badgeSlots.slice(0, 3).map(id => str(id, 40)) : [],
@@ -1737,16 +1759,16 @@ function sanitize(d) {
     else linkedSignupIds.add(player.signupId);
   }
   const captains = new Set();
-  for (const team of teams) {
+  for (const team of season2Teams) {
     if (!signupIds.has(team.captainSignupId) || captains.has(team.captainSignupId)) team.captainSignupId = '';
     else captains.add(team.captainSignupId);
   }
-  const draft = normalizeDraft(d.draft, teams, signups);
+  const draft = normalizeDraft(d.draft, season2Teams, signups);
   const signupById = new Map(signups.map(signup => [signup.id, signup]));
   draft.picks.forEach(pick => { signupById.get(pick.signupId).team = pick.teamId; });
   syncSignupPlayers({ players, signups });
   return {
-    site, teams, rounds, matches, season2Rounds, season2Matches, players, news, rules, signups, badges, draft,
+    site, teams, season2Teams, rounds, matches, season2Rounds, season2Matches, players, news, rules, signups, badges, draft,
     bannedSteamIds, playerListExclusions, season1PlayerIds, playerGroups,
     bannerPoses, bannerSprites, backgroundSprites, helmetSprites, torsoSprites, stickSprites, puckSprites, borderSprites,
     bannerLayers, bannerDefaults,
@@ -1759,9 +1781,9 @@ const slugify = s => String(s ?? '').normalize('NFKD').replace(/[̀-ͯ]/g, '').t
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/g, '');
 const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // by slug, or by id (old links)
-const findTeam = (data, seg) => (data.teams || []).find(t => t.slug === seg) || (data.teams || []).find(t => t.id === seg);
+const findTeam = (teams, seg) => teams.find(team => team.slug === seg) || teams.find(team => team.id === seg);
 
-function teamPageHtml(req, team) {
+function teamPageHtml(req, team, season = 'season1') {
   const html = fs.readFileSync(path.join(DIR, 'team.html'), 'utf8');
   const host = String(req.headers.host || '');
   const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
@@ -1770,9 +1792,9 @@ function teamPageHtml(req, team) {
     return html.replace(/<title>[^<]*<\/title>/, '<title>Team not found | MHL</title>')
       .replace('</head>', '<meta name="robots" content="noindex"><script>window.__MHL_404=1</script></head>');
   }
-  const url = `${origin}/team/${team.slug}`;
-  const title = `${team.name} | MHL`;
-  const desc = `${team.name} in the Miniature Hockey League: record, roster, results and upcoming matches.`;
+  const url = `${origin}/team/${team.slug}${season === 'season2' ? '?season=season2' : ''}`;
+  const title = `${team.name} | MHL${season === 'season2' ? ' Season 2' : ''}`;
+  const desc = `${team.name} in the ${season === 'season2' ? 'Season 2' : 'Miniature Hockey League'}: record, roster, results and upcoming matches.`;
   const logo = findLogo();
   const image = origin && (team.logo || logo) ? origin + (team.logo || logo.url) : '';
   const extra = [
@@ -1795,8 +1817,17 @@ const writeData = d => {
   fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
 };
 const readData = () => {
-  const data = { ...EMPTY, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) };
-  if (migrateTrackedStats(data)) writeData(data);
+  const stored = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  const data = { ...EMPTY, ...stored };
+  let changed = false;
+  if (!Array.isArray(stored.season2Teams)) {
+    const teams = Array.isArray(stored.teams) ? stored.teams : [];
+    data.season2Teams = teams.map(team => ({ ...team }));
+    data.teams = teams.map(team => ({ ...team, captainSignupId: '' }));
+    changed = true;
+  }
+  if (migrateTrackedStats(data)) changed = true;
+  if (changed) writeData(data);
   return data;
 };
 const createSiteBackup = () => {
@@ -2736,18 +2767,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/draft' && req.method === 'GET') {
       const data = readData();
-      const draft = normalizeDraft(data.draft, data.teams, data.signups);
+      const draft = normalizeDraft(data.draft, data.season2Teams, data.signups);
       const player = playerSession(req);
       const signup = player && signupForPlayer(data, player);
-      const captainTeam = signup && data.teams.find(team => team.captainSignupId === signup.id);
+      const captainTeam = signup && data.season2Teams.find(team => team.captainSignupId === signup.id);
       const turn = currentDraftTurn(data, draft);
       return send(res, 200, {
         active: draft.active,
         captainTeamId: captainTeam ? captainTeam.id : '',
         currentTeamId: turn ? turn.team.id : '',
-        captainSignupIds: captainTeam ? data.teams.map(team => team.captainSignupId).filter(Boolean) : [],
+        captainSignupIds: captainTeam ? data.season2Teams.map(team => team.captainSignupId).filter(Boolean) : [],
         pickedSignupIds: draft.picks.map(pick => pick.signupId),
-        teamBudgets: Object.fromEntries(data.teams.map(team => [team.id, draftBudget(data, draft, team.id)])),
+        teamBudgets: Object.fromEntries(data.season2Teams.map(team => [team.id, draftBudget(data, draft, team.id)])),
         complete: draft.active && !turn,
       });
     }
@@ -2755,10 +2786,10 @@ const server = http.createServer(async (req, res) => {
       const player = playerSession(req);
       if (!player) return send(res, 401, { error: 'Sign in with the Steam account assigned as captain.' });
       const data = readData();
-      const draft = normalizeDraft(data.draft, data.teams, data.signups);
+      const draft = normalizeDraft(data.draft, data.season2Teams, data.signups);
       if (!draft.active) return send(res, 409, { error: 'The draft is not active.' });
       const captainSignup = signupForPlayer(data, player);
-      const captainTeam = captainSignup && data.teams.find(team => team.captainSignupId === captainSignup.id);
+      const captainTeam = captainSignup && data.season2Teams.find(team => team.captainSignupId === captainSignup.id);
       if (!captainTeam) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
       const { signupId } = JSON.parse(await readBody(req) || '{}');
       const selectedId = str(signupId, 40);
@@ -2768,7 +2799,7 @@ const server = http.createServer(async (req, res) => {
       if (turn.team.id !== captainTeam.id) return send(res, 409, { error: 'It is not your team’s turn to pick.' });
       const signup = data.signups.find(item => item.id === selectedId);
       if (!signup) return send(res, 404, { error: 'That signup could not be found.' });
-      if (data.teams.some(team => team.captainSignupId === signup.id)) return send(res, 409, { error: 'Team captains cannot be drafted.' });
+      if (data.season2Teams.some(team => team.captainSignupId === signup.id)) return send(res, 409, { error: 'Team captains cannot be drafted.' });
       if (draft.picks.some(pick => pick.signupId === signup.id)) return send(res, 409, { error: 'That player has already been drafted.' });
       const price = draftPrice(signup), budget = draftBudget(data, draft, captainTeam.id);
       if (price > budget) return send(res, 409, { error: 'That player costs more than your team’s remaining budget.' });
@@ -3110,7 +3141,7 @@ const server = http.createServer(async (req, res) => {
       data.season2Rounds = Array.isArray(data.season2Rounds)
         ? data.season2Rounds.map(round => ({ ...round, playoffStage: normalizePlayoffStage(round) }))
         : [];
-      data.draft = normalizeDraft(data.draft, data.teams, data.signups);
+      data.draft = normalizeDraft(data.draft, data.season2Teams, data.signups);
       const signupsById = new Map(data.signups.map(signup => [signup.id, signup]));
       data.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
       if (syncSignupPlayers(data)) writeData(data);
@@ -3136,6 +3167,7 @@ const server = http.createServer(async (req, res) => {
         data.players = data.players.filter(player => !hiddenSignupIds.has(player.signupId));
         data.signups = data.signups.map(({ steam, steamId, bannerNotificationState, ...signup }) => signup);
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
+        data.season2Teams = data.season2Teams.map(({ captainSignupId, ...team }) => team);
         data.players = data.players.map(({ steam, ...player }) => player);
         for (const collection of Object.values(BANNER_NOTIFICATION_COLLECTIONS)) {
           data[collection] = data[collection].map(({
@@ -3205,20 +3237,27 @@ const server = http.createServer(async (req, res) => {
            Object.keys(trackedGameStatsEdits).length > MAX_TRACKED_STAT_GAMES)) {
         return send(res, 400, { error: 'Tracked game stat edits are invalid.' });
       }
-      const incomingTeams = new Set((Array.isArray(incoming && incoming.teams) ? incoming.teams : [])
-        .filter(team => team && typeof team === 'object')
-        .map(team => team.id));
-      const matchSeasons = [
-        [incoming && incoming.rounds, incoming && incoming.matches],
-        [incoming && incoming.season2Rounds, incoming && incoming.season2Matches],
+      const incomingTeamSets = [
+        new Set((Array.isArray(incoming && incoming.teams) ? incoming.teams : [])
+          .filter(team => team && typeof team === 'object')
+          .map(team => team.id)),
+        new Set((Array.isArray(incoming && incoming.season2Teams)
+          ? incoming.season2Teams
+          : Array.isArray(incoming && incoming.teams) ? incoming.teams : [])
+          .filter(team => team && typeof team === 'object')
+          .map(team => team.id)),
       ];
-      for (const [seasonRounds, seasonMatches] of matchSeasons) {
+      const matchSeasons = [
+        [incoming && incoming.rounds, incoming && incoming.matches, incomingTeamSets[0]],
+        [incoming && incoming.season2Rounds, incoming && incoming.season2Matches, incomingTeamSets[1]],
+      ];
+      for (const [seasonRounds, seasonMatches, validTeamIds] of matchSeasons) {
         const playoffCounts = Object.fromEntries(PLAYOFF_STAGES.map(stage => [stage, 0]));
         const rounds = Array.isArray(seasonRounds) ? seasonRounds : [];
         const matches = Array.isArray(seasonMatches) ? seasonMatches : [];
         const stagesByRound = new Map(rounds.map(round => [round && round.id, normalizePlayoffStage(round)]));
         for (const match of matches) {
-          if (!match || !incomingTeams.has(match.a) || !incomingTeams.has(match.b) || match.a === match.b) continue;
+          if (!match || !validTeamIds.has(match.a) || !validTeamIds.has(match.b) || match.a === match.b) continue;
           const stage = stagesByRound.get(match.round);
           if (!stage) continue;
           if (playoffCounts[stage] >= PLAYOFF_MATCH_LIMITS[stage]) {
@@ -3368,7 +3407,7 @@ const server = http.createServer(async (req, res) => {
           return badgeIds.has(badgeId) ? badgeId : '';
         });
       }
-      const currentDraft = normalizeDraft(current.draft, current.teams, current.signups);
+      const currentDraft = normalizeDraft(current.draft, current.season2Teams, current.signups);
       if (clearAllAssignments) {
         clean.signups.forEach(signup => { signup.team = ''; });
         clean.draft = normalizeDraft({
@@ -3376,7 +3415,7 @@ const server = http.createServer(async (req, res) => {
           active: false,
           picks: [],
           nextIndex: 0,
-        }, clean.teams, clean.signups);
+        }, clean.season2Teams, clean.signups);
       } else {
         const keepCurrentOrder = currentDraft.active || currentDraft.picks.length > 0;
         clean.draft = normalizeDraft({
@@ -3385,14 +3424,14 @@ const server = http.createServer(async (req, res) => {
           order: keepCurrentOrder ? currentDraft.order : clean.draft.order,
           picks: currentDraft.picks,
           nextIndex: currentDraft.nextIndex,
-        }, clean.teams, clean.signups);
+        }, clean.season2Teams, clean.signups);
       }
       const signupsById = new Map(clean.signups.map(signup => [signup.id, signup]));
       clean.draft.picks.forEach(pick => { signupsById.get(pick.signupId).team = pick.teamId; });
       syncSignupPlayers(clean);
       writeData(clean);
       // delete uploads nothing uses anymore
-      const used = new Set(clean.teams.flatMap(t => [t.logo, t.photo])
+      const used = new Set([...clean.teams, ...clean.season2Teams].flatMap(t => [t.logo, t.photo])
         .concat(
           clean.signups.flatMap(signup => [signup.photo, signup.cardArtwork]),
           clean.badges.map(badge => badge.image),
@@ -3524,10 +3563,18 @@ const server = http.createServer(async (req, res) => {
     const tm = p.match(/^\/team\/([^/]+)$/);
     if (tm && (req.method === 'GET' || req.method === 'HEAD')) {
       let seg = ''; try { seg = decodeURIComponent(tm[1]).toLowerCase(); } catch {}
-      const team = /^[a-z0-9-]{1,40}$/.test(seg) ? findTeam(readData(), seg) : null;
-      if (!team) return send(res, 404, teamPageHtml(req, null), HTML, { 'Cache-Control': 'no-cache' });
-      if (seg !== team.slug) { res.writeHead(301, { Location: '/team/' + team.slug, 'Cache-Control': 'no-cache' }); return res.end(); }
-      return send(res, 200, teamPageHtml(req, team), HTML, { 'Cache-Control': 'no-cache' });
+      const season = new URL(req.url, 'http://localhost').searchParams.get('season') === 'season2' ? 'season2' : 'season1';
+      const data = readData();
+      const team = /^[a-z0-9-]{1,40}$/.test(seg)
+        ? findTeam(season === 'season2' ? data.season2Teams : data.teams, seg)
+        : null;
+      if (!team) return send(res, 404, teamPageHtml(req, null, season), HTML, { 'Cache-Control': 'no-cache' });
+      if (seg !== team.slug) {
+        const query = season === 'season2' ? '?season=season2' : '';
+        res.writeHead(301, { Location: '/team/' + team.slug + query, 'Cache-Control': 'no-cache' });
+        return res.end();
+      }
+      return send(res, 200, teamPageHtml(req, team, season), HTML, { 'Cache-Control': 'no-cache' });
     }
     const s = STATIC[p];
     if (s && req.method === 'GET') {
@@ -3536,7 +3583,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(path.join(DIR, s[0])), s[1], extra);
     }
     if (p.startsWith('/api/')) return send(res, 404, { error: 'Not found' });
-    send(res, 404, '<!doctype html><meta charset="utf-8"><title>Not found | MHL</title><p style="font:18px system-ui;padding:40px">Page not found. <a href="/">Back to the MHL home page</a></p>', HTML);
+    send(res, 404, '<!doctype html><meta charset="utf-8"><title>Not found | MHL</title><p style="font:18px Montserrat,system-ui;padding:40px">Page not found. <a href="/">Back to the MHL home page</a></p>', HTML);
   } catch (e) {
     if (e.statusCode === 500) {
       console.error('[player-session] Could not read session storage:', e.message);

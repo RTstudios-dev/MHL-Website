@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#111013">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -40,21 +40,43 @@
   try { D = await MHL.load(); } catch { return MHL.fail($('page'), 'this team'); }
   const { esc } = MHL;
   let seg = ''; try { seg = decodeURIComponent(location.pathname.split('/')[2] || '').toLowerCase(); } catch {}
-  const t = D.teams.find(x => x.slug === seg) || D.teams.find(x => x.id === seg);
+  const isSeason2 = new URLSearchParams(location.search).get('season') === 'season2';
+  const view = isSeason2 ? D.season2View : D;
+  const teams = view.teams;
+  const t = teams.find(x => x.slug === seg) || teams.find(x => x.id === seg);
   if (!t) return notFound();
 
-  const r = D.table.S[t.id], n = D.teams.length;
+  const r = view.table.S[t.id], n = teams.length;
   const euroFormat = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   const formatValue = value => Number(value) > 0 ? euroFormat.format(Number(value)) : '—';
   const ord = k => k + (['th', 'st', 'nd', 'rd'][(k % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][k % 100] || 'th');
   const gd = r.gf - r.ga;
-  const mine = D.matches.filter(m => m.a === t.id || m.b === t.id);
-  const results = mine.filter(m => MHL.played(m, D)).sort(MHL.byDate).reverse();
-  const upcoming = mine.filter(m => !MHL.played(m, D)).sort(MHL.byDate);
-  const players = D.players.filter(p => p.team === t.id).sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name));
+  document.body.classList.toggle('season2-theme', isSeason2);
+  const mine = view.matches.filter(m => m.a === t.id || m.b === t.id);
+  const results = mine.filter(m => MHL.played(m, view)).sort(MHL.byDate).reverse();
+  const upcoming = mine.filter(m => !MHL.played(m, view)).sort(MHL.byDate);
+  const season2Totals = isSeason2 ? MHL.playerTotals(view) : null;
+  const players = isSeason2
+    ? D.signups.filter(signup => signup.team === t.id).map(signup => {
+      const player = D.players.find(item => item.signupId === signup.id);
+      const stats = player && season2Totals[player.id] || { g: 0, a: 0 };
+      return {
+        number: player && player.number,
+        name: signup.name,
+        discord: signup.discord,
+        signupPosition: signup.position,
+        hours: signup.hours,
+        skaterValue: signup.skaterValue ?? signup.value,
+        goalieValue: signup.goalieValue ?? signup.value,
+        g: stats.g,
+        a: stats.a,
+      };
+    }).sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name))
+    : D.players.filter(player => player.team === t.id)
+      .sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name));
 
   $('page').innerHTML = `
-    <div class="thead">${MHL.badge(t, 'lg')}<div><a class="back" href="/teams">All teams</a><h1>${esc(t.name)}</h1>
+    <div class="thead">${MHL.badge(t, 'lg')}<div><a class="back" href="/teams${isSeason2 ? '?season=season2' : ''}">All teams</a><h1>${esc(t.name)}</h1>
       <p>${ord(r.place)} of ${n}, ${r.pts} point${r.pts === 1 ? '' : 's'}</p></div></div>
     <div class="stats">
       <div><b class="num">${ord(r.place)}</b><small>Place</small></div>
@@ -74,10 +96,10 @@
       </section>
       <div>
         <section aria-labelledby="hUp"><div class="bh"><h2 id="hUp">Upcoming</h2></div>
-          ${upcoming.length ? `<div class="sbs">${upcoming.map(m => MHL.scoreboard(m, D)).join('')}</div>` : MHL.empty('Nothing scheduled', 'The next series shows here once it is added.')}
+          ${upcoming.length ? `<div class="sbs">${upcoming.map(m => MHL.scoreboard(m, view)).join('')}</div>` : MHL.empty('Nothing scheduled', 'The next series shows here once it is added.')}
         </section>
         <section class="block" aria-labelledby="hRes"><div class="bh"><h2 id="hRes">Results</h2></div>
-          ${results.length ? `<div class="sbs">${results.map(m => MHL.scoreboard(m, D)).join('')}</div>` : MHL.empty('No results yet', 'Finished series show here.')}
+          ${results.length ? `<div class="sbs">${results.map(m => MHL.scoreboard(m, view)).join('')}</div>` : MHL.empty('No results yet', 'Finished series show here.')}
         </section>
       </div>
     </div>`;

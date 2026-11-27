@@ -309,10 +309,23 @@
     D.T = Object.fromEntries(D.teams.map(t => [t.id, t]));
     D.R = Object.fromEntries(D.rounds.map(r => [r.id, r]));
     D.table = M.compute(D);
+    D.T2 = Object.fromEntries((D.season2Teams || []).map(team => [team.id, team]));
+    D.R2 = Object.fromEntries((D.season2Rounds || []).map(round => [round.id, round]));
+    D.season2View = {
+      ...D,
+      seasonKey: 'season2',
+      teams: D.season2Teams || [],
+      matches: D.season2Matches || [],
+      rounds: D.season2Rounds || [],
+      T: D.T2,
+      R: D.R2,
+    };
+    D.season2View.table = M.compute(D.season2View);
     // player totals come from the goal logs
     const tot = M.playerTotals(D);
     D.players.forEach(p => { p.g = tot[p.id].g; p.a = tot[p.id].a; });
     D.P = Object.fromEntries(D.players.map(p => [p.id, p]));
+    D.season2View.P = D.P;
     dress(D);
     return D;
   };
@@ -323,8 +336,11 @@
     ? `<span class="badge ${cls}"><img src="${esc(t.logo)}" alt=""></span>`
     : `<span class="badge ${cls}" style="--c:${esc(t.color)}" aria-hidden="true">${esc(M.code(t))}</span>`;
   M.code = t => t.short || t.name.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase() || t.name.slice(0, 3).toUpperCase();
-  M.teamUrl = t => '/team/' + encodeURIComponent(t.slug || t.id);
-  M.teamLink = (t, text) => t ? `<a class="tlink" href="${M.teamUrl(t)}">${esc(text ?? t.name)}</a>` : 'Unknown team';
+  M.teamUrl = (t, season = 'season1') => '/team/' + encodeURIComponent(t.slug || t.id)
+    + (season === 'season2' ? '?season=season2' : '');
+  M.teamLink = (t, text, season = 'season1') => t
+    ? `<a class="tlink" href="${M.teamUrl(t, season)}">${esc(text ?? t.name)}</a>`
+    : 'Unknown team';
   M.empty = (title, text) => `<div class="empty"><b>${esc(title)}</b>${esc(text)}</div>`;
 
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -362,7 +378,7 @@
     const row = (t, side) => {
       const wins = side === 'a' ? st.wa : st.wb, other = side === 'a' ? st.wb : st.wa;
       const cls = st.decided ? (wins > other ? ' win' : ' lose') : '';
-      return `<div class="sb-row${cls}">${M.badge(t)}<span class="sb-name">${M.teamLink(t)}</span>${Array.from({ length: bestOf }, (_, i) => cell(games[i], side)).join('')}<span class="sb-s">${st.started ? wins : '-'}</span></div>`;
+      return `<div class="sb-row${cls}">${M.badge(t)}<span class="sb-name">${M.teamLink(t, undefined, D.seasonKey)}</span>${Array.from({ length: bestOf }, (_, i) => cell(games[i], side)).join('')}<span class="sb-s">${st.started ? wins : '-'}</span></div>`;
     };
     const winner = st.decided ? (st.wa > st.wb ? A : B) : null;
     const playoff = round && round.playoffStage;

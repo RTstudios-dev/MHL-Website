@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#111013">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/site.css">
 <style>
 .sortbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
@@ -67,7 +67,7 @@
 @media(max-width:560px){.draft-budget-overlay{top:max(8px,env(safe-area-inset-top));padding:8px 12px;font-size:10px}.draft-budget-overlay strong{font-size:21px}.sortbar{align-items:flex-start;flex-direction:column}.sortbar label{width:100%;align-items:flex-start;flex-direction:column}.sortbar select{width:100%}.cap-banner{grid-template-columns:1fr}}
 </style>
 </head>
-<body>
+<body class="season2-theme">
 <div class="app">
 <aside class="side" id="side"></aside>
 <div>
@@ -258,7 +258,7 @@
     if (!response.ok) throw new Error('Could not refresh the Season 2 players.');
     const data = await response.json();
     window.seasonSignups = Array.isArray(data.signups) ? data.signups : [];
-    teams = Array.isArray(data.teams) ? data.teams : [];
+    teams = Array.isArray(data.season2Teams) ? data.season2Teams : [];
     return data;
   }
   async function refreshDraftState() {
