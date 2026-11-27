@@ -36,6 +36,8 @@ const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const MAX_STATS_IMPORT_LOGS = 500;
 const MAX_STATS_IMPORT_BYTES = 20_000_000;
 const MAX_TRACKED_STAT_GAMES = 20;
+const MAX_BANNER_NOTIFICATIONS = 100;
+const MAX_OBSERVED_BANNER_UNLOCKS = 5000;
 const DEFAULT_STATS_POINT_REQUIREMENTS = { goals: 1, assists: 1, saves: 2 };
 const EMPTY = { site: { season: 'Season 1', activeSeason: 'season1', discord: '', iceCap: 0, teamCap: 0, statsPointRequirements: DEFAULT_STATS_POINT_REQUIREMENTS }, teams: [], rounds: [], matches: [], season2Rounds: [], season2Matches: [], players: [], news: [], rules: [], signups: [], badges: [], bannedSteamIds: [], playerListExclusions: [], season1PlayerIds: [], playerGroups: [], bannerPoses: [], bannerSprites: [], backgroundSprites: [], helmetSprites: [], torsoSprites: [], stickSprites: [], puckSprites: [], borderSprites: [], bannerLayers: [], bannerDefaults: { badge: '', banner: '', poseId: 'default', background: '', helmet: '', torso: '', stick: '', puck: '', border: '', badgeTransforms: [], statTransforms: [], statValueTransforms: [], playerNameTransform: {}, playerValueTransform: {}, layerOrder: [], canvasVersion: 0 }, draft: { active: false, manualOrder: false, order: [], nextIndex: 0, picks: [] }, playerStats: {}, modStatEventIds: [], season2PlayerStats: {}, season2ModStatEventIds: [], trackedStatGames: [], trackedStatsMigrationVersion: 0, statsImportLogs: [] };
 
@@ -901,6 +903,45 @@ const poseIsUnlocked = (data, signup, pose) => {
   return automaticallyGranted(data, signup, pose)
     || statRequirementsMet(data, signup, pose.requirements, pose.requireAllStats);
 };
+const unlockedBannerComponentsFor = (data, signup) => {
+  const components = [];
+  const add = (category, item, poseId = '') => {
+    if (!item || !item.id) return;
+    components.push({
+      key: `${category}:${item.id}`,
+      category,
+      componentId: item.id,
+      title: item.name || category,
+      poseId,
+    });
+  };
+  (data.badges || []).forEach(badge => {
+    if (badge.image && badgeIsUnlocked(data, signup, badge)) add('badges', badge);
+  });
+  (data.bannerPoses || []).forEach(pose => {
+    if (poseIsUnlocked(data, signup, pose)) add('pose', pose, pose.id);
+  });
+  const collections = [
+    ['helmet', 'helmetSprites'],
+    ['torso', 'torsoSprites'],
+    ['stick', 'stickSprites'],
+    ['border', 'borderSprites'],
+  ];
+  collections.forEach(([category, collection]) => {
+    (data[collection] || []).forEach(sprite => {
+      if (!sprite.image || !badgeIsUnlocked(data, signup, sprite)) return;
+      if (category === 'torso') {
+        const name = String(sprite.name || '').trim().toLowerCase();
+        const pairedBackground = name && (data.backgroundSprites || []).find(background =>
+          background.poseId === sprite.poseId
+          && String(background.name || '').trim().toLowerCase() === name);
+        if (pairedBackground && !badgeIsUnlocked(data, signup, pairedBackground)) return;
+      }
+      add(category, sprite, sprite.poseId);
+    });
+  });
+  return components;
+};
 const bannerStatRankings = (data, currentSignup) => {
   const statValue = (signup, stat) => {
     const stats = trackedStatsFor(data, signup.id);
@@ -1068,6 +1109,38 @@ const sanitizeBannerConfig = value => {
       : ['Goals', 'Assists', 'Saves'],
   };
 };
+const BANNER_NOTIFICATION_CATEGORIES = new Set(['badges', 'pose', 'helmet', 'torso', 'stick', 'border']);
+const sanitizeBannerNotificationState = value => {
+  const state = value && typeof value === 'object' ? value : {};
+  const notifications = (Array.isArray(state.notifications) ? state.notifications : [])
+    .slice(-MAX_BANNER_NOTIFICATIONS)
+    .map(notification => {
+      if (!notification || typeof notification !== 'object') return null;
+      const category = str(notification.category, 20);
+      const id = str(notification.id, 80);
+      const componentId = str(notification.componentId, 40);
+      const title = str(notification.title, 120);
+      if (!BANNER_NOTIFICATION_CATEGORIES.has(category) || !id || !componentId || !title) return null;
+      return {
+        id,
+        category,
+        componentId,
+        title,
+        poseId: str(notification.poseId, 40),
+        createdAt: str(notification.createdAt, 40),
+        read: notification.read === true,
+      };
+    }).filter(Boolean);
+  const observedUnlocks = [...new Set((Array.isArray(state.observedUnlocks) ? state.observedUnlocks : [])
+    .slice(-MAX_OBSERVED_BANNER_UNLOCKS)
+    .map(value => str(value, 80))
+    .filter(Boolean))];
+  return {
+    initialized: state.initialized === true,
+    observedUnlocks,
+    notifications,
+  };
+};
 function sanitize(d) {
   if (!d || typeof d !== 'object') throw new Error('bad data');
   const s = d.site && typeof d.site === 'object' ? d.site : {};
@@ -1189,6 +1262,7 @@ function sanitize(d) {
         ? p.bannerConfig.equippedStats
         : ['Goals', 'Assists', 'Saves'],
     }),
+    bannerNotificationState: sanitizeBannerNotificationState(p.bannerNotificationState),
     ...signupValues(p),
   })).filter(p => p.discord && p.name);
   const signupIds = new Set(signups.map(signup => signup.id));
@@ -2469,6 +2543,70 @@ const server = http.createServer(async (req, res) => {
       writeData(data);
       return send(res, 200, { ok: true, badgeSlots: equippedBadgeSlotsFor(data, signup) });
     }
+    if (p === '/api/player/notifications' && req.method === 'GET') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam to view your notifications.' });
+      const data = readData();
+      const signup = signupForPlayer(data, player);
+      if (!signup) return send(res, 404, { error: 'Could not find one signup linked to this Steam profile.' });
+      const state = signup.bannerNotificationState;
+      const unlocked = unlockedBannerComponentsFor(data, signup);
+      const observed = new Set(state.observedUnlocks);
+      let changed = false;
+      if (!state.initialized) {
+        unlocked.forEach(component => observed.add(component.key));
+        state.initialized = true;
+        changed = true;
+      } else {
+        unlocked.forEach(component => {
+          if (observed.has(component.key)) return;
+          observed.add(component.key);
+          state.notifications.push({
+            id: crypto.randomUUID(),
+            category: component.category,
+            componentId: component.componentId,
+            title: component.title,
+            poseId: component.poseId,
+            createdAt: new Date().toISOString(),
+            read: false,
+          });
+          changed = true;
+        });
+      }
+      if (changed) {
+        state.observedUnlocks = [...observed].slice(-MAX_OBSERVED_BANNER_UNLOCKS);
+        state.notifications = state.notifications.slice(-MAX_BANNER_NOTIFICATIONS);
+        writeData(data);
+      }
+      return send(res, 200, {
+        notifications: state.notifications,
+        unreadCount: state.notifications.filter(notification => !notification.read).length,
+      });
+    }
+    if (p === '/api/player/notifications/read' && req.method === 'POST') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam to update your notifications.' });
+      const data = readData();
+      const signup = signupForPlayer(data, player);
+      if (!signup) return send(res, 404, { error: 'Could not find one signup linked to this Steam profile.' });
+      const changes = JSON.parse(await readBody(req) || '{}');
+      let notifications;
+      if (changes.markAll === true) {
+        notifications = signup.bannerNotificationState.notifications;
+      } else {
+        const id = str(changes.id, 80);
+        const notification = signup.bannerNotificationState.notifications.find(item => item.id === id);
+        if (!notification) return send(res, 404, { error: 'That notification could not be found.' });
+        notifications = [notification];
+      }
+      const changed = notifications.some(notification => !notification.read);
+      notifications.forEach(notification => { notification.read = true; });
+      if (changed) writeData(data);
+      return send(res, 200, {
+        ok: true,
+        unreadCount: signup.bannerNotificationState.notifications.filter(notification => !notification.read).length,
+      });
+    }
     if (p === '/api/player/signup' && req.method === 'GET') {
       const player = playerSession(req);
       if (!player) return send(res, 401, { error: 'Sign in with Steam to find your signup.' });
@@ -2789,7 +2927,7 @@ const server = http.createServer(async (req, res) => {
       if (!isAdmin(req)) {
         const hiddenSignupIds = new Set(data.playerListExclusions || []);
         data.players = data.players.filter(player => !hiddenSignupIds.has(player.signupId));
-        data.signups = data.signups.map(({ steam, steamId, ...signup }) => signup);
+        data.signups = data.signups.map(({ steam, steamId, bannerNotificationState, ...signup }) => signup);
         data.teams = data.teams.map(({ captainSignupId, ...team }) => team);
         data.players = data.players.map(({ steam, ...player }) => player);
         data.badges = data.badges.map(({ manualPlayerIds, ...badge }) => badge);

@@ -46,6 +46,7 @@
 .banner-pose-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .banner-pose-option{display:flex;min-width:0;min-height:180px;flex-direction:column;align-items:stretch;padding:10px;border:1px solid var(--line);background:var(--paper);color:var(--ink);text-align:left}
 .banner-pose-option[aria-pressed=true]{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.banner-pose-option.notification-target,.banner-inventory-card.notification-target{outline:2px solid var(--gold);outline-offset:3px}
 .banner-pose-option:disabled{opacity:.55;cursor:not-allowed}
 .banner-pose-option img,.banner-pose-placeholder{display:grid;width:100%;height:125px;object-fit:contain;place-items:center;background:#111013;color:var(--gold);font:500 24px var(--disp)}
 .banner-pose-option strong{padding-top:8px;font-size:13px}
@@ -196,6 +197,13 @@
   let pendingTarget = null;
   let dirty = false;
   let editRevision = 0;
+  const notificationParams = new URLSearchParams(location.search);
+  const notificationCategory = notificationParams.get('category');
+  const notificationItemId = notificationParams.get('item') || '';
+  const notificationPoseId = notificationParams.get('pose') || '';
+  const notificationFocusPose = notificationParams.get('focus') === 'pose';
+  if (Object.prototype.hasOwnProperty.call(categories, notificationCategory))
+    activeCategory = notificationCategory;
 
   const status = (message, kind = '') => {
     editorStatus.textContent = message;
@@ -293,6 +301,7 @@
       const option = document.createElement('button');
       option.type = 'button';
       option.className = `banner-pose-option${pose.unlocked === false ? ' locked' : ''}`;
+      option.dataset.poseId = pose.id;
       option.disabled = pose.unlocked === false;
       option.setAttribute('aria-pressed', String(pose.id === selectedPoseId()));
       if (pose.previewImage) {
@@ -355,9 +364,13 @@
       button.setAttribute('aria-selected', String(key === activeCategory));
     });
   };
-  const itemCard = ({ title, image, description, selected, order, action, disabled = false, locked = false }) => {
+  const itemCard = ({ title, image, description, selected, order, action, componentId = '', disabled = false, locked = false }) => {
     const card = document.createElement('article');
     card.className = `banner-inventory-card${selected ? ' selected' : ''}${locked ? ' locked' : ''}`;
+    if (componentId) {
+      card.dataset.componentId = componentId;
+      card.tabIndex = -1;
+    }
     if (image) {
       const thumbnail = document.createElement('img');
       thumbnail.className = 'banner-item-image';
@@ -460,6 +473,7 @@
             ? badge.description || itemRequirementsText(badge) || 'Unlocked badge.'
             : itemRequirementsText(badge) || 'Contact league staff.',
           selected: isEquipped,
+          componentId: badge.id,
           locked: badge.unlocked === false,
           action: {
             label: badge.unlocked ? 'Equip' : 'Locked',
@@ -527,10 +541,12 @@
           : item.name || `${definition.title} sprite`,
         image: item.image,
         selected,
+        componentId: item.id,
         locked: item.unlocked === false,
         description: item.unlocked === false
           ? item.lockedRequirements || itemRequirementsText(item) || 'Contact league staff.'
-          : selected ? 'Currently equipped.' : '',
+          : selected ? 'Currently equipped.'
+            : activeCategory === 'border' ? item.description || '' : '',
         action: {
           label: item.unlocked === false ? 'Locked' : 'Equip',
           run: () => {
@@ -622,10 +638,23 @@
       editorLayout.hidden = false;
       pageStatus.hidden = true;
       window.MHLPlayerBanner.ensureConfig(signup);
+      if (notificationPoseId) {
+        const pose = (signup.bannerPoses || []).find(item =>
+          item.id === notificationPoseId && item.unlocked !== false);
+        if (pose) signup.bannerConfig.poseId = pose.id;
+      }
       renderPosePicker();
       renderAvailableCategories();
       renderBanner();
       renderInventory();
+      const target = notificationFocusPose
+        ? Array.from(poseGrid.children).find(option => option.dataset.poseId === notificationPoseId)
+        : Array.from(inventoryGrid.children).find(card => card.dataset.componentId === notificationItemId);
+      if (target) {
+        target.classList.add('notification-target');
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        target.focus({ preventScroll: true });
+      }
     } catch (error) {
       pageStatus.textContent = error.message || 'Could not load your player banner. Please reload and try again.';
       pageStatus.classList.add('error');

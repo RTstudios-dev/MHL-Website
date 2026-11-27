@@ -12,6 +12,8 @@
   const draftBoard = '/season-2-players';
   const cur = href => href === current ? ' aria-current="page"' : '';
   let checkingDraftTurn = false;
+  let notificationsEnabled = false;
+  let notificationAnimationTimer = 0;
 
   const wordmark = '<span class="wm">M<i>H</i>L</span>';
   let steamLoginButton;
@@ -24,23 +26,150 @@
       ? `<img src="${esc(signup.photo)}" alt="">`
       : `<span>${esc(name.trim().charAt(0).toUpperCase() || 'S')}</span>`;
   };
+  const stopNotificationAnimation = () => {
+    window.clearTimeout(notificationAnimationTimer);
+    notificationAnimationTimer = 0;
+    const toggle = document.getElementById('notificationToggle');
+    if (toggle) toggle.classList.remove('animation-enabled');
+  };
+  const scheduleNotificationAnimation = () => {
+    const toggle = document.getElementById('notificationToggle');
+    const menu = document.getElementById('notificationMenu');
+    if (!toggle || !menu || !menu.hidden || !toggle.classList.contains('has-unread')
+        || toggle.classList.contains('animation-enabled') || notificationAnimationTimer) return;
+    notificationAnimationTimer = window.setTimeout(() => {
+      notificationAnimationTimer = 0;
+      if (menu.hidden && toggle.classList.contains('has-unread'))
+        toggle.classList.add('animation-enabled');
+    }, 10000);
+  };
   M.refreshPlayerButton = async function () {
     const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
     if (!sessionResponse.ok) throw new Error('Could not check Steam sign-in.');
     const session = await sessionResponse.json();
     if (!session.authenticated) {
+      notificationsEnabled = false;
+      stopNotificationAnimation();
       steamLoginButton.classList.remove('is-profile');
       steamLoginButton.innerHTML = '<img class="header-service-logo" src="/steam-logo.png" alt="">';
       steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
       steamLoginButton.removeAttribute('title');
+      document.getElementById('playerNotifications').hidden = true;
       return;
     }
     showSteamProfileButton(null);
     const signupResponse = await fetch('/api/player/signup', { cache: 'no-store' });
-    if (signupResponse.status === 404) return;
+    if (signupResponse.status === 404) {
+      notificationsEnabled = false;
+      stopNotificationAnimation();
+      document.getElementById('playerNotifications').hidden = true;
+      return;
+    }
     if (!signupResponse.ok) throw new Error('Could not load your player profile.');
     const result = await signupResponse.json();
     showSteamProfileButton(result.signup);
+    notificationsEnabled = true;
+    M.refreshNotifications().catch(error => console.error('Could not load player notifications:', error));
+  };
+  M.refreshNotifications = async function () {
+    if (!notificationsEnabled) return;
+    const root = document.getElementById('playerNotifications');
+    const toggle = document.getElementById('notificationToggle');
+    const menu = document.getElementById('notificationMenu');
+    const list = document.getElementById('notificationList');
+    const count = document.getElementById('notificationCount');
+    const markAll = document.getElementById('markAllNotificationsRead');
+    const response = await fetch('/api/player/notifications', { cache: 'no-store' });
+    const result = await response.json();
+    if (response.status === 401 || response.status === 404) {
+      notificationsEnabled = false;
+      stopNotificationAnimation();
+      root.hidden = true;
+      menu.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    if (!response.ok) throw new Error(result.error || 'Could not load player notifications.');
+    root.hidden = false;
+    const unreadCount = Number(result.unreadCount) || 0;
+    count.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+    count.hidden = unreadCount === 0;
+    toggle.classList.toggle('has-unread', unreadCount > 0);
+    if (unreadCount && menu.hidden) scheduleNotificationAnimation();
+    else stopNotificationAnimation();
+    toggle.setAttribute('aria-label', unreadCount
+      ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
+      : 'Notifications');
+    markAll.hidden = unreadCount === 0;
+    list.replaceChildren();
+    const categories = {
+      badges: 'Badge',
+      pose: 'Pose',
+      helmet: 'Helmet',
+      torso: 'Torso',
+      stick: 'Stick',
+      border: 'Border',
+    };
+    const notifications = Array.isArray(result.notifications) ? result.notifications : [];
+    if (!notifications.length) {
+      const empty = document.createElement('li');
+      empty.className = 'notification-empty';
+      empty.textContent = 'No new component unlocks yet.';
+      list.append(empty);
+      return;
+    }
+    notifications.slice().reverse().forEach(notification => {
+      const item = document.createElement('li');
+      item.className = `notification-item${notification.read ? '' : ' unread'}`;
+      const link = document.createElement('a');
+      const query = new URLSearchParams();
+      if (notification.category === 'pose') {
+        query.set('focus', 'pose');
+        query.set('pose', notification.componentId);
+      } else {
+        query.set('category', notification.category);
+        query.set('item', notification.componentId);
+        if (notification.poseId) query.set('pose', notification.poseId);
+      }
+      link.href = `/player-banner?${query.toString()}`;
+      link.textContent = `${categories[notification.category] || 'Component'} unlocked: ${notification.title}`;
+      if (!notification.read) {
+        const indicator = document.createElement('span');
+        indicator.className = 'notification-unread-indicator';
+        indicator.setAttribute('aria-hidden', 'true');
+        link.prepend(indicator);
+      }
+      const time = document.createElement('time');
+      time.className = 'notification-time';
+      if (notification.createdAt) {
+        time.dateTime = notification.createdAt;
+        const date = new Date(notification.createdAt);
+        time.textContent = Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString();
+      }
+      link.append(time);
+      link.addEventListener('click', event => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        const destination = link.href;
+        const markRead = fetch('/api/player/notifications/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: notification.id }),
+        }).then(async readResponse => {
+          const readResult = await readResponse.json();
+          if (!readResponse.ok) throw new Error(readResult.error || 'Could not mark notification as read.');
+        });
+        menu.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
+        stopNotificationAnimation();
+        markRead.then(() => location.assign(destination)).catch(error => {
+          console.error('Could not mark the player notification as read:', error);
+          location.assign(destination);
+        });
+      });
+      item.append(link);
+      list.append(item);
+    });
   };
   M.checkDraftTurn = async function () {
     if (current === draftBoard || document.hidden || checkingDraftTurn) return;
@@ -57,13 +186,37 @@
     }
   };
   function shell() {
-    document.getElementById('mtop').innerHTML = `
+    const header = document.getElementById('mtop');
+    header.innerHTML = `
       <a class="top-brand" href="/" aria-label="MHL home">
         <span class="top-brand-mark">${wordmark}</span>
         <span class="top-brand-title"><span>Miniature</span><span>Hockey League</span></span>
       </a>
       <nav class="top-nav" aria-label="Main">${NAV.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')}</nav>
       <div class="top-actions"><a class="btn top-signup" href="/sign-up">Sign Up</a><span id="discordSlot"></span></div>`;
+    const notificationRoot = document.createElement('div');
+    notificationRoot.className = 'player-notifications';
+    notificationRoot.id = 'playerNotifications';
+    notificationRoot.hidden = true;
+    notificationRoot.innerHTML = `
+        <button class="notification-toggle" id="notificationToggle" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="notificationMenu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+          <span class="notification-count" id="notificationCount" hidden></span>
+        </button>
+        <section class="notification-menu" id="notificationMenu" aria-label="Player notifications" hidden>
+          <div class="notification-menu-heading">
+            <strong>Notifications</strong>
+            <button type="button" id="markAllNotificationsRead" hidden>Mark all read</button>
+          </div>
+          <ul class="notification-list" id="notificationList"></ul>
+        </section>`;
+    header.insertAdjacentElement('afterend', notificationRoot);
+    const positionNotifications = () => {
+      notificationRoot.style.top = `${Math.ceil(header.getBoundingClientRect().bottom + 8)}px`;
+    };
+    positionNotifications();
+    if ('ResizeObserver' in window) new ResizeObserver(positionNotifications).observe(header);
+    else window.addEventListener('resize', positionNotifications);
     steamLoginButton = document.createElement('a');
     steamLoginButton.className = 'header-icon-link steam-login-top';
     steamLoginButton.href = '/player-login';
@@ -71,6 +224,52 @@
     steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
     document.querySelector('.top-actions').appendChild(steamLoginButton);
     M.refreshPlayerButton().catch(error => console.error('Could not update the Steam profile button:', error));
+    const notificationToggle = document.getElementById('notificationToggle');
+    const notificationMenu = document.getElementById('notificationMenu');
+    const closeNotifications = () => {
+      notificationMenu.hidden = true;
+      notificationToggle.setAttribute('aria-expanded', 'false');
+      scheduleNotificationAnimation();
+    };
+    notificationToggle.addEventListener('click', () => {
+      const opening = notificationMenu.hidden;
+      notificationMenu.hidden = !opening;
+      notificationToggle.setAttribute('aria-expanded', String(opening));
+      if (opening) {
+        stopNotificationAnimation();
+        M.refreshNotifications().catch(error => console.error('Could not refresh player notifications:', error));
+      } else {
+        scheduleNotificationAnimation();
+      }
+    });
+    document.getElementById('markAllNotificationsRead').addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/player/notifications/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markAll: true }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not mark notifications as read.');
+        await M.refreshNotifications();
+      } catch (error) {
+        console.error('Could not mark player notifications as read:', error);
+      }
+    });
+    document.addEventListener('click', event => {
+      if (!notificationRoot.contains(event.target)) closeNotifications();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeNotifications();
+    });
+    window.setInterval(() => {
+      if (notificationsEnabled && !document.hidden)
+        M.refreshNotifications().catch(error => console.error('Could not refresh player notifications:', error));
+    }, 60000);
+    document.addEventListener('visibilitychange', () => {
+      if (notificationsEnabled && !document.hidden)
+        M.refreshNotifications().catch(error => console.error('Could not refresh player notifications:', error));
+    });
     if (current !== draftBoard) {
       const checkDraftTurn = () => M.checkDraftTurn().catch(error => console.error('Could not check the draft turn:', error));
       checkDraftTurn();

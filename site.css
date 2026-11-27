@@ -42,6 +42,45 @@ button{font:inherit;color:inherit;cursor:pointer}
 .top-actions{grid-column:3;grid-row:1;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap;min-width:max-content}
 .top-actions .top-signup{background:var(--gold);color:var(--on-gold)}
 .top-actions .top-signup:hover{background:var(--gold-hi);color:var(--on-gold)}
+.player-notifications{position:fixed;top:80px;right:clamp(16px,1.5vw,24px);z-index:31;display:flex;justify-content:flex-end}
+.player-notifications[hidden]{display:none}
+.notification-toggle{position:relative;display:grid;width:42px;height:36px;place-items:center;border:1px solid transparent;background:transparent;color:var(--gold);transform-origin:top right}
+.notification-toggle:hover,.notification-toggle[aria-expanded=true]{border-color:var(--line);background:var(--card)}
+.notification-toggle.has-unread.animation-enabled{animation:notification-pop-glow 10s ease-in-out infinite}
+.notification-toggle svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.6}
+.notification-toggle.has-unread.animation-enabled svg{animation:notification-bell-shake 10s linear infinite;transform-origin:50% 18%}
+.notification-count{position:absolute;top:-7px;right:-7px;display:grid;min-width:18px;height:18px;place-items:center;padding:0 4px;border-radius:10px;background:#c8102e;color:#fff;font:700 10px var(--body)}
+@keyframes notification-pop-glow{
+  0%,20%,100%{transform:scale(1);box-shadow:none}
+  5%,18%{transform:scale(2);box-shadow:0 0 24px 8px rgba(201,163,92,.85)}
+}
+@keyframes notification-bell-shake{
+  0%,5%,20%,100%{transform:rotate(0)}
+  6.5%{transform:rotate(-14deg)}
+  8%{transform:rotate(14deg)}
+  9.5%{transform:rotate(-11deg)}
+  11%{transform:rotate(8deg)}
+  12.5%{transform:rotate(-4deg)}
+  14%{transform:rotate(0)}
+}
+.notification-menu{position:absolute;top:calc(100% + 9px);right:0;z-index:60;width:min(360px,calc(100vw - 32px));max-height:min(70vh,560px);overflow:auto;border:1px solid var(--line);background:var(--card);box-shadow:0 12px 32px #0009}
+.notification-menu[hidden]{display:none}
+.notification-menu-heading{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;border-bottom:1px solid var(--line);background:var(--card);color:var(--ink)}
+.notification-menu-heading strong{font:500 19px var(--disp)}
+.notification-menu-heading button{padding:5px 0;border:0;background:transparent;color:var(--gold);font:600 10px var(--body);letter-spacing:.08em;text-transform:uppercase}
+.notification-menu-heading button:hover{text-decoration:underline}
+.notification-list{margin:0;padding:0;list-style:none}
+.notification-item{border-bottom:1px solid var(--line)}
+.notification-item:last-child{border-bottom:0}
+.notification-item a{display:block;padding:12px 15px;color:var(--muted);font-size:13px;line-height:1.45;text-decoration:none}
+.notification-item a:hover{background:var(--paper);color:var(--ink)}
+.notification-item.unread a{color:var(--ink)}
+.notification-unread-indicator{display:inline-block;width:7px;height:7px;margin:0 8px 1px 0;border-radius:50%;background:var(--gold)}
+.notification-time{display:block;margin:4px 0 0 15px;color:var(--muted);font-size:10px}
+.notification-empty{padding:16px;color:var(--muted);font-size:13px}
+@media(prefers-reduced-motion:reduce){
+  .notification-toggle.has-unread.animation-enabled,.notification-toggle.has-unread.animation-enabled svg{animation:none}
+}
 .header-icon-link{display:inline-flex;align-items:center;justify-content:center;flex:none;width:46px;height:46px;padding:3px;border:0;background:transparent;transition:opacity .2s}
 .header-icon-link:hover{opacity:.78}
 .header-service-logo{display:block;width:100%;height:100%;object-fit:contain}
@@ -226,6 +265,27 @@ dialog.prompt-dialog::backdrop{background:#000b}
 .showcase-link{position:relative;min-height:0;padding:24px 22px 28px;color:var(--ink);transition:border-color .2s,transform .2s var(--ease),background .2s}
 .showcase-link:hover{transform:translateY(-4px);border-color:var(--gold)}
 .showcase-season{background:linear-gradient(180deg,rgba(144,213,255,.28),var(--paper) 72%)}
+.showcase-season .showcase-art{margin-top:54px}
+.season-lights{position:absolute;inset:0 0 auto;z-index:2;height:86px;pointer-events:none}
+.season-lights svg{display:block;width:100%;height:100%;overflow:visible}
+.season-light-wire{fill:none;stroke:#332c26;stroke-width:3}
+.season-light-drop{fill:none;stroke:#3b3027;stroke-width:2}
+.season-light-socket{fill:#78633e}
+.season-light-bulb{fill:currentColor;filter:drop-shadow(0 0 4px currentColor);animation:christmas-glow 1.8s ease-in-out infinite alternate}
+.light-red{color:#f35c57}
+.light-green{color:#67d990}
+.light-gold{color:#ffd36b}
+.light-blue{color:#70d3ff}
+.season-light:nth-of-type(2) .season-light-bulb{animation-delay:.2s}
+.season-light:nth-of-type(3) .season-light-bulb{animation-delay:.8s}
+.season-light:nth-of-type(4) .season-light-bulb{animation-delay:.4s}
+.season-light:nth-of-type(5) .season-light-bulb{animation-delay:1s}
+.season-light:nth-of-type(6) .season-light-bulb{animation-delay:.5s}
+.season-light:nth-of-type(7) .season-light-bulb{animation-delay:1.2s}
+.season-light:nth-of-type(8) .season-light-bulb{animation-delay:.7s}
+.season-light:nth-of-type(9) .season-light-bulb{animation-delay:1.4s}
+@keyframes christmas-glow{from{opacity:.72;filter:drop-shadow(0 0 2px currentColor)}to{opacity:1;filter:drop-shadow(0 0 8px currentColor)}}
+@media(prefers-reduced-motion:reduce){.season-light-bulb{animation:none}}
 .showcase-pugs{background:linear-gradient(180deg,rgba(161,130,196,.3),var(--paper) 72%)}
 .showcase-art{display:grid;place-items:start center;width:100%;height:210px;margin-bottom:14px}
 .showcase-art img{width:min(100%,230px);height:100%;object-fit:contain;object-position:center top}
