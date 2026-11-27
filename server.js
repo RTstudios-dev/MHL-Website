@@ -464,9 +464,7 @@ const modRosterSnapshot = data => {
       return { error: 'Duplicate Steam accounts are linked to MHL signups.' };
     seenSteamIds.add(steamId);
     const team = data.teams.find(item => item.id === signup.team);
-    const config = signup.bannerConfig && typeof signup.bannerConfig === 'object'
-      ? signup.bannerConfig
-      : {};
+    const config = playerBannerConfigFor(data, signup);
     const poseId = config.poseId || defaults.poseId;
     const resolvedSprite = (type, id, defaultId) => {
       const selected = id ? spriteByTypeAndId[type].get(id) : null;
@@ -500,9 +498,10 @@ const modRosterSnapshot = data => {
       teamName: team ? team.name : '',
       photo: okImage(signup.photo) ? signup.photo : '',
       cardArtwork: okImage(signup.cardArtwork) ? signup.cardArtwork : '',
-      bannerConfig: sanitizeBannerConfig(signup.bannerConfig),
+      bannerConfig: config,
       bannerDefaults: data.bannerDefaults || {},
       bannerLayers: data.bannerLayers || [],
+      bannerPoses: playerBannerPosesFor(data, signup),
       badgeSlots: equippedBadgeSlotsFor(data, signup),
       badges: badgeCollectionFor(data, signup),
       bannerSprites: playerBannerSpritesFor(data, signup, 'bannerSprites'),
@@ -634,6 +633,146 @@ const signupForPlayer = (data, player) => {
     (player.steamId && signup.steamId === player.steamId) ||
     (profileKey && steamKey(signup.steam) === profileKey));
   return matches.length === 1 ? matches[0] : null;
+};
+const playerBannerConfigFor = (data, signup) => {
+  const config = sanitizeBannerConfig(signup.bannerConfig);
+  const unlockedPoses = (data.bannerPoses || [])
+    .filter(pose => poseIsUnlocked(data, signup, pose));
+  const defaultPose = unlockedPoses.find(pose => pose.id === data.bannerDefaults.poseId)
+    || unlockedPoses[0];
+  config.poseId = unlockedPoses.some(pose => pose.id === config.poseId)
+    ? config.poseId
+    : defaultPose ? defaultPose.id : '';
+  config.backgroundSpriteId = '';
+
+  const spriteFields = [
+    ['bannerSpriteId', 'bannerSprites', true],
+    ['helmetSpriteId', 'helmetSprites', true],
+    ['torsoSpriteId', 'torsoSprites', true],
+    ['stickSpriteId', 'stickSprites', true],
+    ['puckSpriteId', 'puckSprites', true],
+    ['borderSpriteId', 'borderSprites', false],
+  ];
+  for (const [field, collection, poseBound] of spriteFields) {
+    const id = config[field];
+    if (!id) continue;
+    const sprite = (data[collection] || []).find(item => item.id === id);
+    if (!sprite || !sprite.image || (poseBound && sprite.poseId !== config.poseId)
+        || (!poseBound && sprite.poseId) || !badgeIsUnlocked(data, signup, sprite))
+      config[field] = '';
+  }
+
+  const torso = (data.torsoSprites || []).find(item => item.id === config.torsoSpriteId);
+  const torsoName = String(torso && torso.name || '').trim().toLowerCase();
+  const pairedBackground = torsoName && (data.backgroundSprites || []).find(item =>
+    item.poseId === config.poseId && item.image
+    && String(item.name || '').trim().toLowerCase() === torsoName);
+  if (pairedBackground && !badgeIsUnlocked(data, signup, pairedBackground))
+    config.torsoSpriteId = '';
+
+  return config;
+};
+const playerBannerPosesFor = (data, signup) => (data.bannerPoses || []).map(pose => ({
+  id: pose.id,
+  name: pose.name,
+  previewImage: pose.previewImage,
+  requirements: pose.requirements,
+  requireAllStats: pose.requireAllStats !== false,
+  allPlayers: pose.allPlayers,
+  season1Players: pose.season1Players,
+  season2Players: pose.season2Players,
+  unlocked: poseIsUnlocked(data, signup, pose),
+}));
+const playerBannerSignupPayload = (data, signup) => {
+  const stats = trackedStatsFor(data, signup.id);
+  const team = data.teams.find(item => item.id === signup.team);
+  const values = signupValues(signup);
+  const bannerConfig = playerBannerConfigFor(data, signup);
+  return {
+    id: signup.id, discord: signup.discord, name: signup.name, steam: signup.steam,
+    hours: signup.hours, position: signup.position, captain: signup.captain,
+    europeanLeagueAcknowledgement: signup.europeanLeagueAcknowledgement === true,
+    photo: signup.photo, cardArtwork: signup.cardArtwork || '', team: signup.team, teamName: team ? team.name : '',
+    value: signup.position === 'Goalie' ? values.goalieValue : values.skaterValue,
+    points: configuredPointsFor(data, signup, stats), trackedStats: stats,
+    badgeSlots: equippedBadgeSlotsFor(data, signup),
+    badges: badgeCollectionFor(data, signup),
+    bannerConfig,
+    statRanks: bannerStatRankings(data, signup),
+    bannerPoses: playerBannerPosesFor(data, signup),
+    bannerSprites: playerBannerSpritesFor(data, signup, 'bannerSprites'),
+    backgroundSprites: playerBannerSpritesFor(data, signup, 'backgroundSprites'),
+    helmetSprites: playerBannerSpritesFor(data, signup, 'helmetSprites'),
+    torsoSprites: playerBannerSpritesFor(data, signup, 'torsoSprites'),
+    stickSprites: playerBannerSpritesFor(data, signup, 'stickSprites'),
+    puckSprites: playerBannerSpritesFor(data, signup, 'puckSprites'),
+    borderSprites: playerBannerSpritesFor(data, signup, 'borderSprites'),
+    bannerDefaults: data.bannerDefaults || {},
+    bannerLayers: data.bannerLayers || [],
+    ...values,
+  };
+};
+const savePlayerBannerConfig = (data, signup, changes) => {
+  const currentBannerConfig = sanitizeBannerConfig(signup.bannerConfig);
+  const requestedPoseId = typeof changes.poseId === 'string'
+    ? changes.poseId.trim()
+    : currentBannerConfig.poseId || data.bannerDefaults.poseId;
+  const pose = (data.bannerPoses || []).find(item => item.id === requestedPoseId);
+  if (!pose || !poseIsUnlocked(data, signup, pose))
+    return { status: 400, error: 'The selected pose is unavailable.' };
+  const collections = {
+    bannerSpriteId: ['bannerSprites', 'banner'],
+    backgroundSpriteId: ['backgroundSprites', 'background'],
+    helmetSpriteId: ['helmetSprites', 'helmet'],
+    torsoSpriteId: ['torsoSprites', 'torso'],
+    stickSpriteId: ['stickSprites', 'stick'],
+    puckSpriteId: ['puckSprites', 'puck'],
+    borderSpriteId: ['borderSprites', 'border'],
+  };
+  for (const [field, [key]] of Object.entries(collections)) {
+    const id = typeof changes[field] === 'string' ? changes[field].trim() : '';
+    if (!id) continue;
+    const sprite = (data[key] || []).find(item => item.id === id);
+    const spriteMatchesPose = field === 'borderSpriteId'
+      ? sprite && !sprite.poseId
+      : sprite && sprite.poseId === pose.id;
+    if (!sprite || !spriteMatchesPose || !sprite.image || !badgeIsUnlocked(data, signup, sprite))
+      return { status: 400, error: 'One or more selected player-banner sprites are unavailable.' };
+  }
+  const torsoId = typeof changes.torsoSpriteId === 'string' ? changes.torsoSpriteId.trim() : '';
+  const torso = (data.torsoSprites || []).find(item => item.id === torsoId);
+  const torsoName = String(torso && torso.name || '').trim().toLowerCase();
+  const pairedBackground = torsoName && (data.backgroundSprites || []).find(item =>
+    item.poseId === pose.id && item.image
+    && String(item.name || '').trim().toLowerCase() === torsoName);
+  if (pairedBackground && !badgeIsUnlocked(data, signup, pairedBackground))
+    return { status: 400, error: 'The background paired with this torso is unavailable.' };
+  if (changes.badgeSlots !== undefined) {
+    if (!Array.isArray(changes.badgeSlots) || changes.badgeSlots.length > 3)
+      return { status: 400, error: 'Choose up to three badge slots.' };
+    const unlockedBadgeIds = new Set(
+      badgeCollectionFor(data, signup).filter(badge => badge.unlocked).map(badge => badge.id));
+    const badgeSlots = changes.badgeSlots.map(value => str(value, 40));
+    if (badgeSlots.some(id => id && !unlockedBadgeIds.has(id)))
+      return { status: 400, error: 'One or more selected badges are unavailable.' };
+    while (badgeSlots.length < 3) badgeSlots.push('');
+    signup.badgeSlots = badgeSlots;
+  }
+  const equippedStats = Array.isArray(changes.equippedStats)
+    ? changes.equippedStats.slice(0, 20).map(value => str(value, 40)).filter(Boolean)
+    : [];
+  signup.bannerConfig = sanitizeBannerConfig({
+    ...currentBannerConfig,
+    ...changes,
+    poseId: pose.id,
+    equippedStats,
+  });
+  signup.bannerConfig.equippedStats = equippedStats;
+  writeData(data);
+  return {
+    bannerConfig: signup.bannerConfig,
+    badgeSlots: equippedBadgeSlotsFor(data, signup),
+  };
 };
 const score = v => (v === null || v === '' || v === undefined) ? null : num(v, 99);
 const okImage = u => UPLOAD_RE.test(u) && fs.existsSync(uploadFile(u));
@@ -899,13 +1038,13 @@ const automaticallyGranted = (data, signup, item) => {
 };
 const badgeIsUnlocked = (data, signup, badge) => {
   if (!badge || !badge.image || !matchesPlayerGroupRequirements(data, signup, badge)) return false;
-  if (badge.manualPlayerIds.includes(signup.id)) return true;
+  if (Array.isArray(badge.manualPlayerIds) && badge.manualPlayerIds.includes(signup.id)) return true;
   return automaticallyGranted(data, signup, badge)
     || statRequirementsMet(data, signup, badge.requirements, badge.requireAllStats);
 };
 const poseIsUnlocked = (data, signup, pose) => {
   if (!pose || !matchesPlayerGroupRequirements(data, signup, pose)) return false;
-  if (pose.manualPlayerIds.includes(signup.id)) return true;
+  if (Array.isArray(pose.manualPlayerIds) && pose.manualPlayerIds.includes(signup.id)) return true;
   return automaticallyGranted(data, signup, pose)
     || statRequirementsMet(data, signup, pose.requirements, pose.requireAllStats);
 };
@@ -2491,6 +2630,64 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { code });
     }
+    if (p === '/api/player/game-banner' && req.method === 'POST') {
+      if (!STEAM_API_KEY)
+        return send(res, 503, { error: 'In-game Steam account verification is not configured on this website.' });
+      if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json'))
+        return send(res, 415, { error: 'The in-game banner request must use JSON.' });
+      if (!allowPublic('steam-game-banner:' + clientIp(req), 30, 60 * 60 * 1000))
+        return send(res, 429, { error: 'Too many in-game banner requests. Please try again later.' });
+
+      let payload;
+      try {
+        payload = JSON.parse(await readBody(req, 65536) || '{}');
+      } catch {
+        return send(res, 400, { error: 'The in-game banner request is invalid.' });
+      }
+      const ticket = payload && typeof payload.ticket === 'string' ? payload.ticket : '';
+      if (ticket.length < 64 || ticket.length > 8192 || ticket.length % 2 !== 0 ||
+          !/^[a-f0-9]+$/i.test(ticket) ||
+          !['load', 'save'].includes(payload.action))
+        return send(res, 400, { error: 'The in-game banner request is invalid.' });
+
+      let steamId;
+      try {
+        steamId = await authenticateGameSteamTicket(ticket);
+      } catch (error) {
+        console.error('[steam-game-banner] Steam account verification failed:', error.message);
+        return send(res, 503, { error: 'Your Steam account could not be verified right now. Please try again.' });
+      }
+      if (!steamId)
+        return send(res, 401, { error: 'Steam could not verify the account running the game. Please try again.' });
+
+      const { profileUrl, lookupFailed } = await steamProfileUrl(steamId);
+      const player = { steamId, profileUrl, lookupFailed };
+      const data = readData();
+      const signup = signupForPlayer(data, player);
+      if (!signup) {
+        const matches = data.signups.filter(item =>
+          (player.steamId && item.steamId === player.steamId) ||
+          (steamKey(player.profileUrl) && steamKey(item.steam) === steamKey(player.profileUrl)));
+        if (matches.length > 1)
+          return send(res, 409, { error: 'More than one signup is linked to this Steam profile. Please ask league staff for help.' });
+        if (lookupFailed)
+          return send(res, 503, { error: 'Steam could not resolve your profile link right now. Please try again later.' });
+        return send(res, 404, { error: 'Could not find one signup linked to this Steam profile.' });
+      }
+
+      if (payload.action === 'load')
+        return send(res, 200, { signup: playerBannerSignupPayload(data, signup) });
+
+      const changes = payload.bannerConfig;
+      if (!changes || typeof changes !== 'object' || Array.isArray(changes))
+        return send(res, 400, { error: 'The in-game banner configuration is invalid.' });
+      if (payload.badgeSlots !== undefined)
+        changes.badgeSlots = payload.badgeSlots;
+      const saved = savePlayerBannerConfig(data, signup, changes);
+      if (saved.error)
+        return send(res, saved.status, { error: saved.error });
+      return send(res, 200, { ok: true, ...saved });
+    }
     if (p === '/api/player/game-login/consume' && req.method === 'POST') {
       const origin = requestOrigin(req);
       if (!origin || req.headers.origin !== origin)
@@ -2677,53 +2874,9 @@ const server = http.createServer(async (req, res) => {
       }
       if (matches.length > 1) return send(res, 409, { error: 'More than one signup is linked to this Steam profile. Please ask league staff for help.' });
       const signup = matches[0];
-      const stats = trackedStatsFor(data, signup.id);
-      const team = data.teams.find(item => item.id === signup.team);
-      const values = signupValues(signup);
-      const unlockedPoses = (data.bannerPoses || []).filter(pose => poseIsUnlocked(data, signup, pose));
-      const defaultPose = unlockedPoses.find(pose => pose.id === data.bannerDefaults.poseId)
-        || unlockedPoses[0];
-      const bannerConfig = {
-        ...sanitizeBannerConfig(signup.bannerConfig),
-        backgroundSpriteId: '',
-        poseId: unlockedPoses.some(pose => pose.id === signup.bannerConfig.poseId)
-          ? signup.bannerConfig.poseId : defaultPose && defaultPose.id || '',
-      };
       return send(res, 200, {
         profileUrl: player.profileUrl,
-        signup: {
-          id: signup.id, discord: signup.discord, name: signup.name, steam: signup.steam,
-          hours: signup.hours, position: signup.position, captain: signup.captain,
-          europeanLeagueAcknowledgement: signup.europeanLeagueAcknowledgement === true,
-          photo: signup.photo, cardArtwork: signup.cardArtwork || '', team: signup.team, teamName: team ? team.name : '',
-          value: signup.position === 'Goalie' ? values.goalieValue : values.skaterValue,
-          points: configuredPointsFor(data, signup, stats), trackedStats: stats,
-          badgeSlots: equippedBadgeSlotsFor(data, signup),
-          badges: badgeCollectionFor(data, signup),
-          bannerConfig,
-          statRanks: bannerStatRankings(data, signup),
-          bannerPoses: (data.bannerPoses || []).map(pose => ({
-            id: pose.id,
-            name: pose.name,
-            previewImage: pose.previewImage,
-            requirements: pose.requirements,
-            requireAllStats: pose.requireAllStats !== false,
-            allPlayers: pose.allPlayers,
-            season1Players: pose.season1Players,
-            season2Players: pose.season2Players,
-            unlocked: poseIsUnlocked(data, signup, pose),
-          })),
-          bannerSprites: playerBannerSpritesFor(data, signup, 'bannerSprites'),
-          backgroundSprites: playerBannerSpritesFor(data, signup, 'backgroundSprites'),
-          helmetSprites: playerBannerSpritesFor(data, signup, 'helmetSprites'),
-          torsoSprites: playerBannerSpritesFor(data, signup, 'torsoSprites'),
-          stickSprites: playerBannerSpritesFor(data, signup, 'stickSprites'),
-          puckSprites: playerBannerSpritesFor(data, signup, 'puckSprites'),
-          borderSprites: playerBannerSpritesFor(data, signup, 'borderSprites'),
-          bannerDefaults: data.bannerDefaults || {},
-          bannerLayers: data.bannerLayers || [],
-          ...values,
-        },
+        signup: playerBannerSignupPayload(data, signup),
       });
     }
     if (p === '/api/player/signup' && req.method === 'PUT') {
@@ -2774,65 +2927,10 @@ const server = http.createServer(async (req, res) => {
       if (matches.length !== 1) return send(res, matches.length ? 409 : 404, { error: 'Could not find one signup linked to this Steam profile.' });
       const changes = JSON.parse(await readBody(req) || '{}');
       const signup = matches[0];
-      const currentBannerConfig = sanitizeBannerConfig(signup.bannerConfig);
-      const requestedPoseId = typeof changes.poseId === 'string'
-        ? changes.poseId.trim()
-        : currentBannerConfig.poseId || data.bannerDefaults.poseId;
-      const pose = (data.bannerPoses || []).find(item => item.id === requestedPoseId);
-      if (!pose || !poseIsUnlocked(data, signup, pose))
-        return send(res, 400, { error: 'The selected pose is unavailable.' });
-      const collections = {
-        bannerSpriteId: ['bannerSprites', 'banner'],
-        backgroundSpriteId: ['backgroundSprites', 'background'],
-        helmetSpriteId: ['helmetSprites', 'helmet'],
-        torsoSpriteId: ['torsoSprites', 'torso'],
-        stickSpriteId: ['stickSprites', 'stick'],
-        puckSpriteId: ['puckSprites', 'puck'],
-        borderSpriteId: ['borderSprites', 'border'],
-      };
-      for (const [field, [key]] of Object.entries(collections)) {
-        const id = typeof changes[field] === 'string' ? changes[field].trim() : '';
-        if (!id) continue;
-        const sprite = (data[key] || []).find(item => item.id === id);
-        const spriteMatchesPose = field === 'borderSpriteId' ? !sprite?.poseId : sprite && sprite.poseId === pose.id;
-        if (!sprite || !spriteMatchesPose || !sprite.image || !badgeIsUnlocked(data, signup, sprite))
-          return send(res, 400, { error: 'One or more selected player-banner sprites are unavailable.' });
-      }
-      const torsoId = typeof changes.torsoSpriteId === 'string' ? changes.torsoSpriteId.trim() : '';
-      const torso = (data.torsoSprites || []).find(item => item.id === torsoId);
-      const torsoName = String(torso && torso.name || '').trim().toLowerCase();
-      const pairedBackground = torsoName && (data.backgroundSprites || []).find(item =>
-        item.poseId === pose.id && item.image
-        && String(item.name || '').trim().toLowerCase() === torsoName);
-      if (pairedBackground && !badgeIsUnlocked(data, signup, pairedBackground))
-        return send(res, 400, { error: 'The background paired with this torso is unavailable.' });
-      if (changes.badgeSlots !== undefined) {
-        if (!Array.isArray(changes.badgeSlots) || changes.badgeSlots.length > 3)
-          return send(res, 400, { error: 'Choose up to three badge slots.' });
-        const unlockedBadgeIds = new Set(
-          badgeCollectionFor(data, signup).filter(badge => badge.unlocked).map(badge => badge.id));
-        const badgeSlots = changes.badgeSlots.map(value => str(value, 40));
-        if (badgeSlots.some(id => id && !unlockedBadgeIds.has(id)))
-          return send(res, 400, { error: 'One or more selected badges are unavailable.' });
-        while (badgeSlots.length < 3) badgeSlots.push('');
-        signup.badgeSlots = badgeSlots;
-      }
-      const equippedStats = Array.isArray(changes.equippedStats)
-        ? changes.equippedStats.slice(0, 20).map(value => str(value, 40)).filter(Boolean)
-        : [];
-      signup.bannerConfig = sanitizeBannerConfig({
-        ...currentBannerConfig,
-        ...changes,
-        poseId: pose.id,
-        equippedStats,
-      });
-      signup.bannerConfig.equippedStats = equippedStats;
-      writeData(data);
-      return send(res, 200, {
-        ok: true,
-        bannerConfig: signup.bannerConfig,
-        badgeSlots: equippedBadgeSlotsFor(data, signup),
-      });
+      const saved = savePlayerBannerConfig(data, signup, changes);
+      if (saved.error)
+        return send(res, saved.status, { error: saved.error });
+      return send(res, 200, { ok: true, ...saved });
     }
     if (p === '/api/player/card-artwork' && req.method === 'PUT') {
       const player = playerSession(req);
