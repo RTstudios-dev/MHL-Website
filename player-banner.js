@@ -129,8 +129,9 @@
       border: { items: signup.borderSprites || [], configKey: 'borderSpriteId' },
     };
     if (activePoseId) {
-      Object.values(collections).forEach(collection => {
-        collection.items = collection.items.filter(item => item.poseId === activePoseId);
+      Object.entries(collections).forEach(([key, collection]) => {
+        if (key !== 'border')
+          collection.items = collection.items.filter(item => item.poseId === activePoseId);
       });
     }
     const customLayers = Array.isArray(signup.bannerLayers) ? signup.bannerLayers : [];

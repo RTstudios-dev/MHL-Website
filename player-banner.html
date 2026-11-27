@@ -322,7 +322,7 @@
         if (config.poseId === pose.id) return;
         config.poseId = pose.id;
         for (const field of [
-          'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'bannerSpriteId', 'borderSpriteId',
+          'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'bannerSpriteId',
         ]) {
           const items = [
             ...(signup.helmetSprites || []), ...(signup.torsoSprites || []),
@@ -349,7 +349,7 @@
       const key = button.dataset.category;
       const items = categories[key].items(signup);
       const available = ['badges', 'stats'].includes(key)
-        || items.some(item => item.poseId === poseId && item.image);
+        || items.some(item => (key === 'border' || item.poseId === poseId) && item.image);
       button.hidden = !available;
       if (!available && key === activeCategory) activeCategory = 'badges';
       button.setAttribute('aria-selected', String(key === activeCategory));
@@ -475,7 +475,7 @@
     const config = window.MHLPlayerBanner.ensureConfig(signup);
     const selectedId = config[definition.field] || '';
     const items = definition.items(signup)
-      .filter(item => item.poseId === selectedPoseId())
+      .filter(item => activeCategory === 'border' || item.poseId === selectedPoseId())
       .map(item => {
         if (activeCategory !== 'torso') return item;
         const itemName = String(item.name || '').trim().toLowerCase();

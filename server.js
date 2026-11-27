@@ -449,9 +449,10 @@ const modRosterSnapshot = data => {
   const resolvedDefaultSprite = (type, id, poseId) => {
     const items = spriteCollections[type] || [];
     const item = (id ? spriteByTypeAndId[type].get(id) : null);
-    const matchingDefault = item && item.poseId === poseId
+    const matchesPose = sprite => type === 'border' ? !sprite.poseId : sprite.poseId === poseId;
+    const matchingDefault = item && matchesPose(item)
       ? item
-      : items.find(sprite => sprite.poseId === poseId && sprite.image);
+      : items.find(sprite => matchesPose(sprite) && sprite.image);
     return matchingDefault && matchingDefault.image ? matchingDefault.image : '';
   };
   for (const signup of data.signups) {
@@ -467,7 +468,7 @@ const modRosterSnapshot = data => {
     const poseId = config.poseId || defaults.poseId;
     const resolvedSprite = (type, id, defaultId) => {
       const selected = id ? spriteByTypeAndId[type].get(id) : null;
-      if (selected && selected.poseId === poseId && selected.image) return selected.image;
+      if (selected && (type === 'border' ? !selected.poseId : selected.poseId === poseId) && selected.image) return selected.image;
       return resolvedDefaultSprite(type, defaultId, poseId);
     };
     const selectedBadges = equippedBadgeSlotsFor(data, signup).map(id => {
@@ -1332,7 +1333,7 @@ function sanitize(d) {
     const number = Number(value);
     return Number.isSafeInteger(number) && number > 0 && number <= 10000 ? number : 0;
   };
-  const normalizeSpriteCollection = (key, signupIds) => {
+  const normalizeSpriteCollection = (key, signupIds, poseIndependent = false) => {
     const byId = new Set();
     return (Array.isArray(d[key]) ? d[key] : []).slice(0, 500).map(source => {
       if (!source || typeof source !== 'object') return null;
@@ -1349,7 +1350,7 @@ function sanitize(d) {
       return {
         id,
         name: str(source.name, 80) || 'Sprite',
-        poseId: poseIds.has(str(source.poseId, 40)) ? str(source.poseId, 40) : defaultPose.id,
+        poseId: poseIndependent ? '' : poseIds.has(str(source.poseId, 40)) ? str(source.poseId, 40) : defaultPose.id,
         description: str(source.description, 240),
         image: okSpriteImage(source.image) ? source.image : '',
         naturalWidth: dimension(source.naturalWidth),
@@ -1391,7 +1392,7 @@ function sanitize(d) {
   const torsoSprites = normalizeSpriteCollection('torsoSprites', signupIds);
   const stickSprites = normalizeSpriteCollection('stickSprites', signupIds);
   const puckSprites = normalizeSpriteCollection('puckSprites', signupIds);
-  const borderSprites = normalizeSpriteCollection('borderSprites', signupIds);
+  const borderSprites = normalizeSpriteCollection('borderSprites', signupIds, true);
   const bannerLayerIds = new Set();
   const bannerLayers = (Array.isArray(d.bannerLayers) ? d.bannerLayers : []).slice(0, 50).map(source => {
     if (!source || typeof source !== 'object') return null;
@@ -2604,7 +2605,8 @@ const server = http.createServer(async (req, res) => {
         const id = typeof changes[field] === 'string' ? changes[field].trim() : '';
         if (!id) continue;
         const sprite = (data[key] || []).find(item => item.id === id);
-        if (!sprite || sprite.poseId !== pose.id || !sprite.image || !badgeIsUnlocked(data, signup, sprite))
+        const spriteMatchesPose = field === 'borderSpriteId' ? !sprite?.poseId : sprite && sprite.poseId === pose.id;
+        if (!sprite || !spriteMatchesPose || !sprite.image || !badgeIsUnlocked(data, signup, sprite))
           return send(res, 400, { error: 'One or more selected player-banner sprites are unavailable.' });
       }
       const torsoId = typeof changes.torsoSpriteId === 'string' ? changes.torsoSpriteId.trim() : '';

@@ -529,7 +529,7 @@ const MHLA = (() => {
       D[key] = Array.isArray(D[key]) ? D[key] : [];
       D[key].forEach(item => {
         if (!item.image) return;
-        const poseName = poseNames.get(item.poseId) || 'Default';
+        const poseName = item.poseId ? poseNames.get(item.poseId) || 'Default' : 'All poses';
         entries.push({
           label: `${String(item.name || 'Unnamed reskin').trim()} — ${poseName} — ${component}`,
           remove: () => { item.image = ''; touch(); },
@@ -2125,7 +2125,9 @@ const MHLA = (() => {
         : layer === 'torso' ? 'torso'
         : layer === 'border' ? 'border'
         : 'stick';
-      const defaultPoseItems = items.filter(item => item.poseId === defaultPoseId());
+      const defaultPoseItems = layer === 'border'
+        ? items
+        : items.filter(item => item.poseId === defaultPoseId());
       const selected = defaultPoseItems.find(item => item.id === D.bannerDefaults[defaultKey] && item.image)
         || defaultPoseItems.find(item => item.image)
         || defaultPoseItems.find(item => item.id === D.bannerDefaults[defaultKey])
@@ -2310,7 +2312,7 @@ const MHLA = (() => {
         if (layerKey === 'badges') return;
         const [key] = categoryMap[layerKey];
         const items = (D[key] = Array.isArray(D[key]) ? D[key] : [])
-          .filter(item => item.poseId === defaultPoseId());
+          .filter(item => layerKey === 'border' || item.poseId === defaultPoseId());
         const defaultId = D.bannerDefaults[
           layerKey === 'border' ? 'border'
           : layerKey === 'background' ? 'background'
@@ -2558,7 +2560,7 @@ const MHLA = (() => {
         return;
       }
       const items = (D[key] = Array.isArray(D[key]) ? D[key] : [])
-        .filter(item => item.poseId === defaultPoseId());
+        .filter(item => activeLayer === 'border' || item.poseId === defaultPoseId());
       const defaultKey = activeLayer === 'background' ? 'background'
         : activeLayer === 'helmet' ? 'helmet'
         : activeLayer === 'torso' ? 'torso'
@@ -2910,7 +2912,6 @@ const MHLA = (() => {
       gamesWith30Saves: 'Games with 30+ saves',
     };
     const componentMap = {
-      border: ['borderSprites', 'Border'],
       torso: ['torsoSprites', 'Torso'],
       stick: ['stickSprites', 'Stick'],
       background: ['backgroundSprites', 'Background'],
@@ -2920,23 +2921,31 @@ const MHLA = (() => {
       let imported = 0;
       const errors = [];
       for (const file of Array.from(files || [])) {
-        const match = file.name.match(/^(.+)_([^_]+)_(background|torso|stick|helmet|border)\.png$/i);
-        if (!match) {
-          errors.push(`${file.name}: expected Reskin_Pose_Component.png (component: Background, Torso, Stick, Helmet, or Border)`);
+        const borderMatch = file.name.match(/^(.+)_([^_]+)_border\.png$/i)
+          || file.name.match(/^(.+)_border\.png$/i);
+        const poseMatch = borderMatch ? null
+          : file.name.match(/^(.+)_([^_]+)_(background|torso|stick|helmet)\.png$/i);
+        if (!borderMatch && !poseMatch) {
+          errors.push(`${file.name}: expected Reskin_Pose_Component.png or Name_Border.png (for example Gold_Default_Torso.png or Gold_border.png)`);
           continue;
         }
         if (file.size > 8_000_000) {
           errors.push(`${file.name}: exceeds the 8 MB limit`);
           continue;
         }
-        const poseMatches = D.bannerPoses.filter(pose =>
-          String(pose.name || '').trim().toLowerCase() === match[2].trim().toLowerCase());
-        if (poseMatches.length !== 1) {
-          errors.push(`${file.name}: ${poseMatches.length ? 'pose reference is ambiguous' : `pose "${match[2]}" was not found`}`);
-          continue;
+        let pose = null;
+        let collectionKey = 'borderSprites';
+        let name = borderMatch ? borderMatch[1] : poseMatch[1];
+        if (poseMatch) {
+          const poseMatches = D.bannerPoses.filter(item =>
+            String(item.name || '').trim().toLowerCase() === poseMatch[2].trim().toLowerCase());
+          if (poseMatches.length !== 1) {
+            errors.push(`${file.name}: ${poseMatches.length ? 'pose reference is ambiguous' : `pose "${poseMatch[2]}" was not found`}`);
+            continue;
+          }
+          pose = poseMatches[0];
+          collectionKey = componentMap[poseMatch[3].toLowerCase()][0];
         }
-        const pose = poseMatches[0];
-        const [collectionKey] = componentMap[match[3].toLowerCase()];
         const collection = D[collectionKey] = Array.isArray(D[collectionKey]) ? D[collectionKey] : [];
         try {
           const response = await fetch('/api/upload', { method: 'POST', body: file });
@@ -2946,8 +2955,8 @@ const MHLA = (() => {
           const dimensions = await imageDimensions(result.url);
           collection.push({
             id: uid(),
-            name: match[1].trim(),
-            poseId: pose.id,
+            name: name.trim(),
+            poseId: pose ? pose.id : '',
             description: '',
             image: result.url,
             naturalWidth: dimensions.width,
@@ -2994,7 +3003,7 @@ const MHLA = (() => {
         importPngs(event.dataTransfer.files);
       },
     },
-      h('p', {}, 'Drop multiple PNGs here or select files. Name each file Reskin_Pose_Component.png, for example Goldman_Flying_Torso.png or Goldman_Flying_Border.png.'),
+      h('p', {}, 'Drop multiple PNGs here or select files. Name pose-specific assets Reskin_Pose_Component.png (for example Goldman_Flying_Torso.png); name shared borders Name_border.png (for example Gold_border.png).'),
       h('button', { type: 'button', class: 'btn sm', onclick: () => importInput.click() }, 'Choose PNGs'),
       importInput);
     const importSection = bannerComponentSection('pose-import', 'Batch PNG upload', null,
@@ -3074,19 +3083,19 @@ const MHLA = (() => {
         class: 'btn del sm', type: 'button', onclick: () => {
           if (!confirm(`Delete pose "${pose.name || 'Pose'}" and its reskins?`)) return;
           const removed = new Set();
-          for (const key of ['bannerSprites', 'backgroundSprites', 'helmetSprites', 'torsoSprites', 'stickSprites', 'puckSprites', 'borderSprites']) {
+          for (const key of ['bannerSprites', 'backgroundSprites', 'helmetSprites', 'torsoSprites', 'stickSprites', 'puckSprites']) {
             D[key] = (D[key] || []).filter(item => {
               if (item.poseId !== pose.id) return true;
               removed.add(item.id);
               return false;
             });
           }
-          for (const key of ['banner', 'background', 'helmet', 'torso', 'stick', 'puck', 'border'])
+          for (const key of ['banner', 'background', 'helmet', 'torso', 'stick', 'puck'])
             if (removed.has(D.bannerDefaults[key])) D.bannerDefaults[key] = '';
           D.signups.forEach(signup => {
             if (signup.bannerConfig && signup.bannerConfig.poseId === pose.id)
               signup.bannerConfig.poseId = defaultPoseId();
-            for (const key of ['bannerSpriteId', 'backgroundSpriteId', 'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'puckSpriteId', 'borderSpriteId'])
+            for (const key of ['bannerSpriteId', 'backgroundSpriteId', 'helmetSpriteId', 'torsoSpriteId', 'stickSpriteId', 'puckSpriteId'])
               if (signup.bannerConfig && removed.has(signup.bannerConfig[key])) signup.bannerConfig[key] = '';
           });
           D.bannerPoses = D.bannerPoses.filter(item => item !== pose);
@@ -3146,8 +3155,10 @@ const MHLA = (() => {
     } }, 'Add Pose');
     return [
       importSection,
+      h('p', { class: 'help' }, 'Borders are shared across every pose. Use files named Name_border.png, such as Gold_border.png, or add a border directly below.'),
+      playerBannerSpriteSection('borderSprites', 'Border', 'border'),
       head('Poses', addPose),
-      h('p', { class: 'help' }, 'Each pose has its own Torso, Stick, Background, Helmet, and Border reskins. Use matching Torso and Background reskin names to display them together on player banners. The Default pose contains all legacy PNGs.'),
+      h('p', { class: 'help' }, 'Each pose has its own Torso, Stick, Background, and Helmet reskins. Use matching Torso and Background reskin names to display them together on player banners. The Default pose contains all legacy PNGs.'),
       poses.length ? poses : h('div', { class: 'empty' }, h('b', {}, 'No poses'), 'Add a pose to begin.'),
     ];
   }
