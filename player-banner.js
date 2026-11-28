@@ -246,6 +246,22 @@
       }
       if (target) makeTarget(element, target.category, target);
       canvas.append(element);
+      if (className === 'player-banner-name') {
+        const characters = Array.from(text);
+        if (characters.length > 9) {
+          const measureCanvas = document.createElement('canvas');
+          const context = measureCanvas.getContext('2d');
+          let scale = Math.min(1, 9 / characters.length);
+          if (context) {
+            context.font = getComputedStyle(element).font;
+            const fullWidth = context.measureText(text).width;
+            const nineCharacterWidth = context.measureText(characters.slice(0, 9).join('')).width;
+            if (fullWidth > nineCharacterWidth && fullWidth > 0)
+              scale = nineCharacterWidth / fullWidth;
+          }
+          element.style.transform = `translateX(-50%) scale(${transform.scale * scale})`;
+        }
+      }
     };
     const addRankedText = (text, rank, className, transform, zIndex, target = null) => {
       if (!text) return;
