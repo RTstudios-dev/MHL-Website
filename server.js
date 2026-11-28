@@ -200,6 +200,7 @@ const STATIC = {
   '/': ['index.html', HTML],
   '/league': ['league.html', HTML],
   '/matches': ['matches.html', HTML],
+  '/schedule': ['schedule.html', HTML],
   '/standings': ['standings.html', HTML],
   '/teams': ['teams.html', HTML],
   '/players': ['players.html', HTML],
@@ -644,6 +645,35 @@ const signupForPlayer = (data, player) => {
     (player.steamId && signup.steamId === player.steamId) ||
     (profileKey && steamKey(signup.steam) === profileKey));
   return matches.length === 1 ? matches[0] : null;
+};
+const captainTeamForPlayer = (data, player) => {
+  const signup = player && signupForPlayer(data, player);
+  return signup && data.season2Teams.find(team => team.captainSignupId === signup.id) || null;
+};
+const matchSeriesComplete = (match, rounds) => {
+  const round = rounds.find(item => item.id === match.round);
+  const bestOf = round && round.playoffStage === 'finals' ? 7
+    : round && round.playoffStage === 'semifinals' ? 5 : 3;
+  const winsNeeded = Math.floor(bestOf / 2) + 1;
+  let aWins = 0, bWins = 0;
+  for (const [index, game] of (Array.isArray(match.games) ? match.games : []).slice(0, bestOf).entries()) {
+    if (aWins >= winsNeeded || bWins >= winsNeeded) break;
+    if (bestOf === 3 && index === 2 && !(aWins === 1 && bWins === 1)) break;
+    if (!game || game.as == null || game.bs == null || game.as === game.bs) continue;
+    if (game.as > game.bs) aWins++;
+    else bWins++;
+  }
+  return aWins >= winsNeeded || bWins >= winsNeeded;
+};
+const validScheduleDate = value => {
+  if (!value) return true;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!parts) return false;
+  const [year, month, day, hour, minute] = parts.slice(1).map(Number);
+  if (year < 1900) return false;
+  const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day && date.getUTCHours() === hour && date.getUTCMinutes() === minute;
 };
 const playerBannerConfigFor = (data, signup) => {
   const config = sanitizeBannerConfig(signup.bannerConfig);
@@ -2764,6 +2794,55 @@ const server = http.createServer(async (req, res) => {
         profileUrl: player ? player.profileUrl : '',
         profileLookupFailed: !!(player && player.lookupFailed),
       });
+    }
+    if (p === '/api/captain/schedule' && req.method === 'GET') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam to manage your team schedule.' });
+      const data = readData();
+      const team = captainTeamForPlayer(data, player);
+      if (!team) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
+      const teamsById = new Map(data.season2Teams.map(item => [item.id, item]));
+      const roundsById = new Map(data.season2Rounds.map(item => [item.id, item]));
+      const matches = data.season2Matches
+        .filter(match => (match.a === team.id || match.b === team.id) &&
+          !matchSeriesComplete(match, data.season2Rounds))
+        .map(match => ({
+          id: match.id,
+          date: match.date,
+          round: (roundsById.get(match.round) || {}).name || 'Match',
+          teamA: (teamsById.get(match.a) || {}).name || 'Unknown team',
+          teamB: (teamsById.get(match.b) || {}).name || 'Unknown team',
+        }));
+      return send(res, 200, { team: { id: team.id, name: team.name }, matches });
+    }
+    if (p === '/api/captain/schedule' && req.method === 'PUT') {
+      const player = playerSession(req);
+      if (!player) return send(res, 401, { error: 'Sign in with Steam to manage your team schedule.' });
+      const data = readData();
+      const team = captainTeamForPlayer(data, player);
+      if (!team) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
+      let changes;
+      try {
+        changes = JSON.parse(await readBody(req, 2_000) || '{}');
+      } catch {
+        return send(res, 400, { error: 'Schedule changes must be valid JSON.' });
+      }
+      if (!changes || typeof changes !== 'object' || Array.isArray(changes) ||
+          typeof changes.matchId !== 'string' || typeof changes.date !== 'string' ||
+          changes.matchId.length > 40 || changes.date.length > 25) {
+        return send(res, 400, { error: 'Choose a valid match and date.' });
+      }
+      const date = changes.date.trim();
+      if (!validScheduleDate(date))
+        return send(res, 400, { error: 'Enter a valid date and time.' });
+      const match = data.season2Matches.find(item => item.id === changes.matchId);
+      if (!match || (match.a !== team.id && match.b !== team.id))
+        return send(res, 404, { error: 'That match is not on your team schedule.' });
+      if (matchSeriesComplete(match, data.season2Rounds))
+        return send(res, 409, { error: 'Completed matches can no longer be rescheduled.' });
+      match.date = date;
+      writeData(data);
+      return send(res, 200, { ok: true, date });
     }
     if (p === '/api/draft' && req.method === 'GET') {
       const data = readData();

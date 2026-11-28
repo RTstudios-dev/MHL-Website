@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Schedule | MHL</title>
+<meta name="description" content="Manage the date and time of your team's upcoming Season 2 matches.">
+<meta name="theme-color" content="#111013">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+.schedule-list{display:grid;gap:16px}
+.schedule-match{padding:20px;border:1px solid var(--line);border-top:2px solid var(--rule);border-radius:8px;background:linear-gradient(145deg,rgba(16,33,51,.88),rgba(8,19,32,.88))}
+.schedule-match h2{font:800 clamp(19px,2.4vw,27px)/1.2 var(--disp);letter-spacing:-.02em}
+.schedule-match-round{margin-top:5px;color:var(--muted);font-size:13px}
+.schedule-match form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-top:18px}
+.schedule-match label{display:grid;gap:5px;min-width:min(100%,260px);color:var(--muted);font-size:13px}
+.schedule-match input{min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:5px;background:rgba(5,15,26,.86);color:var(--ink);font:inherit}
+.schedule-match-feedback{margin-top:10px;color:var(--gold);font-size:13px}
+.schedule-match-feedback[hidden]{display:none}
+@media(max-width:520px){.schedule-match form{align-items:stretch;flex-direction:column}.schedule-match form .btn{width:100%}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side" id="side"></aside>
+<div>
+<header class="mtop" id="mtop"></header>
+<main class="main" id="main">
+  <div class="ph">
+    <h1>Team Schedule</h1>
+    <p>Set the date and time for your team's unfinished Season 2 matches.</p>
+  </div>
+  <div id="scheduleList" class="schedule-list" aria-live="polite">
+    <div class="sk"></div>
+  </div>
+</main>
+</div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Main"></nav>
+<div class="more" id="more" hidden></div>
+<script src="/site.js"></script>
+<script>
+(() => {
+  const host = document.getElementById('scheduleList');
+  const esc = MHL.esc;
+  const toDateTimeInput = value => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = number => String(number).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+  const loadSchedule = async () => {
+    const response = await fetch('/api/captain/schedule', { cache: 'no-store' });
+    const result = await response.json();
+    if (response.status === 401) {
+      host.innerHTML = MHL.empty('Sign-in required', 'Sign in with the Steam account assigned as captain to manage your team schedule.');
+      return;
+    }
+    if (response.status === 403) {
+      host.innerHTML = MHL.empty('Captain access required', 'This schedule is only available to signed-in Season 2 team captains.');
+      return;
+    }
+    if (!response.ok) throw new Error(result.error || 'Could not load your team schedule.');
+    if (!result.matches.length) {
+      host.innerHTML = MHL.empty('No matches to schedule', 'Your team has no unfinished Season 2 matches that can be rescheduled.');
+      return;
+    }
+    host.innerHTML = result.matches.map(match => `
+      <article class="schedule-match" data-match-id="${esc(match.id)}">
+        <h2>${esc(match.teamA)} vs ${esc(match.teamB)}</h2>
+        <p class="schedule-match-round">${esc(match.round)}</p>
+        <form data-match-id="${esc(match.id)}">
+          <label>Date and time
+            <input type="datetime-local" name="date" value="${esc(toDateTimeInput(match.date))}">
+          </label>
+          <button class="btn" type="submit">Save date and time</button>
+        </form>
+        <p class="schedule-match-feedback" role="status" aria-live="polite" hidden></p>
+      </article>`).join('');
+  };
+  host.addEventListener('submit', async event => {
+    const form = event.target.closest('form[data-match-id]');
+    if (!form) return;
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    const feedback = form.parentElement.querySelector('.schedule-match-feedback');
+    button.disabled = true;
+    feedback.hidden = false;
+    feedback.textContent = 'Saving schedule...';
+    try {
+      const response = await fetch('/api/captain/schedule', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchId: form.dataset.matchId,
+          date: form.elements.date.value,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save this match time.');
+      feedback.textContent = 'Date and time saved.';
+    } catch (error) {
+      feedback.textContent = error.message || 'Could not save this match time.';
+    } finally {
+      button.disabled = false;
+    }
+  });
+  loadSchedule().catch(error => {
+    host.innerHTML = MHL.empty('Could not load your team schedule', error.message || 'Please reload and try again.');
+  });
+})();
+</script>
+</body>
+</html>

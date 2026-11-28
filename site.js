@@ -26,6 +26,19 @@
       ? `<img src="${esc(signup.photo)}" alt="">`
       : `<span>${esc(name.trim().charAt(0).toUpperCase() || 'S')}</span>`;
   };
+  const addCaptainScheduleLink = async () => {
+    const response = await fetch('/api/draft', { cache: 'no-store' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not check team captain status.');
+    if (!result.captainTeamId) return;
+    const nav = document.querySelector('.top-nav');
+    if (nav.querySelector('a[href="/schedule"]')) return;
+    const link = document.createElement('a');
+    link.href = '/schedule';
+    link.textContent = 'Schedule';
+    if (current === '/schedule') link.setAttribute('aria-current', 'page');
+    nav.append(link);
+  };
   const stopNotificationAnimation = () => {
     window.clearTimeout(notificationAnimationTimer);
     notificationAnimationTimer = 0;
@@ -68,8 +81,10 @@
     if (!signupResponse.ok) throw new Error('Could not load your player profile.');
     const result = await signupResponse.json();
     showSteamProfileButton(result.signup);
+    document.querySelector('.top-signup').hidden = true;
     notificationsEnabled = true;
     M.refreshNotifications().catch(error => console.error('Could not load player notifications:', error));
+    addCaptainScheduleLink().catch(error => console.error('Could not check team captain status:', error));
   };
   M.refreshNotifications = async function () {
     if (!notificationsEnabled) return;
@@ -180,7 +195,7 @@
     });
   };
   M.checkDraftTurn = async function () {
-    if (current === draftBoard || document.hidden || checkingDraftTurn) return;
+    if (current === draftBoard || current === '/schedule' || document.hidden || checkingDraftTurn) return;
     checkingDraftTurn = true;
     try {
       const response = await fetch('/api/draft', { cache: 'no-store' });
@@ -201,7 +216,7 @@
         <span class="top-brand-title"><span>Miniature</span><span>Hockey League</span></span>
       </a>
       <nav class="top-nav" aria-label="Main">${NAV.map(([h, t]) => `<a href="${h}"${cur(h)}>${t}</a>`).join('')}</nav>
-      <div class="top-actions"><a class="btn top-signup" href="/sign-up">Sign Up</a><span id="discordSlot"></span></div>`;
+      <div class="top-actions"><a class="btn top-signup" href="/sign-up">Sign Up for season 2</a><span id="discordSlot"></span></div>`;
     const notificationRoot = document.createElement('div');
     notificationRoot.className = 'player-notifications';
     notificationRoot.id = 'playerNotifications';

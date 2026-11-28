@@ -14,9 +14,9 @@
 <body>
 <main class="season-landing">
   <section class="hub-cards" aria-label="Season 2 options">
-    <a class="showcase-card showcase-link showcase-season" href="/sign-up">
+    <a class="showcase-card showcase-link showcase-season" id="season2SignupButton" href="/sign-up">
       <span class="showcase-art"><img src="/sign-up-logo.png" alt="Sign Up"></span>
-      <h2>Sign Up Now</h2>
+      <h2>Sign Up for season 2</h2>
       <span class="showcase-tag">Claim your player banner, Start Tracking Stats, Join a team</span>
     </a>
     <a class="showcase-card showcase-link showcase-pugs" href="/season-2-players">
@@ -26,5 +26,23 @@
     </a>
   </section>
 </main>
+<script>
+  (async () => {
+    const button = document.getElementById('season2SignupButton');
+    try {
+      const sessionResponse = await fetch('/api/player/me', { cache: 'no-store' });
+      if (!sessionResponse.ok) throw new Error('Could not check Steam sign-in.');
+      const session = await sessionResponse.json();
+      if (!session.authenticated) return;
+
+      const signupResponse = await fetch('/api/player/signup', { cache: 'no-store' });
+      if (signupResponse.status === 404) return;
+      if (!signupResponse.ok) throw new Error('Could not check your Season 2 signup.');
+      button.hidden = true;
+    } catch (error) {
+      console.error('Could not update the Season 2 signup button:', error);
+    }
+  })();
+</script>
 </body>
 </html>

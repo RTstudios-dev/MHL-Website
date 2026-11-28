@@ -25,8 +25,8 @@
 </div>
 <div class="player-stats-top-row" id="playerStatsTopRow">
   <div class="stats-source-switch" role="group" aria-label="Stats source" id="statsSource">
-    <button type="button" data-source="pug" aria-pressed="true">Pug Stats</button>
-    <button type="button" data-source="season2" aria-pressed="false">Season 2 Stats</button>
+    <button type="button" data-source="pug" aria-pressed="false">Pug Stats</button>
+    <button type="button" data-source="season2" aria-pressed="true">Season 2 Stats</button>
   </div>
 </div>
 <div class="player-stats-controls" id="playerStatsControls">
@@ -96,7 +96,7 @@
   const savesPerPoint = requirement(rawPointRequirements.saves, 2);
   const pointRuleText = (value, singular, plural) =>
     `${value} ${value === 1 ? singular : plural} = 1 point`;
-  let key = 'p', direction = 'high', filter = 'all', source = 'pug', search = '';
+  let key = 'p', direction = 'high', filter = 'all', source = 'season2', search = '';
   $('playerStatsPointKey').textContent = [
     `Skaters: ${pointRuleText(goalsPerPoint, 'Goal', 'Goals')} + ${pointRuleText(assistsPerPoint, 'Assist', 'Assists')}`,
     `Goalies: ${pointRuleText(savesPerPoint, 'Save', 'Saves')} + ${pointRuleText(assistsPerPoint, 'Assist', 'Assists')}`,
@@ -392,6 +392,7 @@
   document.addEventListener('scroll', hideBannerHover, true);
   window.addEventListener('blur', hideBannerHover);
   syncStatSortOptions();
+  applyStatsSource();
   leaders(); table();
 })();
 </script>

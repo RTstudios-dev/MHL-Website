@@ -76,7 +76,7 @@
       .sort((x, y) => (y.g + y.a) - (x.g + x.a) || y.g - x.g || x.name.localeCompare(y.name));
 
   $('page').innerHTML = `
-    <div class="thead">${MHL.badge(t, 'lg')}<div><a class="back" href="/teams${isSeason2 ? '?season=season2' : ''}">All teams</a><h1>${esc(t.name)}</h1>
+    <div class="thead">${MHL.badge(t, 'lg')}<div><a class="back" href="/teams?season=${isSeason2 ? 'season2' : 'season1'}">All teams</a><h1>${esc(t.name)}</h1>
       <p>${ord(r.place)} of ${n}, ${r.pts} point${r.pts === 1 ? '' : 's'}</p></div></div>
     <div class="stats">
       <div><b class="num">${ord(r.place)}</b><small>Place</small></div>

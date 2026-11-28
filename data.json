@@ -43,6 +43,38 @@
       "slug": "hc-great-victoria"
     }
   ],
+  "season2Teams": [
+    {
+      "id": "8a293d4f-5e84-4587-b40e-91e7ce0da391",
+      "name": "New team",
+      "short": "",
+      "color": "#c8102e",
+      "logo": "",
+      "photo": "",
+      "captainSignupId": "",
+      "slug": "new-team"
+    },
+    {
+      "id": "8fc2367e-941a-4a63-8661-7e68653a1910",
+      "name": "kokoti",
+      "short": "",
+      "color": "#9a797f",
+      "logo": "/uploads/437ccb6d2193d369.png",
+      "photo": "",
+      "captainSignupId": "",
+      "slug": "kokoti"
+    },
+    {
+      "id": "e4ff5b72-f1fb-4d56-9e17-ae5346a953ac",
+      "name": "hc great victoria",
+      "short": "HCG",
+      "color": "#c8102e",
+      "logo": "",
+      "photo": "",
+      "captainSignupId": "",
+      "slug": "hc-great-victoria"
+    }
+  ],
   "rounds": [],
   "matches": [
     {
@@ -85,6 +117,8 @@
       ]
     }
   ],
+  "season2Rounds": [],
+  "season2Matches": [],
   "players": [
     {
       "id": "16e8b48b-0eba-44a4-8183-9ae200473cfb",
@@ -144,6 +178,7 @@
   "torsoSprites": [],
   "stickSprites": [],
   "puckSprites": [],
+  "borderSprites": [],
   "bannerLayers": [],
   "bannerDefaults": {
     "badge": "",

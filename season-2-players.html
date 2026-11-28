@@ -343,7 +343,7 @@
       const response = await fetch('/api/player/signup', { cache: 'no-store' });
       const result = await response.json();
       if (response.status === 404) {
-        ownHost.innerHTML = '<a class="btn sign-in-entry" href="/sign-up">Sign up for Season 2</a>';
+        ownHost.innerHTML = '<a class="btn sign-in-entry" href="/sign-up">Sign Up for season 2</a>';
         return;
       }
       if (!response.ok) throw new Error(result.error || 'Could not load your entry.');

@@ -39,7 +39,7 @@
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('list'), 'the teams'); }
   const { esc } = MHL;
-  let season = new URLSearchParams(location.search).get('season') === 'season2' ? 'season2' : 'season1';
+  let season = new URLSearchParams(location.search).get('season') === 'season1' ? 'season1' : 'season2';
   const ord = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
   const cap = Number(D.site && D.site.teamCap) || 0;
   const formatEuro = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
@@ -78,7 +78,7 @@
     if (!button) return;
     season = button.dataset.season;
     const url = new URL(location.href);
-    if (season === 'season2') url.searchParams.set('season', season);
+    if (season === 'season1') url.searchParams.set('season', season);
     else url.searchParams.delete('season');
     history.replaceState(null, '', url.pathname + url.search);
     render();

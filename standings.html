@@ -40,7 +40,7 @@
   const $ = id => document.getElementById(id);
   let D;
   try { D = await MHL.load(); } catch { return MHL.fail($('table'), 'the standings'); }
-  let season = new URLSearchParams(location.search).get('season') === 'season2' ? 'season2' : 'season1';
+  let season = new URLSearchParams(location.search).get('season') === 'season1' ? 'season1' : 'season2';
   const gd = r => { const d = r.gf - r.ga; return d > 0 ? '+' + d : String(d); };
   const render = () => {
     const isSeason2 = season === 'season2';
@@ -76,7 +76,7 @@
     if (!button) return;
     season = button.dataset.season;
     const url = new URL(location.href);
-    if (season === 'season2') url.searchParams.set('season', season);
+    if (season === 'season1') url.searchParams.set('season', season);
     else url.searchParams.delete('season');
     history.replaceState(null, '', url.pathname + url.search);
     render();

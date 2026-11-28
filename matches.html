@@ -44,12 +44,12 @@
   const { esc } = MHL;
   D.season2Rounds = Array.isArray(D.season2Rounds) ? D.season2Rounds : [];
   D.season2Matches = Array.isArray(D.season2Matches) ? D.season2Matches : [];
-  let season = new URLSearchParams(location.search).get('season') === 'season2' ? 'season2' : 'season1';
+  let season = new URLSearchParams(location.search).get('season') === 'season1' ? 'season1' : 'season2';
   let pick = new URLSearchParams(location.search).get('round') || 'all';
 
   function updateUrl() {
     const params = new URLSearchParams(location.search);
-    if (season === 'season2') params.set('season', season);
+    if (season === 'season1') params.set('season', season);
     else params.delete('season');
     if (pick === 'all') params.delete('round');
     else params.set('round', pick);
