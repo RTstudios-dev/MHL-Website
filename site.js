@@ -26,11 +26,15 @@
       ? `<img src="${esc(signup.photo)}" alt="">`
       : `<span>${esc(name.trim().charAt(0).toUpperCase() || 'S')}</span>`;
   };
-  const addCaptainScheduleLink = async () => {
-    const response = await fetch('/api/draft', { cache: 'no-store' });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Could not check team captain status.');
-    if (!result.captainTeamId) return;
+  const addScheduleLink = async () => {
+    const [adminResponse, captainResponse] = await Promise.all([
+      fetch('/api/me', { cache: 'no-store' }),
+      fetch('/api/draft', { cache: 'no-store' }),
+    ]);
+    const [admin, captain] = await Promise.all([adminResponse.json(), captainResponse.json()]);
+    if (!adminResponse.ok) throw new Error(admin.error || 'Could not check admin access.');
+    if (!captainResponse.ok) throw new Error(captain.error || 'Could not check team captain status.');
+    if (!admin.admin && !captain.captainTeamId) return;
     const nav = document.querySelector('.top-nav');
     if (nav.querySelector('a[href="/schedule"]')) return;
     const link = document.createElement('a');
@@ -84,7 +88,6 @@
     document.querySelector('.top-signup').hidden = true;
     notificationsEnabled = true;
     M.refreshNotifications().catch(error => console.error('Could not load player notifications:', error));
-    addCaptainScheduleLink().catch(error => console.error('Could not check team captain status:', error));
   };
   M.refreshNotifications = async function () {
     if (!notificationsEnabled) return;
@@ -247,6 +250,7 @@
     steamLoginButton.setAttribute('aria-label', 'Steam login and player profile');
     document.querySelector('.top-actions').appendChild(steamLoginButton);
     M.refreshPlayerButton().catch(error => console.error('Could not update the Steam profile button:', error));
+    addScheduleLink().catch(error => console.error('Could not check schedule access:', error));
     const notificationToggle = document.getElementById('notificationToggle');
     const notificationMenu = document.getElementById('notificationMenu');
     const closeNotifications = () => {
