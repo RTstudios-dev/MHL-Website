@@ -2792,16 +2792,15 @@ const server = http.createServer(async (req, res) => {
       });
     }
     if (p === '/api/captain/schedule' && req.method === 'GET') {
-      const admin = isAdmin(req);
       const player = playerSession(req);
-      if (!admin && !player) return send(res, 401, { error: 'Sign in as a team captain or admin to manage schedules.' });
+      if (!player) return send(res, 401, { error: 'Sign in with Steam to manage your team schedule.' });
       const data = readData();
-      const team = admin ? null : captainTeamForPlayer(data, player);
-      if (!admin && !team) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
+      const team = captainTeamForPlayer(data, player);
+      if (!team) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
       const teamsById = new Map(data.season2Teams.map(item => [item.id, item]));
       const roundsById = new Map(data.season2Rounds.map(item => [item.id, item]));
       const matches = data.season2Matches
-        .filter(match => (!team || match.a === team.id || match.b === team.id) &&
+        .filter(match => (match.a === team.id || match.b === team.id) &&
           !matchSeriesComplete(match, data.season2Rounds))
         .map(match => ({
           id: match.id,
@@ -2810,15 +2809,14 @@ const server = http.createServer(async (req, res) => {
           teamA: (teamsById.get(match.a) || {}).name || 'Unknown team',
           teamB: (teamsById.get(match.b) || {}).name || 'Unknown team',
         }));
-      return send(res, 200, { team: team ? { id: team.id, name: team.name } : null, matches });
+      return send(res, 200, { team: { id: team.id, name: team.name }, matches });
     }
     if (p === '/api/captain/schedule' && req.method === 'PUT') {
-      const admin = isAdmin(req);
       const player = playerSession(req);
-      if (!admin && !player) return send(res, 401, { error: 'Sign in as a team captain or admin to manage schedules.' });
+      if (!player) return send(res, 401, { error: 'Sign in with Steam to manage your team schedule.' });
       const data = readData();
-      const team = admin ? null : captainTeamForPlayer(data, player);
-      if (!admin && !team) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
+      const team = captainTeamForPlayer(data, player);
+      if (!team) return send(res, 403, { error: 'This Steam account is not assigned as a team captain.' });
       let changes;
       try {
         changes = JSON.parse(await readBody(req, 2_000) || '{}');
@@ -2834,7 +2832,7 @@ const server = http.createServer(async (req, res) => {
       if (!validScheduleDate(date))
         return send(res, 400, { error: 'Enter a valid date and time.' });
       const match = data.season2Matches.find(item => item.id === changes.matchId);
-      if (!match || (team && match.a !== team.id && match.b !== team.id))
+      if (!match || (match.a !== team.id && match.b !== team.id))
         return send(res, 404, { error: 'That match is not on your team schedule.' });
       if (matchSeriesComplete(match, data.season2Rounds))
         return send(res, 409, { error: 'Completed matches can no longer be rescheduled.' });
