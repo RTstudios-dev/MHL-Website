@@ -201,6 +201,7 @@
     goalPerfectGames: '100% Goal% Games', value: 'Value',
   };
   const applyStatsSource = () => {
+    document.body.classList.toggle('season2-theme', source === 'season2');
     for (const player of P) {
       const stats = source === 'season2' ? player.seasonTwoStats : player.pugStats;
       player.g = Number(stats.goals) || 0;
@@ -318,7 +319,7 @@
         : MHL.empty('No Season 2 players yet', 'Season 2 signups appear here once they are added.');
       return;
     }
-    const statColumns = [...new Set([key, 'a', 'w'])];
+    const statColumns = [...new Set([key, ...(key === 'p' ? ['g'] : []), 'a', 'w'])];
     $('all').innerHTML = `<div class="tbl-wrap player-stats-wrap"><table class="tbl player-stats-table">
       <thead><tr><th class="l" scope="col">Player</th><th class="l" scope="col">Discord username</th><th scope="col">Position</th>
         <th class="l" scope="col">Team</th>${statColumns.map(stat =>

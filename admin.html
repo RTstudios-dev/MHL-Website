@@ -309,6 +309,18 @@ const MHLA = (() => {
     return shots;
   };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const toLocalDateTimeInput = value => {
+    if (!value) return '';
+    const source = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+    const date = new Date(source);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+  const fromLocalDateTimeInput = value => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+  };
   const defaultPoseId = () => {
     if (D.bannerDefaults && D.bannerDefaults.poseId) return D.bannerDefaults.poseId;
     const pose = (D.bannerPoses || []).find(item => String(item.name || '').toLowerCase() === 'default');
@@ -1142,7 +1154,7 @@ const MHLA = (() => {
       h('option', { value: '' }, 'No round'), matchRounds().map(r => h('option', { value: r.id, selected: r.id === m.round }, r.name)));
     const ed = h('div', { class: 'ed match' },
       h('div', { style: 'display:grid;gap:10px' },
-        field('Date and time', h('input', { type: 'datetime-local', value: MHL.toLocalDateTimeInput(m.date), oninput: e => { m.date = MHL.fromLocalDateTimeInput(e.target.value); touch(); } })),
+        field('Date and time', h('input', { type: 'datetime-local', value: toLocalDateTimeInput(m.date), oninput: e => { m.date = fromLocalDateTimeInput(e.target.value); touch(); } })),
         field('Round', roundSel)),
       h('div', { style: 'display:grid;gap:10px' },
         h('div', { class: 'teamsel' }, field('Team A', teamSelect(m, 'a')), h('span', { class: 'vs' }, 'vs'), field('Team B', teamSelect(m, 'b'))),
