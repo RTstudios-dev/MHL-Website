@@ -360,7 +360,22 @@
 
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  M.parseDate = s => { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; };
+  M.parseDate = s => {
+    if (!s) return null;
+    const value = /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s;
+    const d = new Date(value);
+    return isNaN(d) ? null : d;
+  };
+  M.toLocalDateTimeInput = value => {
+    const date = M.parseDate(value);
+    if (!date) return '';
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+  M.fromLocalDateTimeInput = value => {
+    if (!value) return '';
+    const date = new Date(value);
+    return isNaN(date) ? '' : date.toISOString();
+  };
   M.fmtDate = s => {
     const d = M.parseDate(s); if (!d) return 'Date to be set';
     const time = /T\d/.test(s) ? ', ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') : '';

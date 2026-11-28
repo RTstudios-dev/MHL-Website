@@ -667,13 +667,9 @@ const matchSeriesComplete = (match, rounds) => {
 };
 const validScheduleDate = value => {
   if (!value) return true;
-  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
-  if (!parts) return false;
-  const [year, month, day, hour, minute] = parts.slice(1).map(Number);
-  if (year < 1900) return false;
-  const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day && date.getUTCHours() === hour && date.getUTCMinutes() === minute;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getUTCFullYear() >= 1900 && date.toISOString() === value;
 };
 const playerBannerConfigFor = (data, signup) => {
   const config = sanitizeBannerConfig(signup.bannerConfig);

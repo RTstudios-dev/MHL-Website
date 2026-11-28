@@ -29,7 +29,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* shared top navigation */
 .app{min-height:100dvh}
 .side,.tabbar,.more{display:none!important}
-.mtop{position:sticky;top:0;z-index:30;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px clamp(8px,1vw,18px);padding:10px clamp(16px,1.5vw,24px);background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.mtop{position:sticky;top:0;z-index:30;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px clamp(8px,1vw,18px);padding:10px clamp(16px,1.5vw,24px);background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .top-brand{grid-column:1;grid-row:1;display:flex;align-items:center;gap:9px;white-space:nowrap}
 .top-brand-mark{display:grid;place-items:center;flex:none}
 .top-brand .wm{font-family:var(--disp);font-weight:500;font-size:34px;line-height:1;color:var(--ink)}

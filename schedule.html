@@ -17,6 +17,7 @@
 .schedule-match-round{margin-top:5px;color:var(--muted);font-size:13px}
 .schedule-match form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-top:18px}
 .schedule-match label{display:grid;gap:5px;min-width:min(100%,260px);color:var(--muted);font-size:13px}
+.schedule-time-hint{max-width:52ch;color:var(--muted);font-size:11px;line-height:1.45}
 .schedule-match input{min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:5px;background:rgba(5,15,26,.86);color:var(--ink);font:inherit}
 .schedule-match-feedback{margin-top:10px;color:var(--gold);font-size:13px}
 .schedule-match-feedback[hidden]{display:none}
@@ -46,13 +47,6 @@
 (() => {
   const host = document.getElementById('scheduleList');
   const esc = MHL.esc;
-  const toDateTimeInput = value => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = number => String(number).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
   const loadSchedule = async () => {
     const response = await fetch('/api/captain/schedule', { cache: 'no-store' });
     const result = await response.json();
@@ -75,7 +69,8 @@
         <p class="schedule-match-round">${esc(match.round)}</p>
         <form data-match-id="${esc(match.id)}">
           <label>Date and time
-            <input type="datetime-local" name="date" value="${esc(toDateTimeInput(match.date))}">
+            <input type="datetime-local" name="date" value="${esc(MHL.toLocalDateTimeInput(match.date))}">
+            <small class="schedule-time-hint">Enter the time in your local time zone. Other viewers will see it converted to theirs.</small>
           </label>
           <button class="btn" type="submit">Save date and time</button>
         </form>
@@ -97,7 +92,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           matchId: form.dataset.matchId,
-          date: form.elements.date.value,
+          date: MHL.fromLocalDateTimeInput(form.elements.date.value),
         }),
       });
       const result = await response.json();

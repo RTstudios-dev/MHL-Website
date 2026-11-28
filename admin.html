@@ -1142,7 +1142,7 @@ const MHLA = (() => {
       h('option', { value: '' }, 'No round'), matchRounds().map(r => h('option', { value: r.id, selected: r.id === m.round }, r.name)));
     const ed = h('div', { class: 'ed match' },
       h('div', { style: 'display:grid;gap:10px' },
-        field('Date and time', h('input', { type: 'datetime-local', value: m.date, oninput: e => { m.date = e.target.value; touch(); } })),
+        field('Date and time', h('input', { type: 'datetime-local', value: MHL.toLocalDateTimeInput(m.date), oninput: e => { m.date = MHL.fromLocalDateTimeInput(e.target.value); touch(); } })),
         field('Round', roundSel)),
       h('div', { style: 'display:grid;gap:10px' },
         h('div', { class: 'teamsel' }, field('Team A', teamSelect(m, 'a')), h('span', { class: 'vs' }, 'vs'), field('Team B', teamSelect(m, 'b'))),
